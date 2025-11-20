@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <title>Project Golem: Genesis</title>
+  </head>
+  <body>
+    <div id="game-container"></div>
+
+    <div id="ui-layer">
+      <div class="hud-top">
+        <h1>LABORATÓRIO GENESIS</h1>
+        <p>Status: Aguardando experimento...</p>
+      </div>
+      
+      <div id="creation-modal" class="hidden">
+        <h2>SELECIONE OS COMPONENTES</h2>
+        <div class="columns-container">
+            <div class="col" id="col-bio">
+                <h3>BIOLOGIA</h3>
+                <div class="list"></div>
+            </div>
+            <div class="col" id="col-chem">
+                <h3>QUÍMICA</h3>
+                <div class="list"></div>
+            </div>
+            <div class="col" id="col-phys">
+                <h3>FÍSICA</h3>
+                <div class="list"></div>
+            </div>
+        </div>
+        
+        <div class="actions">
+            <button id="btn-cancel" class="pixel-btn btn-red">CANCELAR</button>
+            <button id="btn-synthesize" class="pixel-btn btn-green" disabled>DAR VIDA</button>
+        </div>
+      </div>
+
+      <button id="btn-open-lab" class="pixel-btn">NOVO EXPERIMENTO</button>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
