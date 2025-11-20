@@ -196,3 +196,7 @@ body {
     box-shadow: none;
     transform: none;
 }
+
+canvas {
+    cursor: inherit; /* Herda o cursor definido pelo JS do Phaser */
+}

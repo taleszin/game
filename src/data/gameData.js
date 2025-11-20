@@ -1,53 +1,62 @@
 export const ELEMENTS = {
-    biologia: [
-        { 
-            id: 'bio_dna', 
-            name: 'DNA Sintético', 
-            desc: 'Código genético reprogramado. Define a base da forma física humanoide.' 
-        },
-        { 
-            id: 'bio_plant', 
-            name: 'Tecido Vegetal', 
-            desc: 'Células ricas em cloroplastos. Permite fotossíntese e regeneração lenta.' 
-        },
-        { 
-            id: 'bio_fungal', 
-            name: 'Esporos Fúngicos', 
-            desc: 'Organismo decompositor resistente. Adapta-se a ambientes hostis.' 
-        }
-    ],
     quimica: [
         { 
-            id: 'chem_mercury', 
-            name: 'Mercúrio', 
-            desc: 'Metal líquido pesado. Instável e altamente condutivo.' 
+            id: 'carbono', 
+            name: 'Carbono', 
+            symbol: 'C',
+            desc: 'Elemento tetravalente base de toda vida orgânica conhecida na Terra.' 
         },
         { 
-            id: 'chem_carbon', 
-            name: 'Nano Carbono', 
-            desc: 'Estrutura rígida e leve. Garante alta durabilidade física.' 
+            id: 'ferro', 
+            name: 'Ferro', 
+            symbol: 'Fe',
+            desc: 'Metal de transição denso, essencial para transporte de oxigênio e magnetismo.' 
         },
         { 
-            id: 'chem_acid', 
-            name: 'Ácido Sulfúrico', 
-            desc: 'Composto corrosivo. Perigoso ao toque, gera calor químico.' 
+            id: 'silicio', 
+            name: 'Silício', 
+            symbol: 'Si',
+            desc: 'Metalóide com estrutura cristalina, base para semicondutores e vidro.' 
         }
     ],
     fisica: [
         { 
-            id: 'phys_spark', 
+            id: 'eletricidade', 
             name: 'Eletricidade', 
-            desc: 'Alta voltagem. Aumenta a velocidade de reação neural.' 
+            measure: 'Volts (V)',
+            desc: 'Fluxo de carga elétrica que gera campos magnéticos e estimula reações.' 
         },
         { 
-            id: 'phys_heat', 
+            id: 'calor', 
             name: 'Termodinâmica', 
-            desc: 'Núcleo superaquecido. A criatura emana radiação térmica.' 
+            measure: 'Joules (J)',
+            desc: 'Transferência de energia térmica que agita as moléculas e acelera reações.' 
         },
         { 
-            id: 'phys_gravity', 
-            name: 'Antigravidade', 
-            desc: 'Manipulação de massa. Permite flutuação.' 
+            id: 'radiacao', 
+            name: 'Radioatividade', 
+            measure: 'Sievert (Sv)',
+            desc: 'Emissão espontânea de partículas por núcleos atômicos instáveis.' 
+        }
+    ],
+    biologia: [
+        { 
+            id: 'mamifero', 
+            name: 'Mamífero', 
+            scientific_class: 'Mammalia',
+            desc: 'Organismo endotérmico coberto por pelos. Possui neocórtex desenvolvido.' 
+        },
+        { 
+            id: 'inseto', 
+            name: 'Inseto', 
+            scientific_class: 'Arthropoda',
+            desc: 'Invertebrado com exoesqueleto de quitina e corpo segmentado.' 
+        },
+        { 
+            id: 'slime', 
+            name: 'Amorfo', 
+            scientific_class: 'Amoebozoa',
+            desc: 'Organismo unicelular ou colonial capaz de alterar sua forma física livremente.' 
         }
     ]
 };
