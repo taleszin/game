@@ -5,66 +5,78 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <title>Project Golem: Genesis</title>
+    <title>GEOMETRY CREATOR</title>
   </head>
   <body>
     <div id="game-container"></div>
 
     <div id="ui-layer">
       <div class="hud-top">
-        <h1>LABORATÓRIO GENESIS</h1>
-        <p>Status: Aguardando experimento...</p>
+        <h1>GEOMETRY CREATOR</h1>
+        <p>Status: PRE ALPHA</p>
       </div>
       
-      <div id="creation-modal" class="hidden">
-        <h2>SELECIONE OS COMPONENTES</h2>
-        <div class="columns-container">
-            <div class="col" id="col-bio">
-                <h3>BIOLOGIA</h3>
-                <div class="list"></div>
+      <button id="btn-tree" class="round-btn" title="Genealogia">🌳</button>
+
+      <div id="tree-modal" class="hidden">
+          <div class="tree-header">
+              <h2>REGISTRO DE VIDA</h2>
+              <button id="btn-close-tree" class="close-btn">X</button>
+          </div>
+          <div id="tree-content">
+              </div>
+      </div>
+      
+      <div id="creation-panel" class="hidden">
+        <div class="slots-container">
+            <div class="slot active" id="slot-forma" data-target="forma">
+                <div class="slot-label">1. FORMA</div>
+                <div class="slot-icon">?</div>
+                <div class="slot-name">Selecione</div>
             </div>
-            <div class="col" id="col-chem">
-                <h3>QUÍMICA</h3>
-                <div class="list"></div>
+            <div class="arrow">➜</div>
+            <div class="slot" id="slot-chem" data-target="quimica">
+                <div class="slot-label">2. ESTRUTURA</div>
+                <div class="slot-icon">?</div>
+                <div class="slot-name">Selecione</div>
             </div>
-            <div class="col" id="col-phys">
-                <h3>FÍSICA</h3>
-                <div class="list"></div>
+            <div class="arrow">➜</div>
+            <div class="slot" id="slot-phys" data-target="fisica">
+                <div class="slot-label">3. ENERGIA</div>
+                <div class="slot-icon">?</div>
+                <div class="slot-name">Selecione</div>
             </div>
         </div>
-        
-        <div class="actions">
+        <div id="options-grid" class="options-grid"></div>
+        <div class="panel-actions">
             <button id="btn-cancel" class="pixel-btn btn-red">CANCELAR</button>
-            <button id="btn-synthesize" class="pixel-btn btn-green" disabled>DAR VIDA</button>
+            <div class="summary" id="recipe-summary">...</div>
+            <button id="btn-synthesize" class="pixel-btn btn-green" disabled>SINTETIZAR</button>
         </div>
       </div>
-      <div id="inspect-modal" class="hidden">
-        <h2 id="inspect-name">NOME DA FORMA DE VIDA</h2>
-        
-        <div class="data-readout">
-            <p id="inspect-desc">Analisando estrutura molecular...</p>
-            
-            <div class="stats-grid">
-                <div class="stat-box">
-                    <span>FORÇA</span>
-                    <span id="val-str" class="stat-val">0</span>
-                </div>
-                <div class="stat-box">
-                    <span>RESISTÊNCIA</span>
-                    <span id="val-res" class="stat-val">0</span>
-                </div>
-                <div class="stat-box">
-                    <span>ENERGIA</span>
-                    <span id="val-eng" class="stat-val">0</span>
-                </div>
-            </div>
 
-            <div class="terminal-log">
-                > <span id="inspect-dialogue">...</span>
+      <div id="inspect-modal" class="hidden">
+        <h2 id="inspect-name">NOME</h2>
+        <div class="data-readout">
+            <p id="inspect-desc">...</p>
+            <div class="stats-grid">
+                <div class="stat-box"><span>FOR</span><span id="val-str" class="stat-val">0</span></div>
+                <div class="stat-box"><span>RES</span><span id="val-res" class="stat-val">0</span></div>
+                <div class="stat-box"><span>ENE</span><span id="val-eng" class="stat-val">0</span></div>
             </div>
+            <div class="terminal-log">> <span id="inspect-dialogue">...</span></div>
         </div>
-        
-        <button id="btn-close-inspect" class="pixel-btn btn-red">ENCERRAR ANÁLISE</button>
+      </div>
+
+      <div id="god-menu">
+          <div class="god-options">
+            <div class="tool-slot" data-action="feed" title="Nutrir"><div class="tool-icon">🍖</div></div>
+            <div class="tool-slot" data-action="burn" title="Incendiar"><div class="tool-icon">🔥</div></div>
+            <div class="tool-slot" data-action="freeze" title="Congelar"><div class="tool-icon">❄️</div></div>
+            <div class="tool-slot" data-action="mutate" title="Mutar DNA"><div class="tool-icon">🧬</div></div>
+            <div class="tool-slot" data-action="kill" title="Eliminar"><div class="tool-icon">💀</div></div>
+          </div>
+          <div class="god-trigger">⚡</div>
       </div>
 
       <button id="btn-open-lab" class="pixel-btn">NOVO EXPERIMENTO</button>
