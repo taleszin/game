@@ -200,3 +200,72 @@ body {
 canvas {
     cursor: inherit; /* Herda o cursor definido pelo JS do Phaser */
 }
+
+/* ... (Mantenha todo o CSS anterior até chegar no #inspect-modal) ... */
+
+/* MODAL DE INSPEÇÃO (Estilo Tooltip Flutuante) */
+#inspect-modal {
+    background-color: rgba(0, 0, 0, 0.9); /* Leve transparência */
+    border: 1px solid #00ffaa;
+    padding: 15px;
+    width: 300px;
+    position: absolute; /* Permite mover via JS */
+    z-index: 100;       /* Sempre no topo */
+    font-family: 'Press Start 2P';
+    text-align: left;
+    pointer-events: none; /* CRUCIAL: O mouse "atravessa" o modal, evitando flickering */
+    transition: opacity 0.1s;
+}
+
+#inspect-modal h2 {
+    color: #00ffaa;
+    font-size: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px dashed #00ffaa;
+    padding-bottom: 5px;
+}
+
+#inspect-desc {
+    font-size: 7px;
+    color: #ccc;
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+.stats-grid {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    background: #111;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 7px;
+    color: #888;
+}
+
+.stat-val {
+    font-size: 10px;
+    color: #fff;
+    margin-top: 2px;
+}
+
+.terminal-log {
+    font-size: 7px;
+    color: #ffff00;
+    font-style: italic;
+}
+
+/* Esconde o botão de fechar que estava no HTML, pois não precisamos mais dele */
+#btn-close-inspect {
+    display: none; 
+}
+#btn-close-inspect:hover {
+    background: #00ffaa;
+    color: #000;
+}

@@ -38,6 +38,34 @@
             <button id="btn-synthesize" class="pixel-btn btn-green" disabled>DAR VIDA</button>
         </div>
       </div>
+      <div id="inspect-modal" class="hidden">
+        <h2 id="inspect-name">NOME DA FORMA DE VIDA</h2>
+        
+        <div class="data-readout">
+            <p id="inspect-desc">Analisando estrutura molecular...</p>
+            
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span>FORÇA</span>
+                    <span id="val-str" class="stat-val">0</span>
+                </div>
+                <div class="stat-box">
+                    <span>RESISTÊNCIA</span>
+                    <span id="val-res" class="stat-val">0</span>
+                </div>
+                <div class="stat-box">
+                    <span>ENERGIA</span>
+                    <span id="val-eng" class="stat-val">0</span>
+                </div>
+            </div>
+
+            <div class="terminal-log">
+                > <span id="inspect-dialogue">...</span>
+            </div>
+        </div>
+        
+        <button id="btn-close-inspect" class="pixel-btn btn-red">ENCERRAR ANÁLISE</button>
+      </div>
 
       <button id="btn-open-lab" class="pixel-btn">NOVO EXPERIMENTO</button>
     </div>

@@ -8,6 +8,14 @@ export default class SanctuaryScene extends Phaser.Scene {
     this.pendingData = null;
     this.cursorText = null;
   }
+  preload() {
+    // Gera um quadrado branco 2x2 na memória para usar como partícula
+    // Isso evita ter que baixar/criar um arquivo png minúsculo
+    const graphics = this.make.graphics({x: 0, y: 0, add: false});
+    graphics.fillStyle(0xffffff, 1);
+    graphics.fillRect(0, 0, 2, 2);
+    graphics.generateTexture('pixel', 2, 2);
+  }
 
   create() {
     // --- 1. AMBIENTE ---
