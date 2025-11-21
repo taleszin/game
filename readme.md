@@ -1,6 +1,6 @@
-# Project Golem — README
+# Geometry Creator — README
 
-Este documento substitui e amplia o README anterior. Contém visão geral do jogo, tecnologias usadas, descrição das formas geométricas (incluindo tridimensionais projetadas em 2D), a matemática por trás dos cálculos (área, perímetro, vértices), e fórmulas para contar combinações possíveis entre componentes.
+Este documento contém visão geral do jogo, tecnologias usadas, descrição das formas geométricas (incluindo tridimensionais projetadas em 2D), a matemática por trás dos cálculos (área, perímetro, vértices), e fórmulas para contar combinações possíveis entre componentes.
 
 ---
 
