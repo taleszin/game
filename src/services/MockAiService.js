@@ -29,9 +29,13 @@ const SHAPE_MATH = {
     'estrela': { sides: 10, complexity: 4 }
 };
 
-// CALCULADORA (Atualizada para Procedural)
-function calculateGeoStats(shapeId, scale, proceduralParams = null) {
-    const baseSize = 30 * scale;
+// CALCULADORA (Atualizada para Procedural e Dimensões Únicas)
+function calculateGeoStats(shapeId, scaleX, scaleY, proceduralParams = null) {
+    // Base dimensions (approximate radius/half-width)
+    // Usamos 30 como base genérica, mas ajustamos por X e Y
+    const avgScale = (scaleX + scaleY) / 2;
+    const baseSize = 30 * avgScale;
+    
     let area = 0;
     let perimeter = 0;
     let vertices = 0;
@@ -39,19 +43,37 @@ function calculateGeoStats(shapeId, scale, proceduralParams = null) {
     if (shapeId === 'procedural' && proceduralParams) {
         // Cálculo aproximado para formas complexas geradas
         vertices = proceduralParams.sides;
-        // Área de polígono regular aproximada
+        // Área de polígono regular aproximada (distorcida pela escala média)
         area = (vertices * (baseSize ** 2)) / (4 * Math.tan(Math.PI / vertices));
         perimeter = vertices * (baseSize * 2 * Math.sin(Math.PI / vertices));
     } else {
         // Formas conhecidas
         const sides = SHAPE_MATH[shapeId] ? SHAPE_MATH[shapeId].sides : 4;
         vertices = sides;
+        
         if (shapeId === 'circulo') {
-            area = Math.PI * (baseSize ** 2);
-            perimeter = 2 * Math.PI * baseSize;
+            // Elipse: Area = pi * a * b
+            // Raio base = 25 (do Golem.js)
+            const rX = 25 * scaleX;
+            const rY = 25 * scaleY;
+            area = Math.PI * rX * rY;
+            
+            // Perímetro Ramanujan approx
+            // p ≈ π [ 3(a+b) - sqrt( (3a+b)(a+3b) ) ]
+            const h = ((rX - rY)**2) / ((rX + rY)**2);
+            perimeter = Math.PI * (rX + rY) * (1 + (3*h)/(10 + Math.sqrt(4 - 3*h)));
+            
             vertices = "∞"; // Infinito
+        } else if (shapeId === 'quadrado') {
+            // Retângulo
+            // Base 44x44 (do Golem.js) -> 44*scaleX por 44*scaleY
+            const w = 44 * scaleX;
+            const h = 44 * scaleY;
+            area = w * h;
+            perimeter = 2 * (w + h);
         } else {
-            area = (baseSize * baseSize) * (sides * 0.5); // Aproximação genérica
+            // Outras formas (aproximação genérica usando escala média)
+            area = (baseSize * baseSize) * (sides * 0.5); 
             perimeter = baseSize * sides;
         }
     }
@@ -60,26 +82,33 @@ function calculateGeoStats(shapeId, scale, proceduralParams = null) {
         area: Math.floor(area) + ' px²',
         perimeter: Math.floor(perimeter) + ' px',
         vertices: vertices,
-        scale: scale.toFixed(2) + 'x'
+        scale: `${scaleX.toFixed(2)}x${scaleY.toFixed(2)}`
     };
 }
 
 export function generateGolemData(ingredients) {
     return new Promise((resolve) => {
         setTimeout(() => {
-            const baseLife = 15000;
-            const scale = 0.8 + Math.random() * 0.6;
-            const geoStats = calculateGeoStats(ingredients.forma.id, scale);
+            const baseLife = 30000;
+            // Escalas independentes para X e Y (Dimensões Únicas)
+            const scaleX = 0.7 + Math.random() * 0.8; 
+            const scaleY = 0.7 + Math.random() * 0.8;
+            const avgScale = (scaleX + scaleY) / 2;
+
+            const geoStats = calculateGeoStats(ingredients.forma.id, scaleX, scaleY);
 
             resolve({
                 name: `Entidade ${ingredients.forma.name}`,
                 description: "Geometria primitiva instanciada.",
                 stats: { 
-                    forca: Math.floor(10 * scale), 
+                    forca: Math.floor(10 * avgScale), 
                     resistencia: 10, 
-                    energia: Math.floor(20 / scale), 
-                    lifespan: baseLife * scale,
-                    maxLifespan: baseLife * scale,
+                    energia: Math.floor(20 / avgScale), 
+                    lifespan: baseLife * avgScale,
+                    maxLifespan: baseLife * avgScale,
+                    scaleX: scaleX,
+                    scaleY: scaleY,
+                    scale: avgScale.toFixed(2), // Fallback
                     ...geoStats
                 },
                 dialogo: "Cálculo de área completo."
@@ -143,18 +172,26 @@ export function breedGolemData(parent1, parent2) {
                 };
             }
 
-            // Herança de Tamanho
-            const p1Scale = parseFloat(parent1.aiData.stats.scale) || 1;
-            const p2Scale = parseFloat(parent2.aiData.stats.scale) || 1;
-            let newScale = (p1Scale + p2Scale) / 2;
-            // Pequena mutação de tamanho
-            if (Math.random() > 0.7) newScale *= 1.2;
-
-            // Calcula stats matemáticos reais da nova forma
-            const geoStats = calculateGeoStats(childShapeId, newScale, childFormaData.params);
-
+            // Herança de Tamanho (Dimensões Independentes)
             const p1Stats = parent1.aiData.stats;
             const p2Stats = parent2.aiData.stats;
+            
+            // Fallback para scale antigo se scaleX/Y não existirem
+            let sX1 = p1Stats.scaleX !== undefined ? parseFloat(p1Stats.scaleX) : (parseFloat(p1Stats.scale) || 1);
+            let sY1 = p1Stats.scaleY !== undefined ? parseFloat(p1Stats.scaleY) : (parseFloat(p1Stats.scale) || 1);
+            let sX2 = p2Stats.scaleX !== undefined ? parseFloat(p2Stats.scaleX) : (parseFloat(p2Stats.scale) || 1);
+            let sY2 = p2Stats.scaleY !== undefined ? parseFloat(p2Stats.scaleY) : (parseFloat(p2Stats.scale) || 1);
+
+            let newScaleX = (sX1 + sX2) / 2;
+            let newScaleY = (sY1 + sY2) / 2;
+            
+            // Mutação independente
+            if (Math.random() > 0.6) newScaleX *= (0.85 + Math.random() * 0.3);
+            if (Math.random() > 0.6) newScaleY *= (0.85 + Math.random() * 0.3);
+
+            // Calcula stats matemáticos reais da nova forma
+            const geoStats = calculateGeoStats(childShapeId, newScaleX, newScaleY, childFormaData.params);
+
             const bonus = 1.2;
 
             const newStats = {
@@ -162,6 +199,9 @@ export function breedGolemData(parent1, parent2) {
                 resistencia: Math.floor(((p1Stats.resistencia + p2Stats.resistencia) / 2) * bonus),
                 energia: Math.floor(((p1Stats.energia + p2Stats.energia) / 2) * bonus),
                 lifespan: ((p1Stats.maxLifespan + p2Stats.maxLifespan) / 2) * bonus,
+                scaleX: newScaleX,
+                scaleY: newScaleY,
+                scale: ((newScaleX + newScaleY)/2).toFixed(2),
                 ...geoStats
             };
 

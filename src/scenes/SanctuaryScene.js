@@ -17,6 +17,7 @@ export default class SanctuaryScene extends Phaser.Scene {
   }
 
   create() {
+        this.golemRecords = [];
     const bgGraphics = this.add.graphics();
     bgGraphics.fillStyle(0x111111, 1);
     bgGraphics.fillRect(0, 0, 800, 600);
@@ -139,6 +140,8 @@ export default class SanctuaryScene extends Phaser.Scene {
 
       try {
           const childData = await breedGolemData(parent1.dataAttributes, parent2.dataAttributes);
+          // Anota os pais para o registro de vida
+          childData.parents = [parent1.id || null, parent2.id || null];
           await new Promise(r => setTimeout(r, 600));
 
           this.spawnGolem(x, y + 30, childData);

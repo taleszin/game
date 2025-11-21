@@ -7,14 +7,21 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.dataAttributes = data;
         this.isDragging = false;
         this.isFrozen = false;
+        this.id = `golem_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+        this.lifeLog = [];
         
         const stats = data.aiData ? data.aiData.stats : {};
-        this.maxLife = stats.lifespan || 15000;
+        this.maxLife = stats.lifespan || 30000;
         this.currentLife = this.maxLife;
         
-        // Escala
-        this.targetScale = stats.scale ? parseFloat(stats.scale) : 1;
-        this.setScale(this.targetScale);
+        // Escala (Dimensões Únicas)
+        this.targetScaleX = stats.scaleX ? parseFloat(stats.scaleX) : (stats.scale ? parseFloat(stats.scale) : 1);
+        this.targetScaleY = stats.scaleY ? parseFloat(stats.scaleY) : (stats.scale ? parseFloat(stats.scale) : 1);
+        
+        // Mantém targetScale como média para compatibilidade com lógica de velocidade/partículas
+        this.targetScale = (this.targetScaleX + this.targetScaleY) / 2;
+        
+        this.setScale(this.targetScaleX, this.targetScaleY);
 
         // --- VISUAL ---
         let neonColor = 0x00ffff;
@@ -62,6 +69,25 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.lifeBar = scene.add.rectangle(0, -50, 22, 2, neonColor);
         this.add([nameTag, barBg, this.lifeBar]);
 
+        // Registro inicial: nasceu
+        try {
+            const bornMsg = `Nasceu: ${nameTag.text} (${this.currentShapeType})`;
+            this.lifeLog.push({ ts: Date.now(), type: 'born', detail: bornMsg });
+            if (!this.scene.golemRecords) this.scene.golemRecords = [];
+            this.scene.golemRecords.push({ 
+                id: this.id, 
+                name: nameTag.text, 
+                forma: data.forma || null, 
+                quimica: data.quimica || null, 
+                fisica: data.fisica || null, 
+                parents: data.parents || null, 
+                bornAt: Date.now(), 
+                lifeLog: this.lifeLog,
+                stats: data.aiData ? data.aiData.stats : {} 
+            });
+            this.scene.game.events.emit('update-tree', this.scene.golemRecords);
+        } catch (e) { console.warn('life record error', e); }
+
         // Partículas
         this.emitter = scene.add.particles(0, 0, 'pixel', {
             speed: 20 * this.targetScale, 
@@ -94,7 +120,7 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.on('pointerover', () => {
                 if (!this.isDragging) {
                     scene.selectedGolem = this;
-                    scene.game.events.emit('inspect-golem', { visual: this.dataAttributes, stats: data.aiData });
+                    scene.game.events.emit('inspect-golem', { visual: this.dataAttributes, stats: data.aiData, lifeLog: this.lifeLog });
                     this.graphics.alpha = 1;
                 }
             });
@@ -198,28 +224,54 @@ export default class Golem extends Phaser.GameObjects.Container {
         } g.closePath();
     }
 
-    // Ações
-    feed() { this.currentLife = this.maxLife; this.scene.tweens.add({targets:this, scale:this.targetScale*1.3, yoyo:true, duration:200}); }
-    burn() { if(this.lifeTimer) this.lifeTimer.timeScale = 5.0; }
-    kill() { this.currentLife = 0; this.die(); }
+    // Ações e logging de vida
+    addLifeEvent(type, detail) {
+        try {
+            const entry = { ts: Date.now(), type, detail: detail || '' };
+            this.lifeLog.push(entry);
+            if (this.scene && this.scene.golemRecords) {
+                // emit para atualizar UI (tree/registro)
+                this.scene.game.events.emit('update-tree', this.scene.golemRecords);
+            }
+        } catch (e) { console.warn('addLifeEvent error', e); }
+    }
+
+    feed() {
+        this.currentLife = this.maxLife;
+        this.scene.tweens.add({ targets: this, scale: this.targetScale * 1.3, yoyo: true, duration: 200 });
+        this.addLifeEvent('feed', 'Nutriu - vida restaurada');
+    }
+
+    burn() {
+        if (this.lifeTimer) this.lifeTimer.timeScale = 5.0;
+        this.addLifeEvent('burn', 'Incendiado - perda acelerada');
+    }
+
+    kill() {
+        this.addLifeEvent('killed', 'Eliminado manualmente');
+        this.currentLife = 0; this.die();
+    }
+
     freeze() {
         this.isFrozen = true; this.body.setVelocity(0); this.graphics.setTint(0x0088ff);
-        this.scene.time.delayedCall(5000, () => { if(this.active) { this.isFrozen=false; this.graphics.clearTint(); this.startRoaming(); }});
+        this.addLifeEvent('freeze', 'Congelado temporariamente');
+        this.scene.time.delayedCall(5000, () => { if (this.active) { this.isFrozen = false; this.graphics.clearTint(); this.startRoaming(); } });
     }
-    
+
     mutate() {
         // Na mutação, gera uma nova forma procedural aleatória
         const newSides = 3 + Math.floor(Math.random() * 7);
         const newParams = { sides: newSides, roughness: Math.random(), seed: Math.random() * 100 };
-        
+
         this.scene.tweens.add({
             targets: this, scaleX: 0.1, scaleY: 0.1, duration: 200, yoyo: true,
             onYoyo: () => {
                 this.proceduralParams = newParams;
                 this.currentColor = Math.random() * 0xffffff;
                 this.drawNeonShape('procedural', this.currentColor, this.currentChem);
-                if(this.emitter) this.emitter.setTint(this.currentColor);
+                if (this.emitter) this.emitter.setTint(this.currentColor);
                 this.lifeBar.setFillStyle(this.currentColor);
+                this.addLifeEvent('mutate', `Mutado: sides=${newSides}`);
             }
         });
     }
@@ -244,11 +296,12 @@ export default class Golem extends Phaser.GameObjects.Container {
         }});
     }
     die() {
-        if(this.lifeTimer) this.lifeTimer.remove();
-        if(this.emitter) this.emitter.stop();
-        if(this.body) this.body.setVelocity(0);
+        if (this.lifeTimer) this.lifeTimer.remove();
+        if (this.emitter) this.emitter.stop();
+        if (this.body) this.body.setVelocity(0);
+        this.addLifeEvent('died', 'Fim do ciclo - dados perdidos');
         const msg = this.scene.add.text(this.x, this.y - 50, "DADOS PERDIDOS", { fontFamily: '"Press Start 2P"', fontSize: '6px', fill: '#ff0000' }).setOrigin(0.5);
         this.scene.tweens.add({ targets: msg, y: this.y - 80, alpha: 0, duration: 2000 });
-        this.scene.tweens.add({ targets: this, alpha: 0, scale: 0.1, duration: 1000, onComplete: () => { msg.destroy(); if(this.emitter) this.emitter.destroy(); this.destroy(); } });
+        this.scene.tweens.add({ targets: this, alpha: 0, scale: 0.1, duration: 1000, onComplete: () => { msg.destroy(); if (this.emitter) this.emitter.destroy(); this.destroy(); } });
     }
 }

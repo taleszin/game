@@ -294,6 +294,52 @@ canvas {
   transition: opacity 0.1s;
 }
 
+/* Modo expandido do modal de inspeção (ao abrir via árvore genealógica) */
+.modal-large {
+  width: 640px !important;
+  max-width: calc(100% - 80px);
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  pointer-events: all !important;
+  z-index: 3000 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-large #btn-close-inspect {
+    display: block !important;
+}
+
+.inspect-layout {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+}
+
+.visual-large {
+    display: none; /* Oculto por padrão no modo pequeno */
+    width: 200px;
+    height: 200px;
+    background: #000;
+    border: 2px solid #333;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.modal-large .visual-large {
+    display: flex; /* Visível no modo grande */
+}
+
+.inspect-info-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+#inspect-modal .data-readout { pointer-events: all; }
+
 #inspect-modal h2 {
   color: #00ffaa;
   font-size: 10px;
@@ -455,91 +501,232 @@ canvas {
 
 /* MODAL DA ÁRVORE */
 #tree-modal {
-    position: absolute;
-    top: 50px;
-    right: 80px; /* Ao lado do botão */
-    width: 300px;
-    max-height: 80vh;
-    background: rgba(10, 15, 20, 0.95);
-    border: 2px solid #00ffaa;
-    box-shadow: -5px 5px 20px rgba(0,0,0,0.8);
-    display: flex;
-    flex-direction: column;
-    z-index: 550;
-    pointer-events: auto;
-    border-radius: 8px;
-    overflow: hidden;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  height: 90%;
+  background: rgba(10, 10, 15, 0.98);
+  border: 2px solid #9d00ff;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  box-shadow: 0 0 50px rgba(157, 0, 255, 0.3);
+  pointer-events: all;
 }
 
 .tree-header {
-    background: #00ffaa;
-    padding: 10px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 10px;
 }
 
 .tree-header h2 {
-    color: #000;
-    font-size: 10px;
-    margin: 0;
-    text-shadow: none;
+  color: #9d00ff;
+  font-size: 16px;
 }
 
 .close-btn {
-    background: transparent;
-    border: none;
-    color: #000;
-    font-weight: bold;
-    cursor: pointer;
+  background: none;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.close-btn:hover {
+  background: #333;
+  color: #f00;
 }
 
 #tree-content {
-    padding: 15px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  padding: 10px;
 }
 
-/* GERAÇÕES */
-.generation-row {
-    border-left: 2px solid #333;
-    padding-left: 10px;
+.tree-generation-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-bottom: 1px dashed #222;
+  padding-bottom: 20px;
 }
 
 .gen-label {
-    font-size: 8px;
-    color: #666;
-    margin-bottom: 5px;
-    text-transform: uppercase;
+  font-size: 10px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-align: center;
+  margin-bottom: 10px;
 }
 
-.golem-node {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    padding: 5px;
-    margin-bottom: 5px;
-    border-radius: 4px;
+.gen-content {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
 }
 
-.golem-node.dead { opacity: 0.5; border-style: dashed; }
-
-.node-icon {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    border: 2px solid #fff;
-    background: #000;
+.golem-card {
+  background: #1a1a1a;
+  border: 1px solid #444;
+  padding: 10px;
+  width: 200px;
+  border-radius: 4px;
+  position: relative;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.node-info { display: flex; flex-direction: column; }
-.node-name { font-size: 8px; color: #fff; }
-.node-parents { font-size: 6px; color: #888; }
+.golem-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+  z-index: 10;
+}
+
+.golem-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #333;
+  padding-bottom: 5px;
+}
+
+.golem-icon {
+  width: 30px;
+  height: 30px;
+  border: 2px solid;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.golem-info {
+  flex: 1;
+}
+
+.golem-name {
+  font-size: 10px;
+  color: #fff;
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.golem-meta {
+  font-size: 8px;
+  color: #888;
+}
+
+.golem-parents {
+  font-size: 8px;
+  color: #666;
+  margin-top: 8px;
+  background: #111;
+  padding: 4px;
+  border-radius: 2px;
+}
+
+.golem-parents strong {
+  color: #888;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.parent-link {
+  color: #9d00ff;
+  text-decoration: none;
+  cursor: pointer;
+}
+.parent-link:hover {
+  text-decoration: underline;
+  color: #b040ff;
+}
 
 /* Scrollbar */
 #tree-content::-webkit-scrollbar { width: 5px; }
 #tree-content::-webkit-scrollbar-thumb { background: #444; }
+
+/* Timeline Animada no Inspect */
+.history-timeline {
+  position: relative;
+  padding-left: 12px;
+  margin-top: 12px;
+  border-left: 1px solid #333;
+  max-height: 150px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.history-timeline::-webkit-scrollbar {
+  width: 4px;
+}
+.history-timeline::-webkit-scrollbar-thumb {
+  background: #333;
+}
+
+.history-item {
+  position: relative;
+  margin-bottom: 10px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  font-size: 8px;
+  color: #ccc;
+  opacity: 0;
+  transform: translateX(-10px);
+  animation: slideInRight 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-item::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #555;
+  border: 2px solid #000;
+  box-shadow: 0 0 5px rgba(255,255,255,0.1);
+}
+
+.history-item.born { border-left: 2px solid #00ffff; }
+.history-item.born::before { background: #00ffff; box-shadow: 0 0 8px #00ffff; }
+
+.history-item.feed { border-left: 2px solid #00ff00; }
+.history-item.feed::before { background: #00ff00; box-shadow: 0 0 8px #00ff00; }
+
+.history-item.burn { border-left: 2px solid #ffaa00; }
+.history-item.burn::before { background: #ffaa00; box-shadow: 0 0 8px #ffaa00; }
+
+.history-item.freeze { border-left: 2px solid #00ffff; }
+.history-item.freeze::before { background: #00ffff; box-shadow: 0 0 8px #00ffff; }
+
+.history-item.mutate { border-left: 2px solid #ff00ff; }
+.history-item.mutate::before { background: #ff00ff; box-shadow: 0 0 8px #ff00ff; }
+
+.history-item.killed, .history-item.died { border-left: 2px solid #ff0000; }
+.history-item.killed::before, .history-item.died::before { background: #ff0000; box-shadow: 0 0 8px #ff0000; }
+
+.h-time { font-size: 6px; color: #666; margin-bottom: 2px; }
+.h-detail { font-size: 7px; color: #fff; }
+
+@keyframes slideInRight {
+  to { opacity: 1; transform: translateX(0); }
+}
