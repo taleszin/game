@@ -5,15 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <title>GEOMETRY CREATOR</title>
+    <title>Project Golem: Genesis</title>
   </head>
   <body>
     <div id="game-container"></div>
 
     <div id="ui-layer">
       <div class="hud-top">
-        <h1>GEOMETRY CREATOR</h1>
-        <p>Status: PRE ALPHA</p>
+        <h1>LABORATÓRIO GENESIS</h1>
+        <p>Status: Sistema Online</p>
       </div>
       
       <button id="btn-tree" class="round-btn" title="Genealogia">🌳</button>
@@ -23,8 +23,7 @@
               <h2>REGISTRO DE VIDA</h2>
               <button id="btn-close-tree" class="close-btn">X</button>
           </div>
-          <div id="tree-content">
-              </div>
+          <div id="tree-content"></div>
       </div>
       
       <div id="creation-panel" class="hidden">
@@ -47,7 +46,9 @@
                 <div class="slot-name">Selecione</div>
             </div>
         </div>
+
         <div id="options-grid" class="options-grid"></div>
+
         <div class="panel-actions">
             <button id="btn-cancel" class="pixel-btn btn-red">CANCELAR</button>
             <div class="summary" id="recipe-summary">...</div>
@@ -59,11 +60,19 @@
         <h2 id="inspect-name">NOME</h2>
         <div class="data-readout">
             <p id="inspect-desc">...</p>
+            
             <div class="stats-grid">
                 <div class="stat-box"><span>FOR</span><span id="val-str" class="stat-val">0</span></div>
                 <div class="stat-box"><span>RES</span><span id="val-res" class="stat-val">0</span></div>
                 <div class="stat-box"><span>ENE</span><span id="val-eng" class="stat-val">0</span></div>
             </div>
+
+            <div class="stats-grid math-grid" style="border-top: 1px dashed #333; padding-top: 5px;">
+                <div class="stat-box"><span>ÁREA</span><span id="val-area" class="stat-val" style="color:#00ffff">0</span></div>
+                <div class="stat-box"><span>PERÍM.</span><span id="val-peri" class="stat-val" style="color:#00ffff">0</span></div>
+                <div class="stat-box"><span>ESCALA</span><span id="val-scale" class="stat-val" style="color:#ffff00">1x</span></div>
+            </div>
+
             <div class="terminal-log">> <span id="inspect-dialogue">...</span></div>
         </div>
       </div>

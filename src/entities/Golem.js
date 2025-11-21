@@ -8,9 +8,15 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.isDragging = false;
         this.isFrozen = false;
         
-        this.maxLife = (data.aiData && data.aiData.stats) ? data.aiData.stats.lifespan : 15000;
+        const stats = data.aiData ? data.aiData.stats : {};
+        this.maxLife = stats.lifespan || 15000;
         this.currentLife = this.maxLife;
+        
+        // Escala
+        this.targetScale = stats.scale ? parseFloat(stats.scale) : 1;
+        this.setScale(this.targetScale);
 
+        // --- VISUAL ---
         let neonColor = 0x00ffff;
         if (data && data.fisica) {
             switch(data.fisica.id) {
@@ -25,35 +31,46 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
 
         this.graphics = scene.add.graphics();
-        this.currentShapeType = data.forma ? data.forma.id : 'quadrado';
+        
+        // Dados de forma
+        const shapeData = data.forma || data.biologia;
+        this.currentShapeType = shapeData ? shapeData.id : 'quadrado';
+        this.proceduralParams = shapeData ? shapeData.params : null; // Pega parâmetros matemáticos
+        
         this.currentColor = neonColor;
         this.currentChem = data.quimica ? data.quimica.id : 'carbono';
 
         this.drawNeonShape(this.currentShapeType, this.currentColor, this.currentChem);
         this.add(this.graphics);
 
+        // Animação
         this.pulseTween = scene.tweens.add({
             targets: this.graphics,
             scaleX: 1.05, scaleY: 1.05, alpha: 0.9,
             duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
         });
 
+        // Nome e Barra
         const nameStr = (data.aiData) ? data.aiData.name.split(' ')[0] : "GLIFO";
-        const nameTag = scene.add.text(0, -55, nameStr, {
+        const nameTag = scene.add.text(0, -60, nameStr, {
             fontFamily: '"Press Start 2P"', fontSize: '6px', fill: '#ffffff', 
             stroke: '#000', strokeThickness: 2
         }).setOrigin(0.5);
+        nameTag.setScale(1 / this.targetScale);
 
-        const barBg = scene.add.rectangle(0, -45, 24, 4, 0x000000);
-        this.lifeBar = scene.add.rectangle(0, -45, 22, 2, neonColor);
+        const barBg = scene.add.rectangle(0, -50, 24, 4, 0x000000);
+        this.lifeBar = scene.add.rectangle(0, -50, 22, 2, neonColor);
         this.add([nameTag, barBg, this.lifeBar]);
 
+        // Partículas
         this.emitter = scene.add.particles(0, 0, 'pixel', {
-            speed: 20, scale: { start: 0.4, end: 0 }, 
+            speed: 20 * this.targetScale, 
+            scale: { start: 0.4 * this.targetScale, end: 0 }, 
             blendMode: 'ADD', lifespan: 600, tint: neonColor, quantity: 1
         });
         this.emitter.startFollow(this);
 
+        // --- FÍSICA ---
         this.setSize(60, 60);
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -67,17 +84,18 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.setInteractive();
             scene.input.setDraggable(this);
 
-            this.baseSpeed = 50;
-            if (data.fisica.id === 'eletricidade') this.baseSpeed = 100;
+            this.baseSpeed = 50 / this.targetScale;
+            if (data.fisica.id === 'eletricidade') this.baseSpeed *= 1.5;
 
             this.startRoaming();
             this.startLifeCycle();
 
+            // Eventos
             this.on('pointerover', () => {
                 if (!this.isDragging) {
                     scene.selectedGolem = this;
                     scene.game.events.emit('inspect-golem', { visual: this.dataAttributes, stats: data.aiData });
-                    this.graphics.alpha = 1; this.graphics.scale = 1.1;
+                    this.graphics.alpha = 1;
                 }
             });
             this.on('pointerout', () => { scene.game.events.emit('hide-inspect'); this.graphics.scale = 1; });
@@ -91,7 +109,7 @@ export default class Golem extends Phaser.GameObjects.Container {
                 const others = scene.golemsGroup.getChildren();
                 let mated = false;
                 for (let other of others) {
-                    if (other !== this && other.active && Phaser.Geom.Intersects.RectangleToRectangle(this.getBounds(), other.getBounds())) {
+                    if (other !== this && other.active && Phaser.Math.Distance.Between(this.x, this.y, other.x, other.y) < (60 * this.targetScale)) {
                          scene.triggerBreeding(this, other); mated = true; break;
                     }
                 }
@@ -99,58 +117,6 @@ export default class Golem extends Phaser.GameObjects.Container {
             });
         }
     }
-
-    freeze() {
-        this.isFrozen = true;
-        this.body.setVelocity(0);
-        this.graphics.setTint(0x0088ff);
-        if(this.emitter) this.emitter.stop();
-        this.scene.time.delayedCall(5000, () => {
-            if(this.active) {
-                this.isFrozen = false;
-                this.graphics.clearTint();
-                if(this.emitter) this.emitter.start();
-                this.startRoaming();
-            }
-        });
-    }
-
-    mutate() {
-        this.scene.tweens.add({
-            targets: this, scaleX: 0.1, scaleY: 0.1, duration: 200, yoyo: true,
-            onYoyo: () => {
-                const shapes = ['circulo', 'quadrado', 'triangulo', 'pentagono', 'losango', 'hexagono'];
-                this.currentShapeType = shapes[Math.floor(Math.random() * shapes.length)];
-                this.currentColor = Math.random() * 0xffffff;
-                this.drawNeonShape(this.currentShapeType, this.currentColor, this.currentChem);
-                if(this.emitter) this.emitter.setTint(this.currentColor);
-                this.lifeBar.setFillStyle(this.currentColor);
-            }
-        });
-    }
-
-    feed() {
-        this.currentLife = this.maxLife;
-        this.scene.tweens.add({ targets: this, scale: 1.3, yoyo: true, duration: 200 });
-        const healPart = this.scene.add.particles(this.x, this.y, 'pixel', {
-            speed: 60, quantity: 10, lifespan: 600, tint: 0x00ff00, scale: { start: 2, end: 0 }, blendMode: 'ADD'
-        });
-        setTimeout(() => healPart.destroy(), 1000);
-    }
-
-    burn() {
-        if (!this.fireEmitter) {
-            this.fireEmitter = this.scene.add.particles(0, 0, 'pixel', {
-                speed: { min: 20, max: 60 }, angle: { min: 220, max: 320 },
-                scale: { start: 4, end: 0 }, tint: [0xffaa00, 0xff0000],
-                lifespan: 500, quantity: 3, blendMode: 'ADD'
-            });
-            this.fireEmitter.startFollow(this);
-        }
-        if(this.lifeTimer) this.lifeTimer.timeScale = 5.0;
-    }
-
-    kill() { this.currentLife = 0; this.die(); }
 
     drawNeonShape(type, color, chemType) {
         const g = this.graphics;
@@ -165,7 +131,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.drawPath(g, type);
         g.strokePath();
         
-        g.lineStyle(lineWidth, (chemType === 'ouro' ? 0xffd700 : 0xffffff), 1); 
+        g.lineStyle(lineWidth, 0xffffff, 1); 
         this.drawPath(g, type);
         g.strokePath();
         
@@ -176,8 +142,30 @@ export default class Golem extends Phaser.GameObjects.Container {
 
     drawPath(g, type) {
         g.beginPath();
+        
+        // SE FOR PROCEDURAL, USA A MATEMÁTICA
+        if (type === 'procedural' && this.proceduralParams) {
+            const { sides, roughness, seed } = this.proceduralParams;
+            const radius = 28;
+            
+            for (let i = 0; i <= sides; i++) {
+                const angle = (i * (Math.PI * 2)) / sides;
+                // Usa o seno para criar irregularidade consistente baseada no seed
+                const noise = Math.sin(i * 123.45 + seed) * (radius * roughness);
+                const r = radius + noise;
+                
+                const px = Math.cos(angle) * r;
+                const py = Math.sin(angle) * r;
+                
+                if (i === 0) g.moveTo(px, py);
+                else g.lineTo(px, py);
+            }
+            g.closePath();
+            return;
+        }
+
+        // FORMAS PADRÃO
         switch(type) {
-            // PRIMITIVOS
             case 'circulo': g.arc(0, 0, 25, 0, Math.PI * 2); break;
             case 'quadrado': g.strokeRect(-22,-22,44,44); break;
             case 'triangulo': g.moveTo(0,-28); g.lineTo(24,18); g.lineTo(-24,18); g.closePath(); break;
@@ -188,96 +176,54 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.moveTo(-8,-24); g.lineTo(8,-24); g.lineTo(8,-8); g.lineTo(24,-8); g.lineTo(24,8); 
                 g.lineTo(8,8); g.lineTo(8,24); g.lineTo(-8,24); g.lineTo(-8,8); g.lineTo(-24,8); 
                 g.lineTo(-24,-8); g.lineTo(-8,-8); g.closePath(); break;
-
-            // HÍBRIDOS LÓGICOS
-            case 'squircle': // Quadrado + Círculo = Quadrado com cantos redondos
-                g.fillRoundedRect(-22, -22, 44, 44, 15);
-                g.strokeRoundedRect(-22, -22, 44, 44, 15);
-                break;
-
-            case 'cone': // Triângulo + Círculo = Gota/Cone
-                g.moveTo(0, -30);
-                g.lineTo(18, 10);
-                g.arc(0, 10, 18, 0, Math.PI);
-                g.lineTo(-18, 10);
-                g.closePath();
-                break;
-
-            case 'escudo': // Pentágono + Círculo = Escudo
-                g.moveTo(-20, -10); g.lineTo(20, -10);
-                g.lineTo(20, 5);
-                g.quadraticBezierTo(0, 35, -20, 5);
-                g.closePath();
-                break;
-
-            case 'trevo': // Cruz + Círculo = Trevo
-                g.strokeCircle(0, -15, 10); g.strokeCircle(0, 15, 10);
-                g.strokeCircle(-15, 0, 10); g.strokeCircle(15, 0, 10);
-                break;
-
-            case 'olho': // Losango + Círculo
-                g.moveTo(-30,0); g.quadraticBezierTo(0,-20, 30,0); 
-                g.quadraticBezierTo(0,20, -30,0); 
-                g.strokeCircle(0,0,10);
-                break;
-
-            case 'cristal': // Quadrado + Triângulo = Obelisco
-                g.moveTo(0,-30); g.lineTo(15,-10); g.lineTo(15,25); 
-                g.lineTo(-15,25); g.lineTo(-15,-10); g.closePath();
-                g.moveTo(-15,-10); g.lineTo(15,-10); // Linha de faceta
-                break;
-
-            case 'pipa': // Quadrado + Losango = Pipa
-                g.moveTo(0,-30); g.lineTo(20,-10); g.lineTo(0,30); g.lineTo(-20,-10); g.closePath();
-                g.moveTo(0,-30); g.lineTo(0,30); g.moveTo(-20,-10); g.lineTo(20,-10);
-                break;
-
-            case 'grade': // Quadrado + Cruz
-                g.strokeRect(-22,-22,44,44);
-                g.moveTo(0,-22); g.lineTo(0,22);
-                g.moveTo(-22,0); g.lineTo(22,0);
-                break;
-
-            case 'estrela6': // Triângulo + Triângulo
-                g.moveTo(0,-25); g.lineTo(20,10); g.lineTo(-20,10); g.closePath();
-                g.moveTo(0,25); g.lineTo(20,-10); g.lineTo(-20,-10); g.closePath();
-                break;
-
-            case 'estrela8': // Quadrado + Quadrado
-                g.strokeRect(-18,-18,36,36);
-                const r = 18 * Math.sqrt(2);
-                g.moveTo(0,-r); g.lineTo(r,0); g.lineTo(0,r); g.lineTo(-r,0); g.closePath();
-                break;
-
-            case 'estrela5': // Pentágono + Triângulo
-                const points = 5; const inner=10; const outer=30;
-                for(let i=0; i<points*2; i++){
-                    const r=(i%2===0)?outer:inner; const a=(i*Math.PI/points)-Math.PI/2;
-                    if(i===0)g.moveTo(Math.cos(a)*r,Math.sin(a)*r); else g.lineTo(Math.cos(a)*r,Math.sin(a)*r);
-                } g.closePath();
-                break;
-
-            case 'vesica': // Círculo + Círculo
-                g.strokeCircle(-10, 0, 20);
-                g.strokeCircle(10, 0, 20);
-                break;
-
-            default: // Fallback
-                g.strokeRect(-20,-20,40,40); 
-                break;
+            
+            case 'cilindro': g.moveTo(-20,-25); g.lineTo(-20,25); g.moveTo(20,-25); g.lineTo(20,25); g.strokeEllipse(0,-25,40,15); g.strokeEllipse(0,25,40,15); break;
+            case 'cone': g.moveTo(0,-35); g.lineTo(25,25); g.moveTo(0,-35); g.lineTo(-25,25); g.strokeEllipse(0,25,50,15); break;
+            case 'piramide': g.moveTo(0,-35); g.lineTo(30,20); g.lineTo(0,35); g.lineTo(-30,20); g.closePath(); g.moveTo(0,-35); g.lineTo(0,35); break;
+            case 'obelisco': g.strokeRect(-15, -40, 30, 80); g.moveTo(-15, -40); g.lineTo(0, -55); g.lineTo(15, -40); break;
+            case 'fractal': g.moveTo(0,-35); g.lineTo(30,25); g.lineTo(-30,25); g.closePath(); g.moveTo(0,25); g.lineTo(15,-5); g.lineTo(-15,-5); g.closePath(); break;
+            case 'esfera': g.strokeCircle(0, 0, 28); g.strokeEllipse(0, 0, 56, 20); g.strokeEllipse(0, 0, 20, 56); break;
+            case 'mira': g.strokeCircle(0, 0, 25); g.moveTo(0, -35); g.lineTo(0, 35); g.moveTo(-35, 0); g.lineTo(35, 0); break;
+            case 'cristal': g.moveTo(0, -40); g.lineTo(20, 0); g.lineTo(0, 40); g.lineTo(-20, 0); g.closePath(); g.moveTo(0, -40); g.lineTo(0, 40); g.moveTo(-20, 0); g.lineTo(20, 0); break;
+            
+            default: g.strokeRect(-20,-20,40,40); break;
         }
     }
 
     drawPolygon(g, sides, size) {
         for(let i=0; i<sides; i++) {
             const angle = (i * (360/sides) - 90) * Math.PI / 180;
-            const px = Math.cos(angle) * size; 
-            const py = Math.sin(angle) * size;
+            const px = Math.cos(angle) * size; const py = Math.sin(angle) * size;
             if(i===0) g.moveTo(px,py); else g.lineTo(px,py);
-        }
-        g.closePath();
+        } g.closePath();
     }
 
+    // Ações
+    feed() { this.currentLife = this.maxLife; this.scene.tweens.add({targets:this, scale:this.targetScale*1.3, yoyo:true, duration:200}); }
+    burn() { if(this.lifeTimer) this.lifeTimer.timeScale = 5.0; }
+    kill() { this.currentLife = 0; this.die(); }
+    freeze() {
+        this.isFrozen = true; this.body.setVelocity(0); this.graphics.setTint(0x0088ff);
+        this.scene.time.delayedCall(5000, () => { if(this.active) { this.isFrozen=false; this.graphics.clearTint(); this.startRoaming(); }});
+    }
+    
+    mutate() {
+        // Na mutação, gera uma nova forma procedural aleatória
+        const newSides = 3 + Math.floor(Math.random() * 7);
+        const newParams = { sides: newSides, roughness: Math.random(), seed: Math.random() * 100 };
+        
+        this.scene.tweens.add({
+            targets: this, scaleX: 0.1, scaleY: 0.1, duration: 200, yoyo: true,
+            onYoyo: () => {
+                this.proceduralParams = newParams;
+                this.currentColor = Math.random() * 0xffffff;
+                this.drawNeonShape('procedural', this.currentColor, this.currentChem);
+                if(this.emitter) this.emitter.setTint(this.currentColor);
+                this.lifeBar.setFillStyle(this.currentColor);
+            }
+        });
+    }
+    
     startLifeCycle() {
         this.lifeTimer = this.scene.time.addEvent({ delay: 100, loop: true, callback: () => {
             const decay = 100 * (this.lifeTimer.timeScale||1);
@@ -288,7 +234,6 @@ export default class Golem extends Phaser.GameObjects.Container {
             if (this.currentLife <= 0) this.die();
         }});
     }
-
     startRoaming() {
         if(!this.body || this.isFrozen) return;
         this.body.setVelocity(Phaser.Math.Between(-this.baseSpeed, this.baseSpeed), Phaser.Math.Between(-this.baseSpeed, this.baseSpeed));
@@ -298,10 +243,8 @@ export default class Golem extends Phaser.GameObjects.Container {
             }
         }});
     }
-
     die() {
         if(this.lifeTimer) this.lifeTimer.remove();
-        if(this.fireEmitter) this.fireEmitter.destroy();
         if(this.emitter) this.emitter.stop();
         if(this.body) this.body.setVelocity(0);
         const msg = this.scene.add.text(this.x, this.y - 50, "DADOS PERDIDOS", { fontFamily: '"Press Start 2P"', fontSize: '6px', fill: '#ff0000' }).setOrigin(0.5);
