@@ -59,6 +59,29 @@ export default class SanctuaryScene extends Phaser.Scene {
     });
 
     this.physics.world.setBounds(0, 0, 800, 600);
+    
+    // === IDLE CHATTER: Golems falam aleatoriamente ===
+    this.idleChatterTimer = this.time.addEvent({
+        delay: 8000, // A cada 8 segundos
+        loop: true,
+        callback: () => this.triggerIdleChatter()
+    });
+  }
+
+  // Escolhe um Golem aleatório para falar algo ocioso
+  triggerIdleChatter() {
+      if (!this.golemsGroup) return;
+      
+      const golems = this.golemsGroup.getChildren().filter(g => g.active && !g.isSpeaking);
+      if (golems.length === 0) return;
+      
+      // Escolhe um Golem aleatório
+      const randomGolem = golems[Math.floor(Math.random() * golems.length)];
+      
+      // 30% de chance de falar (para não ser muito frequente)
+      if (Math.random() < 0.3) {
+          randomGolem.speakContextual('idle');
+      }
   }
 
   enterPlacementMode() {
@@ -83,7 +106,7 @@ export default class SanctuaryScene extends Phaser.Scene {
           const distance = Phaser.Math.Distance.Between(golem.x, golem.y, x, y);
           
           if (golem.active && distance < 60) {
-              this.createHitEffect(golem.x, golem.y, action);
+              this.createHitEffect(golem.x, golem.y, action, golem);
               
               if (action === 'feed') golem.feed();
               if (action === 'burn') golem.burn();
@@ -101,12 +124,24 @@ export default class SanctuaryScene extends Phaser.Scene {
       }
   }
 
-  createHitEffect(x, y, action) {
+  createHitEffect(x, y, action, golem = null) {
+      // Usa auraColor do Golem para efeito de partículas (energia híbrida)
+      const effectColor = golem?.visualDNA?.auraColor || 0xffffff;
+      
       const circle = this.add.circle(x, y, 30);
-      circle.setStrokeStyle(3, 0xffffff);
+      circle.setStrokeStyle(3, effectColor);
       this.tweens.add({
-          targets: circle, scale: 2, alpha: 0, duration: 300, onComplete: () => circle.destroy()
+          targets: circle, scale: 2.5, alpha: 0, duration: 350, onComplete: () => circle.destroy()
       });
+      
+      // Segundo anel com cor de corpo para contraste
+      if (golem?.visualDNA?.bodyColor) {
+          const innerCircle = this.add.circle(x, y, 15);
+          innerCircle.setStrokeStyle(2, golem.visualDNA.bodyColor);
+          this.tweens.add({
+              targets: innerCircle, scale: 2, alpha: 0, duration: 250, onComplete: () => innerCircle.destroy()
+          });
+      }
   }
 
   createMissEffect(x, y, action) {
@@ -127,6 +162,11 @@ export default class SanctuaryScene extends Phaser.Scene {
       const x = (parent1.x + parent2.x) / 2;
       const y = (parent1.y + parent2.y) / 2;
 
+      // Ativa expressão de acasalamento nos pais
+      if (parent1.setBreedingExpression) parent1.setBreedingExpression();
+      if (parent2.setBreedingExpression) parent2.setBreedingExpression();
+
+      // === PARTÍCULAS INICIAIS (Neutras) ===
       const swirl = this.add.particles(x, y, 'pixel', {
           speed: 100, angle: { min: 0, max: 360 },
           scale: { start: 2, end: 0 }, tint: 0xffffff,
@@ -142,7 +182,80 @@ export default class SanctuaryScene extends Phaser.Scene {
           const childData = await breedGolemData(parent1.dataAttributes, parent2.dataAttributes);
           // Anota os pais para o registro de vida
           childData.parents = [parent1.id || null, parent2.id || null];
+          
+          // === FEEDBACK VISUAL DE ESTABILIDADE ===
+          // Partículas coloridas baseadas no resultado da Alquimia
+          const isAnomaly = childData.alchemyMeta?.isAnomaly || false;
+          const stability = childData.alchemyMeta?.stability || 1.0;
+          
+          // Cor do feedback: Dourado (estável) → Vermelho (instável)
+          let feedbackColor = 0xffd700; // Dourado (Alquimia perfeita)
+          if (stability < 0.9) feedbackColor = 0x00ff00; // Verde (Fallback)
+          if (stability < 0.6) feedbackColor = 0xff8800; // Laranja (Instável)
+          if (isAnomaly) feedbackColor = 0xff0044; // Vermelho (Anomalia)
+          
+          // Partículas de resultado
+          const resultParticles = this.add.particles(x, y, 'pixel', {
+              speed: { min: 50, max: 150 },
+              angle: { min: 0, max: 360 },
+              scale: { start: isAnomaly ? 3 : 2, end: 0 },
+              tint: feedbackColor,
+              lifespan: isAnomaly ? 1200 : 600,
+              blendMode: 'ADD',
+              quantity: isAnomaly ? 40 : 15,
+              frequency: isAnomaly ? 50 : -1 // Anomalias emitem continuamente
+          });
+          
+          // Efeito de glitch visual para Anomalias
+          if (isAnomaly) {
+              // Flash de tela
+              const flash = this.add.rectangle(400, 300, 800, 600, feedbackColor, 0.3);
+              this.tweens.add({
+                  targets: flash,
+                  alpha: 0,
+                  duration: 200,
+                  yoyo: true,
+                  repeat: 2,
+                  onComplete: () => flash.destroy()
+              });
+              
+              // Texto de alerta
+              const warningText = this.add.text(x, y - 50, '⚠️ ANOMALIA', {
+                  fontFamily: '"Press Start 2P"',
+                  fontSize: '10px',
+                  fill: '#ff0044',
+                  backgroundColor: '#000000'
+              }).setOrigin(0.5);
+              
+              this.tweens.add({
+                  targets: warningText,
+                  y: y - 80,
+                  alpha: 0,
+                  duration: 1500,
+                  onComplete: () => warningText.destroy()
+              });
+          } else if (stability >= 0.9) {
+              // Alquimia perfeita: texto dourado
+              const alchemyText = this.add.text(x, y - 50, '✨ ALQUIMIA', {
+                  fontFamily: '"Press Start 2P"',
+                  fontSize: '8px',
+                  fill: '#ffd700',
+                  backgroundColor: '#000000'
+              }).setOrigin(0.5);
+              
+              this.tweens.add({
+                  targets: alchemyText,
+                  y: y - 70,
+                  alpha: 0,
+                  duration: 1200,
+                  onComplete: () => alchemyText.destroy()
+              });
+          }
+          
           await new Promise(r => setTimeout(r, 600));
+          
+          // Limpa partículas de resultado
+          resultParticles.destroy();
 
           this.spawnGolem(x, y + 30, childData);
           
