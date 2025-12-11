@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="HYLOMORPH - Simulador de Vida Artificial. Onde Geometria encontra Biologia e Filosofia. Crie Golems sencientes no vazio digital." />
+    <meta name="theme-color" content="#050505" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+    
+    <title>HYLOMORPH | A Forma Dá Ser à Matéria</title>
+    
+    <style>
+      /* Preload critical styles */
+      body {
+        background: #050505;
+        margin: 0;
+        overflow-x: hidden;
+      }
+      
+      /* Loading screen */
+      #loading {
+        position: fixed;
+        inset: 0;
+        background: #050505;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        transition: opacity 0.5s ease;
+      }
+      
+      #loading.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      
+      .loading-text {
+        font-family: 'Press Start 2P', monospace;
+        color: #00ffff;
+        font-size: 12px;
+        animation: blink 1s step-end infinite;
+      }
+      
+      @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading">
+      <span class="loading-text">INICIALIZANDO SISTEMA...</span>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

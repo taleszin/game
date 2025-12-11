@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { generateGolemData } from './services/MockAiService.js';
 import SanctuaryScene from './scenes/SanctuaryScene';
 import { ELEMENTS } from './data/gameData.js';
+import { calculateGeometry } from './utils/GeometryMath.js';
 import './style.css';
 
 const config = {
@@ -26,95 +27,278 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSelection = { forma: null, quimica: null, fisica: null };
     let activeCategory = 'forma';
 
-    // Helpers para métricas geométricas simples (usadas para validação/educação)
-    function polyMetrics(pts){
-        let area = 0; let peri = 0;
-        for(let i=0;i<pts.length;i++){
-            const p1 = pts[i]; const p2 = pts[(i+1)%pts.length];
-            area += p1.x * p2.y - p2.x * p1.y;
-            peri += Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        }
-        return { area: Math.abs(area) / 2, peri };
-    }
-
-    function computeShapeMetrics(id, scaleX = 1, scaleY = 1){
-        let area = null, peri = null, breakdown = '';
+    // ═══════════════════════════════════════════════════════════════════
+    // CONSTANTES DE CORES E ÍCONES
+    // ═══════════════════════════════════════════════════════════════════
+    
+    const PHYSICS_COLORS = {
+        'eletricidade': '#ffea00',
+        'calor': '#ff4d00',
+        'radiacao': '#00ff00',
+        'gravidade': '#9d00ff',
+        'luz': '#ffffff',
+        'frio': '#0088ff',
+        'magnetismo': '#ff00aa'
+    };
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // ENGINE DE RENDERIZAÇÃO SVG (REUTILIZÁVEL)
+    // ═══════════════════════════════════════════════════════════════════
+    
+    /**
+     * Gera um SVG representando o Golem com forma, química e física
+     * @param {string} shape - ID da forma (circulo, quadrado, etc.)
+     * @param {string} chemistry - ID da química (ferro, ouro, etc.)
+     * @param {string} physics - ID da física (eletricidade, calor, etc.)
+     * @param {number} scaleX - Escala horizontal (1.0 = normal)
+     * @param {number} scaleY - Escala vertical (1.0 = normal)
+     * @param {number} size - Tamanho do SVG em pixels
+     * @returns {string} String HTML do SVG
+     */
+    function generateGolemSVG(shape, chemistry, physics, scaleX = 1, scaleY = 1, size = 100) {
+        const c = size / 2; // Centro
+        const s = size;     // Tamanho
         
-        // Helper to scale points
-        const scalePts = (pts) => pts.map(p => ({x: p.x * scaleX, y: p.y * scaleY}));
-
-        switch(id){
-            case 'circulo': {
-                const rX = 25 * scaleX;
-                const rY = 25 * scaleY;
-                area = Math.PI * rX * rY;
-                // Ramanujan approx for perimeter of ellipse
-                const h = ((rX - rY)**2) / ((rX + rY)**2);
-                peri = Math.PI * (rX + rY) * (1 + (3*h)/(10 + Math.sqrt(4 - 3*h)));
-                
-                breakdown = `Elipse (Escala ${scaleX.toFixed(2)}x, ${scaleY.toFixed(2)}x)\nÁrea = π·a·b\n a=${rX.toFixed(1)}, b=${rY.toFixed(1)}\n Área ≈ ${Math.round(area)} px²\nPerímetro ≈ ${Math.round(peri)} px`;
+        // Cor baseada na física
+        const color = PHYSICS_COLORS[physics] || '#00ffff';
+        
+        // Normaliza escala para aspect ratio
+        const maxSc = Math.max(scaleX, scaleY, 1);
+        const nX = scaleX / maxSc;
+        const nY = scaleY / maxSc;
+        const avgScale = (nX + nY) / 2;
+        
+        // Gera o path da forma
+        let shapePath = '';
+        const strokeWidth = Math.max(1.5, 2 * avgScale);
+        
+        switch(shape) {
+            case 'circulo':
+                shapePath = `<ellipse cx="${c}" cy="${c}" rx="${s*0.38*nX}" ry="${s*0.38*nY}"/>`;
                 break;
-            }
             case 'quadrado': {
-                const w = 44 * scaleX;
-                const h = 44 * scaleY;
-                area = w * h;
-                peri = 2 * (w + h);
-                breakdown = `Retângulo\nLargura = ${w.toFixed(1)}, Altura = ${h.toFixed(1)}\nÁrea = ${w.toFixed(1)}·${h.toFixed(1)} = ${Math.round(area)} px²\nPerímetro = 2·(L+A) = ${Math.round(peri)} px`;
+                const w = s*0.65*nX;
+                const h = s*0.65*nY;
+                shapePath = `<rect x="${c-w/2}" y="${c-h/2}" width="${w}" height="${h}"/>`;
                 break;
             }
-            case 'triangulo': {
-                const pts = scalePts([{x:0,y:-28},{x:24,y:18},{x:-24,y:18}]);
-                ({area, peri} = polyMetrics(pts));
-                breakdown = `Triângulo (Escalado)\nÁrea ≈ ${Math.round(area)} px²\nPerímetro ≈ ${Math.round(peri)} px`;
+            case 'triangulo':
+                shapePath = `<polygon points="${c},${c - s*0.38*nY} ${c + s*0.33*nX},${c + s*0.28*nY} ${c - s*0.33*nX},${c + s*0.28*nY}"/>`;
                 break;
-            }
             case 'pentagono': {
-                const R = 26; const n = 5;
                 const pts = [];
-                for(let i=0; i<n; i++) {
-                    const angle = (i * (360/n) - 90) * Math.PI / 180;
-                    pts.push({x: Math.cos(angle)*R, y: Math.sin(angle)*R});
+                for(let i=0; i<5; i++) {
+                    const angle = (i * 72 - 90) * Math.PI / 180;
+                    pts.push(`${c + Math.cos(angle)*s*0.36*nX},${c + Math.sin(angle)*s*0.36*nY}`);
                 }
-                const scaledPts = scalePts(pts);
-                ({area, peri} = polyMetrics(scaledPts));
-                breakdown = `Pentágono (Escalado)\nÁrea ≈ ${Math.round(area)} px²\nPerímetro ≈ ${Math.round(peri)} px`;
+                shapePath = `<polygon points="${pts.join(' ')}"/>`;
                 break;
             }
             case 'hexagono': {
-                const R = 26; const n = 6;
                 const pts = [];
-                for(let i=0; i<n; i++) {
-                    const angle = (i * (360/n) - 90) * Math.PI / 180;
-                    pts.push({x: Math.cos(angle)*R, y: Math.sin(angle)*R});
+                for(let i=0; i<6; i++) {
+                    const angle = (i * 60 - 90) * Math.PI / 180;
+                    pts.push(`${c + Math.cos(angle)*s*0.36*nX},${c + Math.sin(angle)*s*0.36*nY}`);
                 }
-                const scaledPts = scalePts(pts);
-                ({area, peri} = polyMetrics(scaledPts));
-                breakdown = `Hexágono (Escalado)\nÁrea ≈ ${Math.round(area)} px²\nPerímetro ≈ ${Math.round(peri)} px`;
+                shapePath = `<polygon points="${pts.join(' ')}"/>`;
                 break;
             }
-            case 'losango': {
-                const pts = scalePts([{x:0,y:-30},{x:20,y:0},{x:0,y:30},{x:-20,y:0}]); 
-                ({area, peri} = polyMetrics(pts));
-                const d1 = 60 * scaleY; 
-                const d2 = 40 * scaleX;
-                breakdown = `Losango\nDiagonais: ${d1.toFixed(1)} x ${d2.toFixed(1)}\nÁrea = (D1·D2)/2 = ${Math.round(area)} px²\nPerímetro ≈ ${Math.round(peri)} px`;
+            case 'losango':
+                shapePath = `<polygon points="${c},${c - s*0.4*nY} ${c + s*0.28*nX},${c} ${c},${c + s*0.4*nY} ${c - s*0.28*nX},${c}"/>`;
+                break;
+            case 'estrela': {
+                const pts = [];
+                for(let i=0; i<10; i++) {
+                    const angle = (i * 36 - 90) * Math.PI / 180;
+                    const r = i % 2 === 0 ? s*0.36 : s*0.16;
+                    pts.push(`${c + Math.cos(angle)*r*nX},${c + Math.sin(angle)*r*nY}`);
+                }
+                shapePath = `<polygon points="${pts.join(' ')}"/>`;
                 break;
             }
-            default: {
-                const avgScale = (scaleX + scaleY) / 2;
-                const baseSize = 30 * avgScale;
-                area = baseSize * baseSize; 
-                peri = baseSize * 4;
-                breakdown = `Forma Complexa\nÁrea Estimada ≈ ${Math.round(area)} px²`;
+            case 'cruz': {
+                const arm = s*0.15;
+                const len = s*0.35;
+                shapePath = `<polygon points="
+                    ${c-arm*nX},${c-len*nY} ${c+arm*nX},${c-len*nY} ${c+arm*nX},${c-arm*nY}
+                    ${c+len*nX},${c-arm*nY} ${c+len*nX},${c+arm*nY} ${c+arm*nX},${c+arm*nY}
+                    ${c+arm*nX},${c+len*nY} ${c-arm*nX},${c+len*nY} ${c-arm*nX},${c+arm*nY}
+                    ${c-len*nX},${c+arm*nY} ${c-len*nX},${c-arm*nY} ${c-arm*nX},${c-arm*nY}
+                "/>`;
                 break;
             }
+            case 'cilindro':
+                shapePath = `
+                    <ellipse cx="${c}" cy="${c - s*0.25*nY}" rx="${s*0.32*nX}" ry="${s*0.1}"/>
+                    <line x1="${c - s*0.32*nX}" y1="${c - s*0.25*nY}" x2="${c - s*0.32*nX}" y2="${c + s*0.25*nY}"/>
+                    <line x1="${c + s*0.32*nX}" y1="${c - s*0.25*nY}" x2="${c + s*0.32*nX}" y2="${c + s*0.25*nY}"/>
+                    <ellipse cx="${c}" cy="${c + s*0.25*nY}" rx="${s*0.32*nX}" ry="${s*0.1}"/>`;
+                break;
+            case 'cone':
+                shapePath = `
+                    <polygon points="${c},${c - s*0.4*nY} ${c + s*0.32*nX},${c + s*0.25*nY} ${c - s*0.32*nX},${c + s*0.25*nY}"/>
+                    <ellipse cx="${c}" cy="${c + s*0.25*nY}" rx="${s*0.32*nX}" ry="${s*0.09}"/>`;
+                break;
+            case 'capsula':
+                shapePath = `<path d="M${c - s*0.2*nX},${c - s*0.2*nY} 
+                    A${s*0.2*nX},${s*0.2*nX} 0 0,1 ${c + s*0.2*nX},${c - s*0.2*nY}
+                    L${c + s*0.2*nX},${c + s*0.2*nY}
+                    A${s*0.2*nX},${s*0.2*nX} 0 0,1 ${c - s*0.2*nX},${c + s*0.2*nY} Z"/>`;
+                break;
+            case 'domo':
+                shapePath = `
+                    <path d="M${c - s*0.35*nX},${c + s*0.1*nY} 
+                        A${s*0.35*nX},${s*0.35*nY} 0 0,1 ${c + s*0.35*nX},${c + s*0.1*nY}"/>
+                    <rect x="${c - s*0.35*nX}" y="${c + s*0.1*nY}" width="${s*0.7*nX}" height="${s*0.15*nY}"/>`;
+                break;
+            case 'piramide':
+                shapePath = `
+                    <polygon points="${c},${c - s*0.4*nY} ${c + s*0.35*nX},${c + s*0.3*nY} ${c - s*0.35*nX},${c + s*0.3*nY}"/>
+                    <line x1="${c}" y1="${c - s*0.4*nY}" x2="${c}" y2="${c + s*0.3*nY}"/>`;
+                break;
+            case 'obelisco':
+                shapePath = `
+                    <rect x="${c - s*0.12*nX}" y="${c - s*0.35*nY}" width="${s*0.24*nX}" height="${s*0.75*nY}"/>
+                    <polygon points="${c - s*0.12*nX},${c - s*0.35*nY} ${c},${c - s*0.48*nY} ${c + s*0.12*nX},${c - s*0.35*nY}"/>`;
+                break;
+            case 'monolito':
+                shapePath = `
+                    <rect x="${c - s*0.1*nX}" y="${c - s*0.42*nY}" width="${s*0.2*nX}" height="${s*0.84*nY}"/>
+                    <line x1="${c - s*0.06*nX}" y1="${c - s*0.38*nY}" x2="${c - s*0.06*nX}" y2="${c + s*0.38*nY}"/>
+                    <line x1="${c + s*0.06*nX}" y1="${c - s*0.38*nY}" x2="${c + s*0.06*nX}" y2="${c + s*0.38*nY}"/>`;
+                break;
+            case 'tesseract':
+                shapePath = `
+                    <rect x="${c - s*0.28*nX}" y="${c - s*0.28*nY}" width="${s*0.56*nX}" height="${s*0.56*nY}"/>
+                    <rect x="${c - s*0.18*nX}" y="${c - s*0.18*nY}" width="${s*0.36*nX}" height="${s*0.36*nY}"/>
+                    <line x1="${c - s*0.28*nX}" y1="${c - s*0.28*nY}" x2="${c - s*0.18*nX}" y2="${c - s*0.18*nY}"/>
+                    <line x1="${c + s*0.28*nX}" y1="${c - s*0.28*nY}" x2="${c + s*0.18*nX}" y2="${c - s*0.18*nY}"/>
+                    <line x1="${c - s*0.28*nX}" y1="${c + s*0.28*nY}" x2="${c - s*0.18*nX}" y2="${c + s*0.18*nY}"/>
+                    <line x1="${c + s*0.28*nX}" y1="${c + s*0.28*nY}" x2="${c + s*0.18*nX}" y2="${c + s*0.18*nY}"/>`;
+                break;
+            case 'fractal': {
+                const h = s*0.35;
+                shapePath = `
+                    <polygon points="${c},${c - h*nY} ${c + h*0.866*nX},${c + h*0.5*nY} ${c - h*0.866*nX},${c + h*0.5*nY}"/>
+                    <polygon points="${c},${c + h*0.5*nY} ${c + h*0.433*nX},${c - h*0.25*nY} ${c - h*0.433*nX},${c - h*0.25*nY}"/>`;
+                break;
+            }
+            case 'esfera':
+                shapePath = `
+                    <circle cx="${c}" cy="${c}" r="${s*0.35*avgScale}"/>
+                    <ellipse cx="${c}" cy="${c}" rx="${s*0.35*nX}" ry="${s*0.12*nY}"/>
+                    <ellipse cx="${c}" cy="${c}" rx="${s*0.12*nX}" ry="${s*0.35*nY}"/>`;
+                break;
+            case 'cristal':
+                shapePath = `
+                    <polygon points="${c},${c - s*0.4*nY} ${c + s*0.18*nX},${c} ${c + s*0.05*nX},${c + s*0.4*nY} ${c - s*0.05*nX},${c + s*0.4*nY} ${c - s*0.18*nX},${c}"/>
+                    <line x1="${c}" y1="${c - s*0.4*nY}" x2="${c + s*0.18*nX}" y2="${c}"/>
+                    <line x1="${c}" y1="${c - s*0.4*nY}" x2="${c - s*0.18*nX}" y2="${c}"/>`;
+                break;
+            case 'olho':
+                shapePath = `
+                    <path d="M${c - s*0.35*nX},${c} Q${c},${c - s*0.28*nY} ${c + s*0.35*nX},${c} Q${c},${c + s*0.28*nY} ${c - s*0.35*nX},${c}"/>
+                    <circle cx="${c}" cy="${c}" r="${s*0.14*avgScale}"/>
+                    <circle cx="${c}" cy="${c}" r="${s*0.06*avgScale}" fill="${color}"/>`;
+                break;
+            case 'mira':
+                shapePath = `
+                    <circle cx="${c}" cy="${c}" r="${s*0.3*avgScale}"/>
+                    <line x1="${c}" y1="${c - s*0.42*nY}" x2="${c}" y2="${c + s*0.42*nY}"/>
+                    <line x1="${c - s*0.42*nX}" y1="${c}" x2="${c + s*0.42*nX}" y2="${c}"/>`;
+                break;
+            default:
+                shapePath = `<rect x="${c - s*0.25}" y="${c - s*0.25}" width="${s*0.5}" height="${s*0.5}"/>`;
         }
-        return { area, peri, breakdown };
+        
+        // Padrão químico (overlay sutil)
+        let chemPattern = '';
+        const patternOpacity = 0.35;
+        
+        switch(chemistry) {
+            case 'ferro':
+                // Hachuras diagonais
+                chemPattern = `<g stroke="${color}" stroke-opacity="${patternOpacity}" stroke-width="0.8">
+                    <line x1="${c - s*0.3}" y1="${c - s*0.3}" x2="${c + s*0.3}" y2="${c + s*0.3}"/>
+                    <line x1="${c - s*0.2}" y1="${c - s*0.35}" x2="${c + s*0.35}" y2="${c + s*0.2}"/>
+                    <line x1="${c - s*0.35}" y1="${c - s*0.2}" x2="${c + s*0.2}" y2="${c + s*0.35}"/>
+                    <line x1="${c + s*0.3}" y1="${c - s*0.3}" x2="${c - s*0.3}" y2="${c + s*0.3}"/>
+                </g>`;
+                break;
+            case 'ouro':
+                // Brilhos especulares
+                chemPattern = `<g fill="white" fill-opacity="0.5">
+                    <ellipse cx="${c - s*0.12}" cy="${c - s*0.12}" rx="${s*0.08}" ry="${s*0.04}" transform="rotate(-30 ${c - s*0.12} ${c - s*0.12})"/>
+                    <ellipse cx="${c + s*0.08}" cy="${c + s*0.05}" rx="${s*0.04}" ry="${s*0.02}" transform="rotate(-30 ${c + s*0.08} ${c + s*0.05})"/>
+                </g>`;
+                break;
+            case 'cristal':
+                // Linhas de refração
+                chemPattern = `<g stroke="${color}" stroke-opacity="${patternOpacity}" stroke-width="0.6">
+                    <line x1="${c}" y1="${c}" x2="${c}" y2="${c - s*0.35}"/>
+                    <line x1="${c}" y1="${c}" x2="${c + s*0.35}" y2="${c}"/>
+                    <line x1="${c}" y1="${c}" x2="${c}" y2="${c + s*0.35}"/>
+                    <line x1="${c}" y1="${c}" x2="${c - s*0.35}" y2="${c}"/>
+                    <line x1="${c}" y1="${c}" x2="${c + s*0.25}" y2="${c - s*0.25}"/>
+                    <line x1="${c}" y1="${c}" x2="${c - s*0.25}" y2="${c + s*0.25}"/>
+                </g>`;
+                break;
+            case 'silicio':
+                // Circuito PCB
+                chemPattern = `<g stroke="${color}" stroke-opacity="${patternOpacity}" stroke-width="0.8" fill="none">
+                    <path d="M${c - s*0.2},${c - s*0.1} L${c},${c - s*0.1} L${c},${c + s*0.1} L${c + s*0.2},${c + s*0.1}"/>
+                    <rect x="${c - s*0.05}" y="${c - s*0.05}" width="${s*0.1}" height="${s*0.1}"/>
+                </g>`;
+                break;
+            case 'uranio':
+                // Núcleo radioativo
+                chemPattern = `<g>
+                    <circle cx="${c}" cy="${c}" r="${s*0.06}" fill="${color}" fill-opacity="0.6"/>
+                    <circle cx="${c}" cy="${c}" r="${s*0.15}" stroke="${color}" stroke-opacity="${patternOpacity}" fill="none" stroke-dasharray="3,2"/>
+                    <circle cx="${c}" cy="${c}" r="${s*0.25}" stroke="${color}" stroke-opacity="0.2" fill="none" stroke-dasharray="2,3"/>
+                </g>`;
+                break;
+            case 'mercurio':
+                // Ondas líquidas
+                chemPattern = `<g stroke="${color}" stroke-opacity="${patternOpacity}" stroke-width="0.8" fill="none">
+                    <path d="M${c - s*0.3},${c - s*0.05} Q${c - s*0.15},${c - s*0.15} ${c},${c - s*0.05} Q${c + s*0.15},${c + s*0.05} ${c + s*0.3},${c - s*0.05}"/>
+                    <path d="M${c - s*0.3},${c + s*0.1} Q${c - s*0.15},${c} ${c},${c + s*0.1} Q${c + s*0.15},${c + s*0.2} ${c + s*0.3},${c + s*0.1}"/>
+                </g>`;
+                break;
+        }
+        
+        // Olhos (expressão)
+        const eyeOffset = s * 0.08;
+        const eyeY = c - s * 0.05;
+        const eyeR = s * 0.035;
+        const eyes = `<g fill="${color}" opacity="0.9">
+            <circle cx="${c - eyeOffset}" cy="${eyeY}" r="${eyeR}"/>
+            <circle cx="${c + eyeOffset}" cy="${eyeY}" r="${eyeR}"/>
+        </g>`;
+        
+        // Monta o SVG completo
+        return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <filter id="glow-${shape}-${size}" x="-50%" y="-50%" width="200%" height="200%">
+                    <feGaussianBlur stdDeviation="${size * 0.025}" result="blur"/>
+                    <feMerge>
+                        <feMergeNode in="blur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+            </defs>
+            <g filter="url(#glow-${shape}-${size})" fill="none" stroke="${color}" stroke-width="${strokeWidth}">
+                ${shapePath}
+            </g>
+            ${chemPattern}
+            ${eyes}
+        </svg>`;
     }
 
-    // Helpers para métricas geométricas simples (usadas para validação/educação)
-    // (Definidas no escopo superior para uso na árvore genealógica também)
+    // ═══════════════════════════════════════════════════════════════════
+    // ELEMENTOS DOM
+    // ═══════════════════════════════════════════════════════════════════
+    
     const creationPanel = document.getElementById('creation-panel');
     const btnOpen = document.getElementById('btn-open-lab');
     const btnSynthesize = document.getElementById('btn-synthesize');
@@ -149,7 +333,13 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderFamilyTree(data) {
         treeContent.innerHTML = '';
         if (!data || !data.length) {
-            treeContent.innerHTML = '<div style="text-align:center; color:#666; margin-top:50px;">Nenhum registro de vida disponível.</div>';
+            treeContent.innerHTML = `
+                <div class="tree-empty-state">
+                    <div class="empty-icon">🧬</div>
+                    <div class="empty-title">ARQUIVO VAZIO</div>
+                    <div class="empty-subtitle">Nenhuma forma de vida registrada</div>
+                </div>
+            `;
             return;
         }
 
@@ -164,25 +354,20 @@ document.addEventListener('DOMContentLoaded', () => {
         function getGen(id) {
             if (nodeGen[id] !== undefined) return nodeGen[id];
             const node = map[id];
-            // Se não existe ou não tem pais conhecidos no registro, é Geração 0
             if (!node || !node.parents || node.parents.length === 0) {
                 nodeGen[id] = 0;
                 return 0;
             }
-            
-            // Se tem pais, mas nenhum está no mapa (ex: deletados?), é Geração 0
             const knownParents = node.parents.filter(pid => map[pid]);
             if (knownParents.length === 0) {
                 nodeGen[id] = 0;
                 return 0;
             }
-
             let maxP = -1;
             knownParents.forEach(pid => {
                 const pGen = getGen(pid);
                 if (pGen > maxP) maxP = pGen;
             });
-            
             const myGen = maxP + 1;
             nodeGen[id] = myGen;
             return myGen;
@@ -194,7 +379,18 @@ document.addEventListener('DOMContentLoaded', () => {
             generations[g].push(d);
         });
 
-        // 3. Renderizar por Geração
+        // 3. Header com estatísticas
+        const statsHeader = document.createElement('div');
+        statsHeader.className = 'tree-stats-header';
+        const totalGolems = data.length;
+        const maxGen = Math.max(...Object.keys(generations).map(Number));
+        statsHeader.innerHTML = `
+            <div class="stat-item"><span class="stat-value">${totalGolems}</span><span class="stat-label">REGISTROS</span></div>
+            <div class="stat-item"><span class="stat-value">${maxGen + 1}</span><span class="stat-label">GERAÇÕES</span></div>
+        `;
+        treeContent.appendChild(statsHeader);
+
+        // 4. Renderizar por Geração
         const genKeys = Object.keys(generations).sort((a,b) => a-b);
         
         genKeys.forEach(key => {
@@ -203,14 +399,14 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const label = document.createElement('div');
             label.className = 'gen-label';
-            label.innerText = `GERAÇÃO ${key}`;
+            label.innerHTML = `<span class="gen-number">G${key}</span><span class="gen-text">GERAÇÃO ${key}</span><span class="gen-count">${generations[key].length} entidades</span>`;
             row.appendChild(label);
 
             const rowContent = document.createElement('div');
             rowContent.className = 'gen-content';
 
             generations[key].forEach(golem => {
-                const card = createGolemCard(golem, map);
+                const card = createGolemCard(golem, map, nodeGen[golem.id]);
                 rowContent.appendChild(card);
             });
             
@@ -219,244 +415,1008 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function createGolemCard(rec, map) {
+    function createGolemCard(rec, map, generation = 0) {
         const card = document.createElement('div');
         card.className = 'golem-card';
         
-        // Cor baseada na física (elemento)
-        let color = '#888';
-        if (rec.fisica) {
-            switch(rec.fisica.id) {
-                case 'eletricidade': color = '#ffea00'; break;
-                case 'calor':        color = '#ff4d00'; break;
-                case 'radiacao':     color = '#00ff00'; break;
-                case 'gravidade':    color = '#9d00ff'; break;
-                case 'luz':          color = '#ffffff'; break;
-                case 'frio':         color = '#0088ff'; break;
-                case 'magnetismo':   color = '#ff00aa'; break;
-            }
-        }
-        card.style.borderColor = color;
-
-        const header = document.createElement('div');
-        header.className = 'golem-card-header';
-
-        const icon = document.createElement('div');
-        icon.className = 'golem-icon';
-        icon.style.borderColor = color;
-        icon.style.color = color;
-        // Ícone simples baseado na forma
-        let shapeIcon = '⬜';
-        if(rec.forma) {
-            if(rec.forma.id === 'circulo') shapeIcon = '⚪';
-            if(rec.forma.id === 'triangulo') shapeIcon = '🔺';
-            if(rec.forma.id === 'pentagono') shapeIcon = '⬠';
-            if(rec.forma.id === 'hexagono') shapeIcon = '⬡';
-        }
-        icon.innerText = shapeIcon;
-
-        const info = document.createElement('div');
-        info.className = 'golem-info';
+        // Extrai dados
+        const shapeId = rec.forma?.id || 'quadrado';
+        const chemId = rec.quimica?.id || 'carbono';
+        const physId = rec.fisica?.id || 'luz';
+        const stats = rec.stats || { forca: '?', resistencia: '?', energia: '?' };
+        const scaleX = stats.scaleX || 1;
+        const scaleY = stats.scaleY || 1;
         
-        const name = document.createElement('div');
-        name.className = 'golem-name';
-        name.innerText = rec.name || 'Desconhecido';
+        const physColor = PHYSICS_COLORS[physId] || '#0ff';
+        card.style.setProperty('--card-color', physColor);
         
-        const meta = document.createElement('div');
-        meta.className = 'golem-meta';
-        const born = rec.bornAt ? new Date(rec.bornAt).toLocaleTimeString() : '--:--';
-        meta.innerText = `${born}`;
-
-        info.appendChild(name);
-        info.appendChild(meta);
-        header.appendChild(icon);
-        header.appendChild(info);
-        card.appendChild(header);
-
-        // Parents info
-        if (rec.parents && rec.parents.length > 0) {
-            const pDiv = document.createElement('div');
-            pDiv.className = 'golem-parents';
-            pDiv.innerHTML = '<strong>PAIS:</strong>';
+        // === PARTE COLAPSADA (Sempre Visível) ===
+        const collapsed = document.createElement('div');
+        collapsed.className = 'golem-card-collapsed';
+        
+        // Usa generateGolemSVG para ícone visual (pequeno)
+        const miniSVG = generateGolemSVG(shapeId, chemId, physId, scaleX, scaleY, 40);
+        
+        collapsed.innerHTML = `
+            <div class="card-visual-mini">${miniSVG}</div>
+            <div class="card-info">
+                <div class="card-name">${rec.name || 'Desconhecido'}</div>
+                <div class="card-gen">Geração ${generation}</div>
+            </div>
+            <div class="expand-icon">▼</div>
+        `;
+        card.appendChild(collapsed);
+        
+        // === PARTE EXPANSÍVEL (Acordeão) ===
+        const expandable = document.createElement('div');
+        expandable.className = 'golem-card-expandable';
+        
+        const expandableInner = document.createElement('div');
+        expandableInner.className = 'golem-card-expandable-inner';
+        
+        // 1. SVG do Golem (maior) usando generateGolemSVG
+        const visualSection = document.createElement('div');
+        visualSection.className = 'golem-expanded-visual';
+        visualSection.innerHTML = generateGolemSVG(shapeId, chemId, physId, scaleX, scaleY, 80);
+        expandableInner.appendChild(visualSection);
+        
+        // 2. Grid de Stats
+        const statsGrid = document.createElement('div');
+        statsGrid.className = 'golem-stats-grid';
+        statsGrid.innerHTML = `
+            <div class="stat-item">
+                <div class="stat-value">${stats.forca ?? '?'}</div>
+                <div class="stat-label">Força</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">${stats.resistencia ?? '?'}</div>
+                <div class="stat-label">Resistência</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value">${stats.energia ?? '?'}</div>
+                <div class="stat-label">Energia</div>
+            </div>
+        `;
+        expandableInner.appendChild(statsGrid);
+        
+        // 3. Painel Matemático - Usa calculateGeometry diretamente
+        const mathPanel = document.createElement('div');
+        mathPanel.className = 'golem-math-panel';
+        
+        let areaValue = '—';
+        let perimValue = '—';
+        let formulaText = 'Calculando...';
+        let descText = 'Forma geométrica';
+        
+        try {
+            const geoResult = calculateGeometry(shapeId, scaleX, scaleY, rec.forma?.params);
+            areaValue = geoResult.areaFormatted;
+            perimValue = geoResult.perimeterFormatted;
+            formulaText = geoResult.formula;
+            descText = geoResult.description;
+        } catch (e) {
+            console.warn('[Card] Geometry calc error:', e);
+            formulaText = 'Erro no cálculo';
+        }
+        
+        mathPanel.innerHTML = `
+            <div class="math-panel-header">
+                <span class="math-icon">📐</span>
+                <span class="math-title">Painel Matemático</span>
+            </div>
+            <div class="math-row">
+                <span class="math-label">Área (A)</span>
+                <span class="math-value">${areaValue}</span>
+            </div>
+            <div class="math-row">
+                <span class="math-label">Perímetro (P)</span>
+                <span class="math-value">${perimValue}</span>
+            </div>
+            <div class="math-row">
+                <span class="math-label">Escala</span>
+                <span class="math-value">${scaleX.toFixed(2)} × ${scaleY.toFixed(2)}</span>
+            </div>
+            <div class="math-formula">${formulaText}</div>
+            <div class="math-desc">${descText}</div>
+        `;
+        expandableInner.appendChild(mathPanel);
+        
+        // 4. Linhagem (Pais) - com SVG mini para cada pai
+        if (rec.parents && rec.parents.length > 0 && rec.parents.some(p => map[p])) {
+            const lineageSection = document.createElement('div');
+            lineageSection.className = 'golem-lineage-expanded';
             
-            rec.parents.forEach((pid, idx) => {
-                if(!pid) return;
-                const pName = map[pid] ? map[pid].name : '???';
-                const span = document.createElement('span');
-                span.className = 'parent-link';
-                span.innerText = pName;
-                span.title = `ID: ${pid}`;
-                
-                pDiv.appendChild(span);
-                if (idx < rec.parents.length - 1) {
-                    pDiv.appendChild(document.createTextNode(' & '));
-                }
+            let parentsHTML = '';
+            rec.parents.filter(pid => map[pid]).forEach(pid => {
+                const parent = map[pid];
+                const pShape = parent.forma?.id || 'quadrado';
+                const pChem = parent.quimica?.id || 'carbono';
+                const pPhys = parent.fisica?.id || 'luz';
+                const parentMiniSVG = generateGolemSVG(pShape, pChem, pPhys, 1, 1, 24);
+                parentsHTML += `<div class="parent-chip"><span class="parent-visual">${parentMiniSVG}</span><span class="parent-name">${parent.name || '???'}</span></div>`;
             });
-            card.appendChild(pDiv);
+            
+            lineageSection.innerHTML = `
+                <div class="lineage-header">
+                    <span class="lineage-icon">🧬</span>
+                    <span class="lineage-title">Linhagem</span>
+                </div>
+                <div class="lineage-parents">${parentsHTML}</div>
+            `;
+            expandableInner.appendChild(lineageSection);
         }
+        
+        expandable.appendChild(expandableInner);
+        card.appendChild(expandable);
 
-        // Stats summary
-        const statsDiv = document.createElement('div');
-        statsDiv.style.fontSize = '8px';
-        statsDiv.style.color = '#aaa';
-        statsDiv.style.marginTop = '5px';
-        const evCount = (rec.lifeLog && rec.lifeLog.length) ? rec.lifeLog.length : 0;
-        statsDiv.innerText = `${evCount} eventos registrados`;
-        card.appendChild(statsDiv);
-
-        // Math Info
-        if (rec.forma) {
-            const sX = rec.stats ? (rec.stats.scaleX || parseFloat(rec.stats.scale) || 1) : 1;
-            const sY = rec.stats ? (rec.stats.scaleY || parseFloat(rec.stats.scale) || 1) : 1;
-            const metrics = computeShapeMetrics(rec.forma.id, sX, sY);
-            if (metrics.area) {
-                const mathDiv = document.createElement('div');
-                mathDiv.style.marginTop = '8px';
-                mathDiv.style.padding = '6px';
-                mathDiv.style.background = '#111';
-                mathDiv.style.border = '1px dashed #444';
-                mathDiv.style.fontSize = '8px';
-                mathDiv.style.fontFamily = 'monospace';
-                mathDiv.style.color = '#00ffff';
-                
-                mathDiv.innerHTML = `
-                    <div style="margin-bottom:4px;">ÁREA: ${Math.round(metrics.area)} px²</div>
-                    <div style="color:#888; white-space:pre-wrap; font-size:7px;">${metrics.breakdown}</div>
-                `;
-                card.appendChild(mathDiv);
-            }
-        }
-
-        // click: abrir modal de inspeção com detalhes completos
-        card.style.cursor = 'pointer';
-        card.addEventListener('click', () => {
-            // Monta payload compatível com handler de inspeção
-            const data = {
-                stats: {
-                    name: rec.name || 'Desconhecido',
-                    description: rec.forma ? (rec.forma.name || rec.forma.id) : '—',
-                    dialogo: rec.dialogo || '...','stats': { forca: '?', resistencia: '?', energia: '?' }
-                },
-                visual: {
-                    forma: rec.forma || null,
-                    quimica: rec.quimica || null,
-                    fisica: rec.fisica || null
-                },
-                lifeLog: rec.lifeLog || []
-            };
-
-            // Fecha a janela da árvore para focar no modal
-            if (treeModal) treeModal.classList.add('hidden');
-
-            // Força o modal para modo grande e centralizado
-            if (inspectModal) {
-                inspectModal.classList.add('modal-large');
-            }
-
-            // Emite o evento para usar o handler existente
-            game.events.emit('inspect-golem', data);
+        // === CLICK HANDLER: Toggle Accordion (Autossuficiente, sem modal) ===
+        collapsed.addEventListener('click', (e) => {
+            e.stopPropagation();
+            card.classList.toggle('expanded');
         });
 
         return card;
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // ESTAÇÃO DE MONTAGEM HOLOGRÁFICA - Nova Interface
+    // ═══════════════════════════════════════════════════════════════════
+    
+    const previewCanvas = document.getElementById('golem-preview');
+    const previewCtx = previewCanvas ? previewCanvas.getContext('2d') : null;
+    const previewStatusText = document.getElementById('preview-status-text');
+    const previewContainer = document.querySelector('.preview-container');
+    const stabilityFill = document.getElementById('stability-fill');
+    const stabilityValue = document.getElementById('stability-value');
+    
+    // Containers de opções por categoria
+    const optionsForma = document.getElementById('options-forma');
+    const optionsQuimica = document.getElementById('options-quimica');
+    const optionsFisica = document.getElementById('options-fisica');
+    
+    // Status displays
+    const statusForma = document.getElementById('status-forma');
+    const statusQuimica = document.getElementById('status-quimica');
+    const statusFisica = document.getElementById('status-fisica');
+    
+    // Colunas
+    const colForma = document.getElementById('col-forma');
+    const colQuimica = document.getElementById('col-quimica');
+    const colFisica = document.getElementById('col-fisica');
+    
+    // Espessura por química
+    const CHEM_LINE_WIDTH = {
+        'carbono': 2, 'ferro': 4, 'silicio': 2,
+        'ouro': 3, 'cristal': 1, 'mercurio': 5, 'uranio': 3
+    };
+    
+    // Ícones por categoria
+    const SHAPE_ICONS = {
+        'circulo': '○', 'quadrado': '□', 'triangulo': '△',
+        'pentagono': '⬠', 'hexagono': '⬡', 'losango': '◇', 'cruz': '✚'
+    };
+    
+    const CHEM_ICONS = {
+        'carbono': '⬡', 'ferro': '⛏', 'silicio': '◈',
+        'ouro': '★', 'cristal': '◆', 'mercurio': '☿', 'uranio': '☢'
+    };
+    
+    const PHYSICS_ICONS = {
+        'eletricidade': '⚡', 'calor': '🔥', 'radiacao': '☢',
+        'gravidade': '◉', 'luz': '☀', 'frio': '❄', 'magnetismo': '🧲'
+    };
+    
+    // Inicializa as colunas com opções
+    function initHolographicPanel() {
+        if (!optionsForma || !optionsQuimica || !optionsFisica) return;
+        
+        // Popula cada coluna
+        renderColumnOptions('forma', optionsForma, SHAPE_ICONS);
+        renderColumnOptions('quimica', optionsQuimica, CHEM_ICONS);
+        renderColumnOptions('fisica', optionsFisica, PHYSICS_ICONS);
+        
+        // Desenha preview inicial
+        drawPreview();
+        
+        // Inicia loop de animação para preview dinâmico
+        startPreviewAnimation();
+    }
+    
+    let previewAnimationId = null;
+    
+    function startPreviewAnimation() {
+        if (previewAnimationId) return;
+        
+        function animate() {
+            drawPreview();
+            previewAnimationId = requestAnimationFrame(animate);
+        }
+        previewAnimationId = requestAnimationFrame(animate);
+    }
+    
+    function stopPreviewAnimation() {
+        if (previewAnimationId) {
+            cancelAnimationFrame(previewAnimationId);
+            previewAnimationId = null;
+        }
+    }
+    
+    function renderColumnOptions(category, container, icons) {
+        container.innerHTML = '';
+        const items = ELEMENTS[category];
+        
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'option-item';
+            div.dataset.id = item.id;
+            div.dataset.category = category;
+            
+            if (currentSelection[category] && currentSelection[category].id === item.id) {
+                div.classList.add('selected');
+            }
+            
+            const icon = icons[item.id] || '?';
+            div.innerHTML = `
+                <span class="option-icon">${icon}</span>
+                <span class="option-name">${item.name}</span>
+            `;
+            
+            div.addEventListener('click', () => {
+                selectItemHolographic(category, item, container);
+            });
+            
+            container.appendChild(div);
+        });
+    }
+    
+    function selectItemHolographic(category, item, container) {
+        // Atualiza seleção
+        currentSelection[category] = item;
+        
+        // Atualiza visual da coluna
+        const column = container.closest('.selector-column');
+        const statusEl = column.querySelector('.column-status');
+        
+        // Remove seleção anterior e aplica nova
+        container.querySelectorAll('.option-item').forEach(el => el.classList.remove('selected'));
+        container.querySelector(`[data-id="${item.id}"]`)?.classList.add('selected');
+        
+        // Marca coluna como preenchida com animação
+        column.classList.remove('just-filled');
+        void column.offsetWidth; // Trigger reflow
+        column.classList.add('filled', 'just-filled');
+        
+        // Atualiza texto do status
+        statusEl.querySelector('.status-text').textContent = item.name;
+        
+        // Som sutil (se AudioContext disponível)
+        playSelectionBeep(category);
+        
+        // Atualiza preview em tempo real
+        drawPreview();
+        
+        // Atualiza fórmula e estado
+        checkCraftingReady();
+        updateRecipeFormula();
+    }
+    
+    function updateRecipeFormula() {
+        const forma = currentSelection.forma?.name || '?';
+        const quimica = currentSelection.quimica?.name || '?';
+        const fisica = currentSelection.fisica?.name || '?';
+        
+        recipeSummary.innerHTML = `[ ${forma} ] + [ ${quimica} ] + [ ${fisica} ]`;
+    }
+    
+    function playSelectionBeep(category) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            // Frequência baseada na categoria
+            const freqs = { forma: 440, quimica: 550, fisica: 660 };
+            osc.frequency.value = freqs[category] || 500;
+            osc.type = 'sine';
+            
+            gain.gain.value = 0.1;
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.1);
+        } catch (e) {
+            // Silencia erros de áudio
+        }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // PREVIEW RENDERER - Desenha o Golem em tempo real
+    // ═══════════════════════════════════════════════════════════════════
+    
+    function drawPreview() {
+        if (!previewCtx) return;
+        
+        const ctx = previewCtx;
+        const w = previewCanvas.width;
+        const h = previewCanvas.height;
+        const cx = w / 2;
+        const cy = h / 2;
+        
+        // Limpa canvas
+        ctx.clearRect(0, 0, w, h);
+        
+        // Background com grid sutil
+        drawPreviewBackground(ctx, w, h);
+        
+        const forma = currentSelection.forma;
+        const quimica = currentSelection.quimica;
+        const fisica = currentSelection.fisica;
+        
+        // Determina cor e espessura
+        let color = '#334455'; // Wireframe neutro
+        let glowColor = '#334455';
+        let lineWidth = 2;
+        let stability = 0;
+        
+        if (fisica) {
+            color = PHYSICS_COLORS[fisica.id] || '#00ffff';
+            glowColor = color;
+            stability += 33;
+        }
+        
+        if (quimica) {
+            lineWidth = CHEM_LINE_WIDTH[quimica.id] || 2;
+            stability += 33;
+        }
+        
+        if (forma) {
+            stability += 34;
+        }
+        
+        // Atualiza barra de estabilidade
+        if (stabilityFill) stabilityFill.style.width = `${stability}%`;
+        if (stabilityValue) stabilityValue.textContent = `${stability}%`;
+        
+        // Atualiza status do preview
+        updatePreviewStatus(forma, quimica, fisica);
+        
+        // Se não há forma, desenha silhueta pulsante
+        if (!forma) {
+            drawPulsingPlaceholder(ctx, cx, cy);
+            return;
+        }
+        
+        // Desenha a forma com efeitos e textura química
+        const chemId = quimica ? quimica.id : null;
+        drawGolemShape(ctx, cx, cy, forma.id, color, glowColor, lineWidth, !!fisica, chemId);
+        
+        // Desenha rosto simplificado se tiver física (energia = vida)
+        if (fisica) {
+            drawPreviewFace(ctx, cx, cy, color);
+        }
+    }
+    
+    function drawPreviewBackground(ctx, w, h) {
+        // Grid holográfico
+        ctx.strokeStyle = '#112233';
+        ctx.lineWidth = 0.5;
+        
+        const gridSize = 20;
+        for (let x = 0; x < w; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, h);
+            ctx.stroke();
+        }
+        for (let y = 0; y < h; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+        }
+        
+        // Cruz central
+        ctx.strokeStyle = '#223344';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(w/2, 0);
+        ctx.lineTo(w/2, h);
+        ctx.moveTo(0, h/2);
+        ctx.lineTo(w, h/2);
+        ctx.stroke();
+    }
+    
+    function drawPulsingPlaceholder(ctx, cx, cy) {
+        const time = Date.now() * 0.003;
+        const pulse = 0.8 + Math.sin(time) * 0.2;
+        const size = 40 * pulse;
+        
+        ctx.strokeStyle = `rgba(50, 80, 100, ${0.3 + Math.sin(time) * 0.2})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        
+        // Quadrado tracejado pulsante
+        ctx.beginPath();
+        ctx.rect(cx - size, cy - size, size * 2, size * 2);
+        ctx.stroke();
+        
+        // Texto
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#445566';
+        ctx.font = '8px "Press Start 2P"';
+        ctx.textAlign = 'center';
+        ctx.fillText('AGUARDANDO', cx, cy - 5);
+        ctx.fillText('GEOMETRIA', cx, cy + 10);
+    }
+    
+    function drawGolemShape(ctx, cx, cy, shapeId, color, glowColor, lineWidth, hasEnergy, chemId = null) {
+        const size = 45;
+        
+        // Ajuste de cor para materiais especiais
+        let effectiveColor = color;
+        if (chemId === 'ouro') {
+            effectiveColor = blendHexColors(color, '#FFD700', 0.4);
+        } else if (chemId === 'ferro') {
+            effectiveColor = blendHexColors(color, '#8899AA', 0.2);
+        }
+        
+        // Camada 1: Glow externo (se tiver energia)
+        if (hasEnergy) {
+            ctx.shadowColor = glowColor;
+            ctx.shadowBlur = 20;
+            ctx.strokeStyle = glowColor;
+            ctx.lineWidth = lineWidth + 6;
+            ctx.globalAlpha = 0.3;
+            drawShapePath(ctx, cx, cy, shapeId, size);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Camada 2: Fill sutil
+        ctx.fillStyle = hasEnergy ? effectiveColor : '#223344';
+        ctx.globalAlpha = 0.15;
+        drawShapePath(ctx, cx, cy, shapeId, size);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        
+        // Camada 2.5: Padrão químico (textura interna)
+        if (chemId) {
+            drawChemistryPatternPreview(ctx, cx, cy, shapeId, chemId, size, effectiveColor);
+        }
+        
+        // Camada 3: Stroke principal
+        ctx.strokeStyle = effectiveColor;
+        ctx.lineWidth = lineWidth;
+        drawShapePath(ctx, cx, cy, shapeId, size);
+        ctx.stroke();
+    }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // PADRÕES QUÍMICOS - Texturas procedurais para o preview
+    // ═══════════════════════════════════════════════════════════════════
+    
+    function drawChemistryPatternPreview(ctx, cx, cy, shapeId, chemId, size, color) {
+        ctx.save();
+        ctx.globalAlpha = 0.4;
+        
+        switch (chemId) {
+            case 'ouro':
+                // Brilhos especulares
+                ctx.fillStyle = '#FFFFFF';
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.ellipse(cx - size * 0.4, cy - size * 0.4, size * 0.2, size * 0.1, -0.3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.ellipse(cx - size * 0.2, cy - size * 0.55, size * 0.1, size * 0.05, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Fill dourado
+                ctx.fillStyle = '#FFD700';
+                ctx.globalAlpha = 0.25;
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+                
+            case 'ferro':
+                // Hachuras diagonais
+                ctx.strokeStyle = lightenHexColor(color, 0.4);
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.35;
+                const spacing = 6;
+                const extent = size * 0.85;
+                for (let i = -extent * 2; i < extent * 2; i += spacing) {
+                    ctx.beginPath();
+                    ctx.moveTo(cx + i - extent, cy - extent);
+                    ctx.lineTo(cx + i + extent, cy + extent);
+                    ctx.stroke();
+                }
+                break;
+                
+            case 'cristal':
+                // Linhas facetadas
+                ctx.strokeStyle = lightenHexColor(color, 0.5);
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.4;
+                let facets = 6;
+                if (shapeId === 'triangulo') facets = 3;
+                else if (shapeId === 'quadrado') facets = 4;
+                else if (shapeId === 'pentagono') facets = 5;
+                else if (shapeId === 'circulo') facets = 8;
+                
+                for (let i = 0; i < facets; i++) {
+                    const angle = (i * (360 / facets) - 90) * Math.PI / 180;
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.lineTo(cx + Math.cos(angle) * size * 0.8, cy + Math.sin(angle) * size * 0.8);
+                    ctx.stroke();
+                }
+                // Anel interno
+                ctx.globalAlpha = 0.25;
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+                
+            case 'mercurio':
+                // Ondas líquidas
+                const time = Date.now() * 0.002;
+                ctx.fillStyle = lightenHexColor(color, 0.3);
+                ctx.globalAlpha = 0.4;
+                const pulseSize = size * 0.3 + Math.sin(time) * size * 0.05;
+                ctx.beginPath();
+                ctx.arc(cx + Math.sin(time * 1.3) * 2, cy + Math.cos(time) * 2, pulseSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Ondas
+                ctx.strokeStyle = lightenHexColor(color, 0.4);
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.35;
+                for (let wave = 0; wave < 3; wave++) {
+                    ctx.beginPath();
+                    const baseY = cy - size * 0.35 + wave * size * 0.3;
+                    for (let x = -size * 0.6; x <= size * 0.6; x += 3) {
+                        const y = baseY + Math.sin(x * 0.15 + time + wave * 0.7) * 3;
+                        if (x === -size * 0.6) ctx.moveTo(cx + x, y);
+                        else ctx.lineTo(cx + x, y);
+                    }
+                    ctx.stroke();
+                }
+                break;
+                
+            case 'silicio':
+                // Circuito impresso
+                const s = size * 0.5;
+                ctx.strokeStyle = lightenHexColor(color, 0.4);
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.4;
+                
+                // Trilhas
+                ctx.beginPath();
+                ctx.moveTo(cx - s, cy - s * 0.5);
+                ctx.lineTo(cx - s * 0.3, cy - s * 0.5);
+                ctx.lineTo(cx - s * 0.3, cy);
+                ctx.lineTo(cx + s * 0.3, cy);
+                ctx.lineTo(cx + s * 0.3, cy + s * 0.5);
+                ctx.lineTo(cx + s, cy + s * 0.5);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - s);
+                ctx.lineTo(cx, cy - s * 0.3);
+                ctx.lineTo(cx + s * 0.5, cy - s * 0.3);
+                ctx.lineTo(cx + s * 0.5, cy + s * 0.3);
+                ctx.lineTo(cx, cy + s * 0.3);
+                ctx.lineTo(cx, cy + s);
+                ctx.stroke();
+                
+                // Nós
+                ctx.fillStyle = lightenHexColor(color, 0.5);
+                ctx.globalAlpha = 0.5;
+                [[cx - s * 0.3, cy - s * 0.5], [cx + s * 0.3, cy], [cx, cy + s * 0.3]].forEach(([nx, ny]) => {
+                    ctx.beginPath();
+                    ctx.arc(nx, ny, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                
+                // Chip central
+                ctx.strokeStyle = lightenHexColor(color, 0.4);
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.45;
+                ctx.strokeRect(cx - s * 0.2, cy - s * 0.2, s * 0.4, s * 0.4);
+                break;
+                
+            case 'uranio':
+                // Núcleo radioativo
+                const t = Date.now() * 0.003;
+                ctx.fillStyle = '#00FF00';
+                ctx.globalAlpha = 0.4 + Math.sin(t * 2) * 0.15;
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 0.18, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Órbitas
+                ctx.strokeStyle = lightenHexColor(color, 0.3);
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.35;
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 0.55, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Elétrons
+                ctx.fillStyle = '#FFFF00';
+                ctx.globalAlpha = 0.6;
+                for (let i = 0; i < 3; i++) {
+                    const angle = t * 2 + i * (Math.PI * 2 / 3);
+                    const orbitR = size * 0.35 + (i % 2) * size * 0.2;
+                    ctx.beginPath();
+                    ctx.arc(cx + Math.cos(angle) * orbitR, cy + Math.sin(angle) * orbitR * 0.5, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                break;
+                
+            case 'carbono':
+            default:
+                // Grid molecular sutil
+                ctx.strokeStyle = lightenHexColor(color, 0.3);
+                ctx.lineWidth = 0.5;
+                ctx.globalAlpha = 0.2;
+                const gridSize = 8;
+                const ext = size * 0.6;
+                for (let y = -ext; y <= ext; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(cx - ext, cy + y);
+                    ctx.lineTo(cx + ext, cy + y);
+                    ctx.stroke();
+                }
+                for (let x = -ext; x <= ext; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(cx + x, cy - ext);
+                    ctx.lineTo(cx + x, cy + ext);
+                    ctx.stroke();
+                }
+                break;
+        }
+        
+        ctx.restore();
+    }
+    
+    // Utilitários de cor para o preview
+    function lightenHexColor(hexColor, amount) {
+        // Converte hex string para componentes
+        let hex = hexColor.replace('#', '');
+        if (hex.length === 3) hex = hex[0]+hex[0]+hex[1]+hex[1]+hex[2]+hex[2];
+        const r = Math.min(255, parseInt(hex.substr(0, 2), 16) + 255 * amount);
+        const g = Math.min(255, parseInt(hex.substr(2, 2), 16) + 255 * amount);
+        const b = Math.min(255, parseInt(hex.substr(4, 2), 16) + 255 * amount);
+        return `rgb(${Math.floor(r)}, ${Math.floor(g)}, ${Math.floor(b)})`;
+    }
+    
+    function blendHexColors(color1, color2, weight) {
+        let hex1 = color1.replace('#', '');
+        let hex2 = color2.replace('#', '');
+        if (hex1.length === 3) hex1 = hex1[0]+hex1[0]+hex1[1]+hex1[1]+hex1[2]+hex1[2];
+        if (hex2.length === 3) hex2 = hex2[0]+hex2[0]+hex2[1]+hex2[1]+hex2[2]+hex2[2];
+        
+        const r1 = parseInt(hex1.substr(0, 2), 16);
+        const g1 = parseInt(hex1.substr(2, 2), 16);
+        const b1 = parseInt(hex1.substr(4, 2), 16);
+        
+        const r2 = parseInt(hex2.substr(0, 2), 16);
+        const g2 = parseInt(hex2.substr(2, 2), 16);
+        const b2 = parseInt(hex2.substr(4, 2), 16);
+        
+        const r = Math.floor(r1 * (1 - weight) + r2 * weight);
+        const g = Math.floor(g1 * (1 - weight) + g2 * weight);
+        const b = Math.floor(b1 * (1 - weight) + b2 * weight);
+        
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+    
+    function drawShapePath(ctx, cx, cy, shapeId, size) {
+        ctx.beginPath();
+        
+        switch(shapeId) {
+            case 'circulo':
+                ctx.arc(cx, cy, size, 0, Math.PI * 2);
+                break;
+            case 'quadrado':
+                ctx.rect(cx - size, cy - size, size * 2, size * 2);
+                break;
+            case 'triangulo':
+                ctx.moveTo(cx, cy - size);
+                ctx.lineTo(cx + size * 0.866, cy + size * 0.5);
+                ctx.lineTo(cx - size * 0.866, cy + size * 0.5);
+                ctx.closePath();
+                break;
+            case 'pentagono':
+                drawPolygonPath(ctx, cx, cy, 5, size);
+                break;
+            case 'hexagono':
+                drawPolygonPath(ctx, cx, cy, 6, size);
+                break;
+            case 'losango':
+                ctx.moveTo(cx, cy - size * 1.2);
+                ctx.lineTo(cx + size * 0.7, cy);
+                ctx.lineTo(cx, cy + size * 1.2);
+                ctx.lineTo(cx - size * 0.7, cy);
+                ctx.closePath();
+                break;
+            case 'cruz':
+                const t = size * 0.35;
+                ctx.moveTo(cx - t, cy - size);
+                ctx.lineTo(cx + t, cy - size);
+                ctx.lineTo(cx + t, cy - t);
+                ctx.lineTo(cx + size, cy - t);
+                ctx.lineTo(cx + size, cy + t);
+                ctx.lineTo(cx + t, cy + t);
+                ctx.lineTo(cx + t, cy + size);
+                ctx.lineTo(cx - t, cy + size);
+                ctx.lineTo(cx - t, cy + t);
+                ctx.lineTo(cx - size, cy + t);
+                ctx.lineTo(cx - size, cy - t);
+                ctx.lineTo(cx - t, cy - t);
+                ctx.closePath();
+                break;
+            // ═══ FORMAS DO SISTEMA DE ALQUIMIA ═══
+            case 'capsula':
+                // Retângulo arredondado
+                ctx.moveTo(cx - size * 0.4, cy - size);
+                ctx.lineTo(cx + size * 0.4, cy - size);
+                ctx.arc(cx + size * 0.4, cy - size * 0.6, size * 0.4, -Math.PI/2, Math.PI/2);
+                ctx.lineTo(cx - size * 0.4, cy - size * 0.2);
+                ctx.arc(cx - size * 0.4, cy - size * 0.6, size * 0.4, Math.PI/2, -Math.PI/2);
+                break;
+            case 'domo':
+                // Semicírculo em base quadrada
+                ctx.arc(cx, cy, size, Math.PI, 0);
+                ctx.lineTo(cx + size, cy + size * 0.5);
+                ctx.lineTo(cx - size, cy + size * 0.5);
+                ctx.closePath();
+                break;
+            case 'monolito':
+                // Retângulo vertical estreito
+                ctx.rect(cx - size * 0.35, cy - size * 1.2, size * 0.7, size * 2.4);
+                break;
+            case 'obelisco':
+                // Pirâmide alongada
+                ctx.moveTo(cx, cy - size * 1.3);
+                ctx.lineTo(cx + size * 0.4, cy + size * 0.8);
+                ctx.lineTo(cx - size * 0.4, cy + size * 0.8);
+                ctx.closePath();
+                break;
+            case 'cilindro':
+                // Elipse + retângulo
+                ctx.ellipse(cx, cy - size * 0.7, size * 0.6, size * 0.25, 0, 0, Math.PI * 2);
+                ctx.moveTo(cx - size * 0.6, cy - size * 0.7);
+                ctx.lineTo(cx - size * 0.6, cy + size * 0.7);
+                ctx.ellipse(cx, cy + size * 0.7, size * 0.6, size * 0.25, 0, Math.PI, 0);
+                ctx.lineTo(cx + size * 0.6, cy - size * 0.7);
+                break;
+            case 'cone':
+                ctx.moveTo(cx, cy - size);
+                ctx.lineTo(cx + size * 0.8, cy + size * 0.7);
+                ctx.ellipse(cx, cy + size * 0.7, size * 0.8, size * 0.25, 0, 0, Math.PI);
+                ctx.closePath();
+                break;
+            case 'estrela':
+                // Estrela de 5 pontas
+                for (let i = 0; i < 5; i++) {
+                    const outerAngle = (i * Math.PI * 2 / 5) - Math.PI / 2;
+                    const innerAngle = outerAngle + Math.PI / 5;
+                    const ox = cx + Math.cos(outerAngle) * size;
+                    const oy = cy + Math.sin(outerAngle) * size;
+                    const ix = cx + Math.cos(innerAngle) * size * 0.4;
+                    const iy = cy + Math.sin(innerAngle) * size * 0.4;
+                    if (i === 0) ctx.moveTo(ox, oy);
+                    else ctx.lineTo(ox, oy);
+                    ctx.lineTo(ix, iy);
+                }
+                ctx.closePath();
+                break;
+            case 'piramide':
+                // Pirâmide 3D projetada
+                ctx.moveTo(cx, cy - size);
+                ctx.lineTo(cx + size, cy + size * 0.7);
+                ctx.lineTo(cx, cy + size * 0.3);
+                ctx.lineTo(cx - size, cy + size * 0.7);
+                ctx.closePath();
+                break;
+            case 'cristal':
+                // Octógono alongado
+                ctx.moveTo(cx, cy - size * 1.2);
+                ctx.lineTo(cx + size * 0.5, cy - size * 0.6);
+                ctx.lineTo(cx + size * 0.5, cy + size * 0.6);
+                ctx.lineTo(cx, cy + size * 1.2);
+                ctx.lineTo(cx - size * 0.5, cy + size * 0.6);
+                ctx.lineTo(cx - size * 0.5, cy - size * 0.6);
+                ctx.closePath();
+                break;
+            case 'tesseract':
+                // Cubo em perspectiva
+                const s2 = size * 0.6;
+                const off = size * 0.35;
+                ctx.rect(cx - s2, cy - s2, s2 * 2, s2 * 2);
+                ctx.moveTo(cx - s2, cy - s2);
+                ctx.lineTo(cx - s2 + off, cy - s2 - off);
+                ctx.lineTo(cx + s2 + off, cy - s2 - off);
+                ctx.lineTo(cx + s2, cy - s2);
+                ctx.moveTo(cx + s2, cy + s2);
+                ctx.lineTo(cx + s2 + off, cy + s2 - off);
+                ctx.lineTo(cx + s2 + off, cy - s2 - off);
+                break;
+            case 'fractal':
+                // Triângulo de Sierpinski simplificado
+                drawFractalTriangle(ctx, cx, cy - size * 0.1, size * 0.9, 2);
+                break;
+            case 'olho':
+                // Forma de olho
+                ctx.ellipse(cx, cy, size, size * 0.5, 0, 0, Math.PI * 2);
+                ctx.moveTo(cx + size * 0.35, cy);
+                ctx.arc(cx, cy, size * 0.35, 0, Math.PI * 2);
+                break;
+            case 'mira':
+                // Alvo/Mira
+                ctx.arc(cx, cy, size, 0, Math.PI * 2);
+                ctx.moveTo(cx + size * 0.5, cy);
+                ctx.arc(cx, cy, size * 0.5, 0, Math.PI * 2);
+                ctx.moveTo(cx, cy - size * 1.2);
+                ctx.lineTo(cx, cy + size * 1.2);
+                ctx.moveTo(cx - size * 1.2, cy);
+                ctx.lineTo(cx + size * 1.2, cy);
+                break;
+            default:
+                ctx.rect(cx - size, cy - size, size * 2, size * 2);
+        }
+    }
+    
+    function drawPolygonPath(ctx, cx, cy, sides, radius) {
+        for (let i = 0; i < sides; i++) {
+            const angle = (i * Math.PI * 2 / sides) - Math.PI / 2;
+            const x = cx + Math.cos(angle) * radius;
+            const y = cy + Math.sin(angle) * radius;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+    }
+    
+    function drawFractalTriangle(ctx, cx, cy, size, depth) {
+        // Triângulo de Sierpinski simplificado
+        if (depth <= 0) {
+            ctx.moveTo(cx, cy - size);
+            ctx.lineTo(cx + size * 0.866, cy + size * 0.5);
+            ctx.lineTo(cx - size * 0.866, cy + size * 0.5);
+            ctx.closePath();
+            return;
+        }
+        
+        const h = size * 0.5;
+        // Triângulo superior
+        drawFractalTriangle(ctx, cx, cy - h * 0.5, h, depth - 1);
+        // Triângulo inferior esquerdo
+        drawFractalTriangle(ctx, cx - h * 0.433, cy + h * 0.25, h, depth - 1);
+        // Triângulo inferior direito  
+        drawFractalTriangle(ctx, cx + h * 0.433, cy + h * 0.25, h, depth - 1);
+    }
+    
+    function drawPreviewFace(ctx, cx, cy, color) {
+        // Olhos simples
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 5;
+        
+        ctx.beginPath();
+        ctx.arc(cx - 12, cy - 5, 4, 0, Math.PI * 2);
+        ctx.arc(cx + 12, cy - 5, 4, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Boca (sorriso)
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy + 5, 10, 0.2, Math.PI - 0.2);
+        ctx.stroke();
+        
+        ctx.shadowBlur = 0;
+    }
+    
+    function updatePreviewStatus(forma, quimica, fisica) {
+        if (!previewStatusText || !previewContainer) return;
+        
+        const count = (forma ? 1 : 0) + (quimica ? 1 : 0) + (fisica ? 1 : 0);
+        
+        previewContainer.classList.remove('ready', 'partial');
+        
+        if (count === 3) {
+            previewStatusText.textContent = 'PRONTO PARA SÍNTESE';
+            previewContainer.classList.add('ready');
+        } else if (count > 0) {
+            previewStatusText.textContent = `CONFIGURANDO... (${count}/3)`;
+            previewContainer.classList.add('partial');
+        } else {
+            previewStatusText.textContent = 'AGUARDANDO DADOS...';
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // EVENT HANDLERS ATUALIZADOS
+    // ═══════════════════════════════════════════════════════════════════
+
     btnOpen.addEventListener('click', () => {
         creationPanel.classList.remove('hidden');
         btnOpen.classList.add('hidden');
-        switchTab('forma');
+        initHolographicPanel();
     });
 
     btnCancel.addEventListener('click', () => {
+        stopPreviewAnimation();
         creationPanel.classList.add('hidden');
         btnOpen.classList.remove('hidden');
         resetSelection();
     });
-
-    slotForma.addEventListener('click', () => switchTab('forma'));
-    slotChem.addEventListener('click', () => switchTab('quimica'));
-    slotPhys.addEventListener('click', () => switchTab('fisica'));
-
-    function switchTab(category) {
-        activeCategory = category;
-        [slotForma, slotChem, slotPhys].forEach(s => s.classList.remove('active'));
-        if(category === 'forma') slotForma.classList.add('active');
-        if(category === 'quimica') slotChem.classList.add('active');
-        if(category === 'fisica') slotPhys.classList.add('active');
-        renderGrid(category);
-    }
-
-    function renderGrid(category) {
-        gridContainer.innerHTML = '';
-        const items = ELEMENTS[category];
-
-        items.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'grid-item';
-            if (currentSelection[category] && currentSelection[category].id === item.id) {
-                div.classList.add('selected');
-            }
-
-            div.innerHTML = `<strong>${item.name}</strong><span class="desc">${item.desc}</span>`;
-            div.addEventListener('click', () => {
-                selectItem(category, item);
-            });
-            gridContainer.appendChild(div);
-        });
-    }
-
-    function selectItem(category, item) {
-        currentSelection[category] = item;
-        updateSlotVisual(category, item);
-        renderGrid(category);
-
-        if (category === 'forma' && !currentSelection.quimica) {
-            setTimeout(() => switchTab('quimica'), 200);
-        } else if (category === 'quimica' && !currentSelection.fisica) {
-            setTimeout(() => switchTab('fisica'), 200);
-        }
-        checkCraftingReady();
-    }
-
-    function updateSlotVisual(category, item) {
-        let slot;
-        let icon = '?';
-        if (category === 'forma') { slot = slotForma; icon = '📐'; }
-        if (category === 'quimica') { slot = slotChem; icon = '🧪'; }
-        if (category === 'fisica') { slot = slotPhys; icon = '⚡'; }
-
-        slot.classList.add('filled');
-        slot.querySelector('.slot-icon').innerText = icon;
-        slot.querySelector('.slot-name').innerText = item.name;
-    }
-
+    
     function resetSelection() {
         currentSelection = { forma: null, quimica: null, fisica: null };
-        [slotForma, slotChem, slotPhys].forEach(s => {
-            s.classList.remove('filled');
-            s.querySelector('.slot-icon').innerText = '?';
-            s.querySelector('.slot-name').innerText = 'Selecione';
+        
+        // Reset colunas
+        [colForma, colQuimica, colFisica].forEach(col => {
+            if (col) col.classList.remove('filled', 'just-filled');
         });
+        
+        // Reset status texts
+        if (statusForma) {
+            const st = statusForma.querySelector('.status-text');
+            if (st) st.textContent = 'Não Definida';
+        }
+        if (statusQuimica) {
+            const st = statusQuimica.querySelector('.status-text');
+            if (st) st.textContent = 'Não Vinculada';
+        }
+        if (statusFisica) {
+            const st = statusFisica.querySelector('.status-text');
+            if (st) st.textContent = 'Vazio';
+        }
+        
+        // Reset opções selecionadas
+        document.querySelectorAll('.option-item.selected').forEach(el => el.classList.remove('selected'));
+        
+        // Reset preview
+        drawPreview();
+        
+        // Reset fórmula
+        if (recipeSummary) recipeSummary.innerHTML = '[ ? ] + [ ? ] + [ ? ]';
+        
+        // Reset botão
         btnSynthesize.disabled = true;
-        recipeSummary.innerText = '...';
-        switchTab('forma');
+        btnSynthesize.innerHTML = '<span class="btn-icon">⏳</span> INCOMPLETO';
     }
 
     function checkCraftingReady() {
         const isReady = currentSelection.forma && currentSelection.quimica && currentSelection.fisica;
         if (isReady) {
-            btnSynthesize.removeAttribute('disabled');
-            btnSynthesize.innerHTML = "SINTETIZAR";
-            recipeSummary.innerText = `${currentSelection.forma.name} + ${currentSelection.quimica.name} + ${currentSelection.fisica.name}`;
+            btnSynthesize.disabled = false;
+            btnSynthesize.innerHTML = '<span class="btn-icon">✨</span> SINTETIZAR';
         } else {
-            btnSynthesize.setAttribute('disabled', 'true');
-            btnSynthesize.innerHTML = "INCOMPLETO";
-            recipeSummary.innerText = 'Preencha todos os slots';
+            btnSynthesize.disabled = true;
+            btnSynthesize.innerHTML = '<span class="btn-icon">⏳</span> INCOMPLETO';
         }
     }
 
     btnSynthesize.addEventListener('click', () => {
-        btnSynthesize.innerHTML = "PROCESSANDO...";
+        btnSynthesize.innerHTML = '<span class="btn-icon">⚡</span> SINTETIZANDO...';
         btnSynthesize.disabled = true;
+        
+        // Efeito visual no preview durante síntese
+        if (previewContainer) {
+            previewContainer.classList.add('synthesizing');
+        }
         
         setTimeout(async () => {
             const aiResult = await generateGolemData(currentSelection);
@@ -464,11 +1424,18 @@ document.addEventListener('DOMContentLoaded', () => {
             
             game.events.emit('spawn-golem', golemData);
             
+            // Remove efeito de síntese
+            if (previewContainer) {
+                previewContainer.classList.remove('synthesizing');
+            }
+            
+            // Para animação e fecha painel
+            stopPreviewAnimation();
             creationPanel.classList.add('hidden');
             btnOpen.classList.remove('hidden');
             resetSelection();
-            btnSynthesize.innerHTML = "DAR VIDA";
-        }, 500);
+            btnSynthesize.innerHTML = '<span class="btn-icon">✨</span> SINTETIZAR';
+        }, 800);
     });
 
     const inspectModal = document.getElementById('inspect-modal');
@@ -518,149 +1485,48 @@ document.addEventListener('DOMContentLoaded', () => {
         elEng.innerText = att.energia;
         elDiag.innerText = stats.dialogo || "...";
 
-        // Renderizar visual grande (SVG simples)
+        // === VISUAL GRANDE: Usa generateGolemSVG (Render Engine Unificada) ===
         if (elVisualLarge) {
-            elVisualLarge.innerHTML = '';
-            if (visual.forma) {
-                let svgShape = '';
-                let color = '#00ffff';
-                if (visual.fisica) {
-                    switch(visual.fisica.id) {
-                        case 'eletricidade': color = '#ffea00'; break;
-                        case 'calor':        color = '#ff4d00'; break;
-                        case 'radiacao':     color = '#00ff00'; break;
-                        case 'gravidade':    color = '#9d00ff'; break;
-                        case 'luz':          color = '#ffffff'; break;
-                        case 'frio':         color = '#0088ff'; break;
-                        case 'magnetismo':   color = '#ff00aa'; break;
-                    }
-                }
-                
-                const s = 100; // size
-                const c = s/2; // center
-                
-                // Aspect Ratio Logic (Visualização Proporcional)
-                const scX = att ? (att.scaleX || parseFloat(att.scale) || 1) : 1;
-                const scY = att ? (att.scaleY || parseFloat(att.scale) || 1) : 1;
-                const maxSc = Math.max(scX, scY);
-                const nX = scX / maxSc;
-                const nY = scY / maxSc;
-
-                switch(visual.forma.id) {
-                    case 'circulo':
-                        svgShape = `<ellipse cx="${c}" cy="${c}" rx="${s*0.4*nX}" ry="${s*0.4*nY}" stroke="${color}" stroke-width="4" fill="none" />`;
-                        break;
-                    case 'quadrado': {
-                        const w = s*0.7*nX;
-                        const h = s*0.7*nY;
-                        svgShape = `<rect x="${c-w/2}" y="${c-h/2}" width="${w}" height="${h}" stroke="${color}" stroke-width="4" fill="none" />`;
-                        break;
-                    }
-                    case 'triangulo':
-                        svgShape = `<polygon points="${c},${c - s*0.4*nY} ${c + s*0.35*nX},${c + s*0.3*nY} ${c - s*0.35*nX},${c + s*0.3*nY}" stroke="${color}" stroke-width="4" fill="none" />`;
-                        break;
-                    case 'pentagono':
-                        svgShape = `<g transform="translate(50,50) scale(${nX}, ${nY}) translate(-50,-50)">
-                            <polygon points="50,10 90,40 75,90 25,90 10,40" transform="scale(1.5) translate(-15,-15)" stroke="${color}" stroke-width="3" fill="none" />
-                        </g>`;
-                        break;
-                    case 'hexagono':
-                        svgShape = `<g transform="translate(50,50) scale(${nX}, ${nY}) translate(-50,-50)">
-                            <polygon points="50,10 85,30 85,70 50,90 15,70 15,30" transform="scale(1.5) translate(-15,-15)" stroke="${color}" stroke-width="3" fill="none" />
-                        </g>`;
-                        break;
-                    case 'losango':
-                        svgShape = `<g transform="translate(50,50) scale(${nX}, ${nY}) translate(-50,-50)">
-                            <polygon points="50,10 80,50 50,90 20,50" transform="scale(1.5) translate(-15,-15)" stroke="${color}" stroke-width="3" fill="none" />
-                        </g>`;
-                        break;
-                    // --- Tridimensionais (representação 2D simplificada) ---
-                    case 'cilindro':
-                        svgShape = `
-                            <g stroke="${color}" stroke-width="2" fill="none">
-                                <ellipse cx="${c}" cy="${c-28*0.5}" rx="${s*0.35*nX}" ry="${s*0.12}" />
-                                <rect x="${c - s*0.35*nX}" y="${c-28*0.5}" width="${s*0.7*nX}" height="${s*0.6*nY}" />
-                                <ellipse cx="${c}" cy="${c-28*0.5 + s*0.6*nY}" rx="${s*0.35*nX}" ry="${s*0.12}" />
-                            </g>`;
-                        break;
-                    case 'cone':
-                        svgShape = `
-                            <g stroke="${color}" stroke-width="2" fill="none">
-                                <polygon points="${c},${c - s*0.45*nY} ${c + s*0.35*nX},${c + s*0.3*nY} ${c - s*0.35*nX},${c + s*0.3*nY}" />
-                                <ellipse cx="${c}" cy="${c + s*0.3*nY}" rx="${s*0.33*nX}" ry="${s*0.09}" />
-                            </g>`;
-                        break;
-                    case 'piramide':
-                        svgShape = `
-                            <g stroke="${color}" stroke-width="2" fill="none">
-                                <polygon points="${c},${c - s*0.45*nY} ${c + s*0.36*nX},${c + s*0.32*nY} ${c - s*0.36*nX},${c + s*0.32*nY}" />
-                                <line x1="${c}" y1="${c - s*0.45*nY}" x2="${c}" y2="${c + s*0.32*nY}" />
-                            </g>`;
-                        break;
-                    case 'obelisco':
-                        svgShape = `
-                            <g stroke="${color}" stroke-width="2" fill="none">
-                                <rect x="${c - s*0.12*nX}" y="${c - s*0.45*nY}" width="${s*0.24*nX}" height="${s*0.9*nY}" />
-                                <polygon points="${c - s*0.12*nX},${c - s*0.45*nY} ${c},${c - s*0.6*nY} ${c + s*0.12*nX},${c - s*0.45*nY}" />
-                            </g>`;
-                        break;
-                    case 'esfera':
-                        svgShape = `
-                            <g stroke="${color}" stroke-width="2" fill="none">
-                                <circle cx="${c}" cy="${c}" r="${s*0.36* (nX+nY)/2 }" />
-                                <ellipse cx="${c}" cy="${c}" rx="${s*0.36*nX}" ry="${s*0.12*nY}" />
-                            </g>`;
-                        break;
-                    case 'cristal':
-                        svgShape = `
-                            <g stroke="${color}" stroke-width="2" fill="none">
-                                <polygon points="${c},${c - s*0.45*nY} ${c + s*0.18*nX},${c} ${c + s*0.05*nX},${c + s*0.45*nY} ${c - s*0.05*nX},${c + s*0.45*nY} ${c - s*0.18*nX},${c}" />
-                                <line x1="${c}" y1="${c - s*0.45*nY}" x2="${c + s*0.18*nX}" y2="${c}" />
-                                <line x1="${c}" y1="${c - s*0.45*nY}" x2="${c - s*0.18*nX}" y2="${c}" />
-                            </g>`;
-                        break;
-                    case 'tesseract':
-                    case 'fractal':
-                        // Abstract cube-like / complex symbol
-                        svgShape = `
-                            <g stroke="${color}" stroke-width="2" fill="none">
-                                <rect x="${c - s*0.22}" y="${c - s*0.22}" width="${s*0.44}" height="${s*0.44}" />
-                                <rect x="${c - s*0.12}" y="${c - s*0.32}" width="${s*0.44}" height="${s*0.44}" transform="rotate(12 ${c} ${c})" />
-                            </g>`;
-                        break;
-                    default:
-                        svgShape = `<text x="50%" y="50%" fill="${color}" font-size="30" text-anchor="middle" dy=".3em">?</text>`;
-                }
-                
-                elVisualLarge.innerHTML = `<svg width="100%" height="100%" viewBox="0 0 100 100">${svgShape}</svg>`;
-                // Efeito de brilho
-                elVisualLarge.style.boxShadow = `0 0 20px ${color}40`;
-                elVisualLarge.style.borderColor = color;
-            }
+            const shapeId = visual.forma?.id || 'quadrado';
+            const chemId = visual.quimica?.id || 'carbono';
+            const physId = visual.fisica?.id || 'luz';
+            const scX = att.scaleX || parseFloat(att.scale) || 1;
+            const scY = att.scaleY || parseFloat(att.scale) || 1;
+            
+            // Usa a render engine unificada
+            const svgHtml = generateGolemSVG(shapeId, chemId, physId, scX, scY, 120);
+            elVisualLarge.innerHTML = svgHtml;
+            
+            // Efeito de brilho baseado na física
+            const physColor = PHYSICS_COLORS[physId] || '#00ffff';
+            elVisualLarge.style.boxShadow = `0 0 25px ${physColor}50`;
+            elVisualLarge.style.borderColor = physColor;
         }
 
-        // Mostrar área/perímetro apenas se houver elementos suficientes para validar
-        if (visual && visual.forma && visual.quimica) {
-            const sX = att ? (att.scaleX || parseFloat(att.scale) || 1) : 1;
-            const sY = att ? (att.scaleY || parseFloat(att.scale) || 1) : 1;
-            const metrics = computeShapeMetrics(visual.forma.id, sX, sY);
-
-            if (metrics.area && !Number.isNaN(metrics.area)) {
-                elArea.innerText = Math.round(metrics.area);
-                elPeri.innerText = Math.round(metrics.peri);
-                elScale.innerText = `${sX.toFixed(2)}x / ${sY.toFixed(2)}x`;
-                elFormula.innerText = metrics.breakdown || '';
-            } else {
+        // === MATEMÁTICA: Usa calculateGeometry do GeometryMath ===
+        if (visual && visual.forma) {
+            const sX = att.scaleX || parseFloat(att.scale) || 1;
+            const sY = att.scaleY || parseFloat(att.scale) || 1;
+            
+            try {
+                const geoResult = calculateGeometry(visual.forma.id, sX, sY, visual.forma.params);
+                
+                elArea.innerText = geoResult.areaFormatted;
+                elPeri.innerText = geoResult.perimeterFormatted;
+                elScale.innerText = `${sX.toFixed(2)}× / ${sY.toFixed(2)}×`;
+                elFormula.innerText = geoResult.formula;
+            } catch (e) {
+                console.warn('[Inspect] Geometry calc error:', e);
                 elArea.innerText = '--';
                 elPeri.innerText = '--';
-                elScale.innerText = '1x';
-                elFormula.innerText = 'Cálculo não disponível para esta forma.';
+                elScale.innerText = `${sX.toFixed(2)}× / ${sY.toFixed(2)}×`;
+                elFormula.innerText = 'Erro no cálculo geométrico.';
             }
         } else {
             elArea.innerText = '--';
             elPeri.innerText = '--';
             elScale.innerText = '—';
-            elFormula.innerText = 'Preencha `Forma` e `Estrutura` para habilitar cálculo.';
+            elFormula.innerText = 'Selecione uma forma para habilitar cálculo.';
         }
 
         // Render life history timeline (animated)
@@ -718,6 +1584,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function startDrag(action, iconChar, startX, startY) {
         draggedTool = action;
         document.body.classList.add('grabbing');
+        
+        // Emite evento global para Golems detectarem ameaça
+        game.events.emit('tool-drag-start', { action });
 
         ghostElement = document.createElement('div');
         ghostElement.classList.add('dragging-ghost');
@@ -738,6 +1607,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function onDragMove(e) {
         updateGhostPosition(e.clientX, e.clientY);
+        
+        // Emite posição do mouse para Golems calcularem distância da ameaça
+        const canvas = document.querySelector('canvas');
+        if (canvas && draggedTool) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const gameX = (e.clientX - rect.left) * scaleX;
+            const gameY = (e.clientY - rect.top) * scaleY;
+            
+            game.events.emit('tool-drag-move', {
+                action: draggedTool,
+                x: gameX,
+                y: gameY
+            });
+        }
     }
 
     function updateGhostPosition(x, y) {
@@ -751,6 +1636,9 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('mousemove', onDragMove);
         document.removeEventListener('mouseup', onDragEnd);
         document.body.classList.remove('grabbing');
+        
+        // Emite fim do arraste para Golems relaxarem
+        game.events.emit('tool-drag-end', { action: draggedTool });
         
         if (ghostElement) ghostElement.remove();
 

@@ -446,7 +446,52 @@ const SHAPE_MATH = {
     'cristal': { sides: 6, complexity: 3 }, 'anomaly': { sides: 7, complexity: 5 }
 };
 
+// ═══════════════════════════════════════════════════════════════════
+// INTEGRAÇÃO COM GEOMETRY MATH MODULE
+// ═══════════════════════════════════════════════════════════════════
+
+// Importação dinâmica do módulo de geometria (lazy load)
+let GeometryMathModule = null;
+
+async function loadGeometryMath() {
+    if (!GeometryMathModule) {
+        try {
+            GeometryMathModule = await import('../utils/GeometryMath.js');
+            console.log('[MockAI] GeometryMath module loaded successfully');
+        } catch (e) {
+            console.warn('[MockAI] GeometryMath module not available, using fallback:', e.message);
+        }
+    }
+    return GeometryMathModule;
+}
+
+// Tenta carregar o módulo na inicialização
+loadGeometryMath();
+
+/**
+ * Calcula estatísticas geométricas usando o novo módulo ou fallback
+ * @returns {Object} { area, perimeter, areaRaw, perimeterRaw, formula, description }
+ */
 function calculateGeoStats(shapeId, scaleX, scaleY, proceduralParams = null) {
+    // Tenta usar o módulo de geometria precisa
+    if (GeometryMathModule) {
+        try {
+            const result = GeometryMathModule.calculateGeometry(shapeId, scaleX, scaleY, proceduralParams);
+            return {
+                area: result.areaFormatted,
+                perimeter: result.perimeterFormatted,
+                areaRaw: result.area,
+                perimeterRaw: result.perimeter,
+                formula: result.formula,
+                description: result.description,
+                scale: `${scaleX.toFixed(2)}x${scaleY.toFixed(2)}`
+            };
+        } catch (e) {
+            console.warn('[MockAI] GeometryMath calculation failed, using fallback:', e.message);
+        }
+    }
+    
+    // Fallback: cálculo simplificado (legado)
     const avgScale = (scaleX + scaleY) / 2;
     const baseSize = 30 * avgScale;
     let area = 0, perimeter = 0, vertices = 0;
@@ -477,9 +522,29 @@ function calculateGeoStats(shapeId, scaleX, scaleY, proceduralParams = null) {
     return {
         area: Math.floor(area) + ' px²',
         perimeter: Math.floor(perimeter) + ' px',
+        areaRaw: area,
+        perimeterRaw: perimeter,
         vertices,
+        formula: 'Cálculo legado',
+        description: `Forma: ${shapeId}`,
         scale: `${scaleX.toFixed(2)}x${scaleY.toFixed(2)}`
     };
+}
+
+/**
+ * Calcula força baseada na área real da forma
+ * Força é proporcional à raiz quadrada da área (balanceamento)
+ */
+function calculateStrength(areaRaw, baseStrength = 10) {
+    // Se o módulo estiver disponível, usa a função dele
+    if (GeometryMathModule && GeometryMathModule.calculateStrengthFromArea) {
+        return GeometryMathModule.calculateStrengthFromArea(areaRaw, baseStrength);
+    }
+    
+    // Fallback: área de referência (círculo base)
+    const referenceArea = Math.PI * 25 * 25; // ~1963 px²
+    const areaFactor = Math.sqrt(areaRaw / referenceArea);
+    return Math.floor(baseStrength * areaFactor);
 }
 
 export function generateGolemData(ingredients) {
@@ -497,7 +562,11 @@ export function generateGolemData(ingredients) {
             const personality = PHYSICS_PERSONALITY[physicsId] || PHYSICS_PERSONALITY.luz;
             const chemMods = CHEMISTRY_MODIFIERS[chemId] || CHEMISTRY_MODIFIERS.carbono;
 
+            // Calcula geometria usando o novo módulo (ou fallback)
             const geoStats = calculateGeoStats(ingredients.forma.id, scaleX, scaleY);
+            
+            // Força proporcional à área real calculada
+            const strengthFromArea = calculateStrength(geoStats.areaRaw || 1000, 10);
 
             resolve({
                 id: generateGolemId(),
@@ -515,7 +584,7 @@ export function generateGolemData(ingredients) {
                 },
                 
                 stats: {
-                    forca: Math.floor(10 * avgScale),
+                    forca: strengthFromArea, // AGORA PROPORCIONAL À ÁREA REAL
                     resistencia: Math.floor(10 * chemMods.resistanceMod),
                     energia: Math.floor(20 / avgScale),
                     lifespan: baseLife * avgScale,

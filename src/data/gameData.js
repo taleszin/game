@@ -8,7 +8,8 @@ export const ELEMENTS = {
         { id: 'losango', name: 'Losango', desc: 'Aerodinâmica agressiva.' },
         { id: 'hexagono', name: 'Hexagonal', desc: 'Estrutura de colmeia eficiente.' }, // NOVO
         { id: 'cruz', name: 'Ortogonal', desc: 'Intersecção de eixos de força.' }, // NOVO
-        { id: 'estrela', name: 'Estelar', desc: 'Pontas radiantes de alta energia.' } // NOVO
+        { id: 'estrela', name: 'Estelar', desc: 'Pontas radiantes de alta energia.' }, // NOVO
+        { id: 'espiral', name: 'Espiral', desc: 'Crescimento logarítmico áureo.' } // DLC: Exotic Matter
     ],
 
     // ESTRUTURA (Material da Borda)
@@ -18,7 +19,8 @@ export const ELEMENTS = {
         { id: 'silicio', name: 'Silício', desc: 'Cristal lógico translúcido.' },
         { id: 'ouro', name: 'Ouro', desc: 'Condutor nobre.' },
         { id: 'cristal', name: 'Cristal', desc: 'Estrutura vítrea refrativa.' }, // NOVO
-        { id: 'mercurio', name: 'Mercúrio', desc: 'Metal líquido instável.' } // NOVO
+        { id: 'mercurio', name: 'Mercúrio', desc: 'Metal líquido instável.' }, // NOVO
+        { id: 'bismuto', name: 'Bismuto', desc: 'Cristalização geométrica iridescente.' } // DLC: Exotic Matter
     ],
 
     // ENERGIA (Cor do Neon)
@@ -29,6 +31,8 @@ export const ELEMENTS = {
         { id: 'gravidade', name: 'Gravidade', desc: 'Singularidade densa.' },
         { id: 'luz', name: 'Fotônica', desc: 'Luz sólida pura.' }, // NOVO
         { id: 'frio', name: 'Zero Absoluto', desc: 'Paralisia molecular.' }, // NOVO
-        { id: 'magnetismo', name: 'Magnetismo', desc: 'Campos de atração polar.' } // NOVO
+        { id: 'magnetismo', name: 'Magnetismo', desc: 'Campos de atração polar.' }, // NOVO
+        { id: 'entropia', name: 'Entropia', desc: 'Tendência inevitável à desordem.' }, // DLC: Exotic Matter
+        { id: 'sonico', name: 'Sônico', desc: 'Ressonância de frequência pura.' } // DLC: Exotic Matter
     ]
 };

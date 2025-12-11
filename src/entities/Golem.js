@@ -104,6 +104,26 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.audioContext = null;
         this.masterGain = null;
 
+        // ═══════════════════════════════════════════════════════════════════
+        // SISTEMA DE INSTINTOS REATIVOS EM TEMPO REAL
+        // Steering behaviors: seek, flee, separation
+        // ═══════════════════════════════════════════════════════════════════
+        
+        this.instincts = {
+            active: false,
+            state: null,           // 'seeking', 'fleeing', 'freezing', null
+            intensity: 0,          // 0-1: força da reação
+            targetPos: null,       // posição do mouse/ferramenta
+            steeringForce: { x: 0, y: 0 },
+            tremor: { x: 0, y: 0 },
+            lastUpdate: 0
+        };
+        
+        this.INSTINCT_RADIUS = 200;
+        this.MAX_STEERING_FORCE = 150;
+        this.SEPARATION_RADIUS = 80;
+        this.SEPARATION_FORCE = 60;
+
         this.drawNeonShape(this.currentShapeType, this.currentColor, this.currentChem);
         this.drawFace();
         this.add(this.graphics);
@@ -225,7 +245,192 @@ export default class Golem extends Phaser.GameObjects.Container {
                 }
                 if (!mated) this.startRoaming();
             });
+            
+            // ═══════════════════════════════════════════════════════════════════
+            // LISTENERS DE INSTINTOS REATIVOS
+            // ═══════════════════════════════════════════════════════════════════
+            
+            this.toolDragMoveHandler = (data) => {
+                if (!this.active || this.isDragging) return;
+                this.updateInstincts({ x: data.x, y: data.y }, data.action);
+            };
+            scene.game.events.on('tool-drag-move', this.toolDragMoveHandler);
+            
+            this.toolDragEndHandler = () => {
+                this.clearInstincts();
+            };
+            scene.game.events.on('tool-drag-end', this.toolDragEndHandler);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SISTEMA DE INSTINTOS REATIVOS - Steering Behaviors
+    // ═══════════════════════════════════════════════════════════════════
+
+    updateInstincts(mousePos, activeTool) {
+        if (!this.body || this.isFrozen || this.isDragging) return;
+        
+        const distance = Phaser.Math.Distance.Between(this.x, this.y, mousePos.x, mousePos.y);
+        
+        if (distance > this.INSTINCT_RADIUS) {
+            if (this.instincts.active) this.clearInstincts();
+            return;
+        }
+        
+        this.instincts.active = true;
+        this.instincts.targetPos = mousePos;
+        this.instincts.intensity = Math.pow(1 - (distance / this.INSTINCT_RADIUS), 1.5);
+        
+        let steeringX = 0, steeringY = 0;
+        
+        switch (activeTool) {
+            case 'feed':
+                this.instincts.state = 'seeking';
+                const seekForce = this.calculateSeek(mousePos);
+                steeringX = seekForce.x;
+                steeringY = seekForce.y;
+                break;
+                
+            case 'burn':
+            case 'kill':
+                this.instincts.state = 'fleeing';
+                const fleeForce = this.calculateFlee(mousePos);
+                steeringX = fleeForce.x * 1.5;
+                steeringY = fleeForce.y * 1.5;
+                this.instincts.tremor.x = (Math.random() - 0.5) * 6 * this.instincts.intensity;
+                this.instincts.tremor.y = (Math.random() - 0.5) * 4 * this.instincts.intensity;
+                break;
+                
+            case 'freeze':
+                this.instincts.state = 'freezing';
+                if (this.body.velocity) {
+                    this.body.velocity.scale(0.92);
+                }
+                this.instincts.tremor.x = (Math.random() - 0.5) * 3 * this.instincts.intensity;
+                this.instincts.tremor.y = (Math.random() - 0.5) * 2 * this.instincts.intensity;
+                break;
+                
+            case 'mutate':
+                this.instincts.state = 'curious';
+                const curiousForce = this.calculateSeek(mousePos);
+                steeringX = curiousForce.x * 0.5;
+                steeringY = curiousForce.y * 0.5;
+                break;
+                
+            default:
+                return;
+        }
+        
+        if (activeTool === 'feed') {
+            const separation = this.calculateSeparation();
+            steeringX += separation.x;
+            steeringY += separation.y;
+        }
+        
+        const magnitude = Math.sqrt(steeringX * steeringX + steeringY * steeringY);
+        if (magnitude > this.MAX_STEERING_FORCE) {
+            const scale = this.MAX_STEERING_FORCE / magnitude;
+            steeringX *= scale;
+            steeringY *= scale;
+        }
+        
+        this.instincts.steeringForce.x = Phaser.Math.Linear(
+            this.instincts.steeringForce.x, steeringX, 0.15
+        );
+        this.instincts.steeringForce.y = Phaser.Math.Linear(
+            this.instincts.steeringForce.y, steeringY, 0.15
+        );
+        
+        if (activeTool !== 'freeze') {
+            const currentVX = this.body.velocity.x || 0;
+            const currentVY = this.body.velocity.y || 0;
+            this.body.setVelocity(
+                currentVX + this.instincts.steeringForce.x * 0.1,
+                currentVY + this.instincts.steeringForce.y * 0.1
+            );
+        }
+        
+        this.graphics.x = this.instincts.tremor.x;
+        this.graphics.y = this.instincts.tremor.y;
+        this.faceGraphics.x = this.instincts.tremor.x;
+        this.faceGraphics.y = this.instincts.tremor.y;
+    }
+
+    calculateSeek(targetPos) {
+        const dx = targetPos.x - this.x;
+        const dy = targetPos.y - this.y;
+        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+        
+        const desiredSpeed = this.baseSpeed * (1.5 + this.instincts.intensity);
+        
+        return {
+            x: (dx / distance) * desiredSpeed,
+            y: (dy / distance) * desiredSpeed
+        };
+    }
+
+    calculateFlee(threatPos) {
+        const dx = this.x - threatPos.x;
+        const dy = this.y - threatPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy) || 1;
+        
+        const fleeSpeed = this.baseSpeed * (2 + this.instincts.intensity * 2);
+        const erratic = (Math.random() - 0.5) * 0.4 * this.instincts.intensity;
+        
+        const angle = Math.atan2(dy, dx) + erratic;
+        
+        return {
+            x: Math.cos(angle) * fleeSpeed,
+            y: Math.sin(angle) * fleeSpeed
+        };
+    }
+
+    calculateSeparation() {
+        const others = this.scene.golemsGroup?.getChildren() || [];
+        let separationX = 0, separationY = 0;
+        let count = 0;
+        
+        for (const other of others) {
+            if (other === this || !other.active) continue;
+            
+            const dist = Phaser.Math.Distance.Between(this.x, this.y, other.x, other.y);
+            
+            if (dist < this.SEPARATION_RADIUS && dist > 0) {
+                const pushStrength = (1 - dist / this.SEPARATION_RADIUS) * this.SEPARATION_FORCE;
+                separationX += (this.x - other.x) / dist * pushStrength;
+                separationY += (this.y - other.y) / dist * pushStrength;
+                count++;
+            }
+        }
+        
+        if (count > 0) {
+            separationX /= count;
+            separationY /= count;
+        }
+        
+        return { x: separationX, y: separationY };
+    }
+
+    clearInstincts() {
+        if (!this.instincts.active) return;
+        
+        this.scene.tweens.add({
+            targets: this.instincts,
+            intensity: 0,
+            duration: 300,
+            ease: 'Sine.easeOut',
+            onComplete: () => {
+                this.instincts.active = false;
+                this.instincts.state = null;
+                this.instincts.tremor = { x: 0, y: 0 };
+                this.instincts.steeringForce = { x: 0, y: 0 };
+                
+                this.graphics.x = 0;
+                this.graphics.y = 0;
+                this.faceGraphics.x = 0;
+                this.faceGraphics.y = 0;
+            }
+        });
     }
 
     drawNeonShape(type, color, chemType) {
@@ -236,87 +441,143 @@ export default class Golem extends Phaser.GameObjects.Container {
         const bodyColor = this.visualDNA?.bodyColor || color;
         const auraColor = this.visualDNA?.auraColor || color;
         
+        // === COR MATERIAL: Ouro tinge o corpo ===
+        let effectiveBodyColor = bodyColor;
+        if (chemType === 'ouro') {
+            effectiveBodyColor = this.blendColors(bodyColor, 0xFFD700, 0.4);
+        } else if (chemType === 'ferro') {
+            effectiveBodyColor = this.blendColors(bodyColor, 0x8899AA, 0.2);
+        }
+        
         // === EFEITO GLITCH PARA ANOMALIAS ===
         if (this.isAnomaly && this.glitchIntensity > 0) {
-            this.drawAnomalyGlitch(g, type, bodyColor, auraColor, chemType);
+            this.drawAnomalyGlitch(g, type, effectiveBodyColor, auraColor, chemType);
             return;
         }
         
-        let lineWidth = this.visualDNA?.lineWidth || 2;
-        if (chemType === 'ferro') lineWidth = 4;
-        if (chemType === 'ouro') lineWidth = 3;
-        if (chemType === 'cristal') lineWidth = 1;
-        if (chemType === 'mercurio') lineWidth = 5;
+        // === TRAÇOS REFINADOS: Linhas mais finas e elegantes ===
+        let lineWidth = 1.5; // Base mais fina
+        if (chemType === 'ferro') lineWidth = 2.5;
+        else if (chemType === 'ouro') lineWidth = 2;
+        else if (chemType === 'cristal') lineWidth = 1;
+        else if (chemType === 'mercurio') lineWidth = 2;
+        else if (chemType === 'silicio') lineWidth = 1.5;
+        else if (chemType === 'uranio') lineWidth = 2;
+        
+        // Helper function para desenhar path do cilindro
+        const drawCylinderPath = () => {
+            g.beginPath();
+            g.moveTo(-20, -25); g.lineTo(-20, 25);
+            g.moveTo(20, -25); g.lineTo(20, 25);
+            g.strokePath();
+            g.strokeEllipse(0, -25, 40, 15);
+            g.strokeEllipse(0, 25, 40, 15);
+        };
+        
+        // Helper function para desenhar path do cone
+        const drawConePath = () => {
+            g.beginPath();
+            g.moveTo(0, -35); g.lineTo(25, 25);
+            g.moveTo(0, -35); g.lineTo(-25, 25);
+            g.strokePath();
+            g.strokeEllipse(0, 25, 50, 15);
+        };
         
         // Tratamento especial para formas com base elíptica (cilindro / cone)
         if (type === 'cilindro') {
-            // Preenche o corpo com BODY COLOR
-            g.fillStyle(bodyColor, 0.18);
+            // 1. FILL: Preenchimento sutil
+            g.fillStyle(effectiveBodyColor, 0.12);
             g.beginPath();
             g.moveTo(-20, -25); g.lineTo(20, -25); g.lineTo(20, 25); g.lineTo(-20, 25); g.closePath();
             g.fillPath();
             g.fillEllipse(0, -25, 40, 15);
             g.fillEllipse(0, 25, 40, 15);
+            
+            // 2. CHEMISTRY PATTERN
+            this.drawChemistryPattern(g, type, chemType, 25, effectiveBodyColor);
 
-            // Glow externo com AURA COLOR (energia)
-            g.lineStyle(lineWidth + 8, auraColor, 0.35);
-            g.beginPath();
-            g.moveTo(-20, -25); g.lineTo(-20, 25);
-            g.moveTo(20, -25); g.lineTo(20, 25);
-            g.strokePath();
-            g.strokeEllipse(0, -25, 40, 15);
-            g.strokeEllipse(0, 25, 40, 15);
-
-            // Traço interno com BODY COLOR (sólido)
-            g.lineStyle(lineWidth, bodyColor, 1);
-            g.beginPath();
-            g.moveTo(-20, -25); g.lineTo(-20, 25);
-            g.moveTo(20, -25); g.lineTo(20, 25);
-            g.strokePath();
-            g.strokeEllipse(0, -25, 40, 15);
-            g.strokeEllipse(0, 25, 40, 15);
+            // 3-7. AURA LAYERS (5 camadas suaves)
+            const auraLayers = [
+                { width: lineWidth + 14, alpha: 0.08 },
+                { width: lineWidth + 10, alpha: 0.15 },
+                { width: lineWidth + 6, alpha: 0.22 },
+                { width: lineWidth + 3, alpha: 0.35 }
+            ];
+            
+            for (const layer of auraLayers) {
+                g.lineStyle(layer.width, auraColor, layer.alpha);
+                drawCylinderPath();
+            }
+            
+            // 8. TRAÇO PRINCIPAL
+            g.lineStyle(lineWidth, effectiveBodyColor, 0.9);
+            drawCylinderPath();
             return;
         }
 
         if (type === 'cone') {
-            // Preenche com BODY COLOR
-            g.fillStyle(bodyColor, 0.18);
+            // 1. FILL: Preenchimento sutil
+            g.fillStyle(effectiveBodyColor, 0.12);
             g.beginPath();
             g.moveTo(0, -35); g.lineTo(25, 25); g.lineTo(-25, 25); g.closePath();
             g.fillPath();
             g.fillEllipse(0, 25, 50, 15);
+            
+            // 2. CHEMISTRY PATTERN
+            this.drawChemistryPattern(g, type, chemType, 25, effectiveBodyColor);
 
-            // Glow com AURA COLOR
-            g.lineStyle(lineWidth + 8, auraColor, 0.35);
-            g.beginPath();
-            g.moveTo(0, -35); g.lineTo(25, 25);
-            g.moveTo(0, -35); g.lineTo(-25, 25);
-            g.strokePath();
-            g.strokeEllipse(0, 25, 50, 15);
-
-            // Traço interno com BODY COLOR
-            g.lineStyle(lineWidth, bodyColor, 1);
-            g.beginPath();
-            g.moveTo(0, -35); g.lineTo(25, 25);
-            g.moveTo(0, -35); g.lineTo(-25, 25);
-            g.strokePath();
-            g.strokeEllipse(0, 25, 50, 15);
+            // 3-7. AURA LAYERS (5 camadas suaves)
+            const auraLayers = [
+                { width: lineWidth + 14, alpha: 0.08 },
+                { width: lineWidth + 10, alpha: 0.15 },
+                { width: lineWidth + 6, alpha: 0.22 },
+                { width: lineWidth + 3, alpha: 0.35 }
+            ];
+            
+            for (const layer of auraLayers) {
+                g.lineStyle(layer.width, auraColor, layer.alpha);
+                drawConePath();
+            }
+            
+            // 8. TRAÇO PRINCIPAL
+            g.lineStyle(lineWidth, effectiveBodyColor, 0.9);
+            drawConePath();
             return;
         }
 
-        // ═══ DEFAULT: Renderização com 3 camadas ═══
-        // 1. FILL: Preenchimento com bodyColor
-        g.fillStyle(bodyColor, 0.18);
+        // ═══ DEFAULT: Renderização com 5 camadas (refinada) ═══
+        
+        // 1. FILL: Preenchimento sutil com gradiente interno
+        g.fillStyle(effectiveBodyColor, 0.12);
         this.drawPath(g, type);
         g.fillPath();
+        
+        // 2. PADRÃO QUÍMICO: Textura interna baseada no material
+        this.drawChemistryPattern(g, type, chemType, 25, effectiveBodyColor);
 
-        // 2. AURA: Glow externo com auraColor (fusão de energias)
-        g.lineStyle(lineWidth + 8, auraColor, 0.35);
+        // 3. AURA EXTERNA: Glow suave em múltiplas passadas
+        // Camada 1: Glow externo difuso
+        g.lineStyle(lineWidth + 12, auraColor, 0.08);
+        this.drawPath(g, type);
+        g.strokePath();
+        
+        // Camada 2: Glow médio
+        g.lineStyle(lineWidth + 6, auraColor, 0.15);
+        this.drawPath(g, type);
+        g.strokePath();
+        
+        // Camada 3: Glow interno
+        g.lineStyle(lineWidth + 3, auraColor, 0.25);
         this.drawPath(g, type);
         g.strokePath();
 
-        // 3. BODY: Traço sólido interno com bodyColor
-        g.lineStyle(lineWidth, bodyColor, 1);
+        // 4. CONTORNO PRINCIPAL: Traço fino e nítido
+        g.lineStyle(lineWidth, effectiveBodyColor, 0.9);
+        this.drawPath(g, type);
+        g.strokePath();
+        
+        // 5. HIGHLIGHT INTERNO: Brilho sutil no centro
+        g.lineStyle(lineWidth * 0.5, 0xFFFFFF, 0.15);
         this.drawPath(g, type);
         g.strokePath();
     }
@@ -423,6 +684,26 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.closePath();
                 break;
             
+            // ═══ DLC: EXOTIC MATTER - ESPIRAL DE FIBONACCI ═══
+            case 'espiral':
+                // Espiral de Arquimedes: r = a + b*θ
+                const spiralTurns = 3;
+                const spiralGrowth = 4;
+                const spiralStart = 2;
+                const spiralSteps = 80;
+                const spiralThetaMax = spiralTurns * 2 * Math.PI;
+                
+                g.moveTo(spiralStart, 0);
+                for (let i = 1; i <= spiralSteps; i++) {
+                    const theta = (i / spiralSteps) * spiralThetaMax;
+                    const r = spiralStart + spiralGrowth * theta;
+                    const px = Math.cos(theta) * r;
+                    const py = Math.sin(theta) * r;
+                    g.lineTo(px, py);
+                }
+                // Não fecha o path - espiral é aberta
+                break;
+            
             // Olho: Forma de amêndoa com círculo central
             case 'olho':
                 // Contorno do olho (duas curvas)
@@ -470,6 +751,322 @@ export default class Golem extends Phaser.GameObjects.Container {
         } g.closePath();
     }
 
+    // ══════════ SISTEMA DE TEXTURAS QUÍMICAS (MATERIAIS) ══════════
+    
+    /**
+     * Desenha padrões internos baseados no material químico
+     * Cada material tem uma textura procedural única
+     */
+    drawChemistryPattern(g, shapeId, chemId, size, color) {
+        if (!chemId) return;
+        
+        // Cor do padrão (mais clara que o corpo)
+        const patternColor = this.lightenColor(color, 0.4);
+        const patternAlpha = 0.35;
+        
+        switch (chemId) {
+            case 'ouro':
+                // OURO: Brilhos especulares (pequenas elipses brilhantes)
+                this.drawGoldSpecular(g, size, patternColor, patternAlpha);
+                break;
+                
+            case 'ferro':
+                // FERRO: Hachuras diagonais (metal reforçado)
+                this.drawIronHatching(g, shapeId, size, patternColor, patternAlpha);
+                break;
+                
+            case 'cristal':
+                // CRISTAL: Linhas do centro aos vértices (facetado)
+                this.drawCrystalFacets(g, shapeId, size, patternColor, patternAlpha);
+                break;
+                
+            case 'mercurio':
+                // MERCURIO: Ondas/bolhas internas (líquido)
+                this.drawMercuryWaves(g, size, patternColor, patternAlpha);
+                break;
+                
+            case 'silicio':
+                // SILÍCIO: Circuito impresso (linhas ortogonais)
+                this.drawSiliconCircuit(g, size, patternColor, patternAlpha);
+                break;
+                
+            case 'uranio':
+                // URÂNIO: Núcleo radioativo + anéis de órbita
+                this.drawUraniumCore(g, size, patternColor, patternAlpha);
+                break;
+            
+            // ═══ DLC: EXOTIC MATTER ═══
+            case 'bismuto':
+                // BISMUTO: Degraus quadrados concêntricos iridescentes
+                this.drawBismutoCrystal(g, size, patternAlpha);
+                break;
+                
+            case 'carbono':
+            default:
+                // CARBONO: Grid sutil (estrutura molecular)
+                this.drawCarbonGrid(g, size, patternColor, patternAlpha * 0.5);
+                break;
+        }
+    }
+    
+    // === OURO: Brilhos especulares ===
+    drawGoldSpecular(g, size, color, alpha) {
+        g.fillStyle(0xFFFFFF, alpha * 1.2);
+        
+        // Brilho principal (canto superior esquerdo)
+        g.fillEllipse(-size * 0.4, -size * 0.4, size * 0.25, size * 0.12);
+        
+        // Brilho secundário menor
+        g.fillEllipse(-size * 0.2, -size * 0.55, size * 0.12, size * 0.06);
+        
+        // Brilho inferior direito (reflexo)
+        g.fillStyle(0xFFFFFF, alpha * 0.6);
+        g.fillEllipse(size * 0.3, size * 0.3, size * 0.15, size * 0.08);
+        
+        // Preenchimento dourado extra
+        g.fillStyle(0xFFD700, alpha * 0.4);
+        g.fillCircle(0, 0, size * 0.5);
+    }
+    
+    // === FERRO: Hachuras diagonais ===
+    drawIronHatching(g, shapeId, size, color, alpha) {
+        g.lineStyle(1, color, alpha);
+        
+        const spacing = 6;
+        const extent = size * 0.85;
+        
+        // Linhas diagonais ////
+        for (let i = -extent * 2; i < extent * 2; i += spacing) {
+            g.beginPath();
+            g.moveTo(i - extent, -extent);
+            g.lineTo(i + extent, extent);
+            g.strokePath();
+        }
+        
+        // Segunda camada cruzada (para efeito metálico)
+        g.lineStyle(0.5, color, alpha * 0.5);
+        for (let i = -extent * 2; i < extent * 2; i += spacing * 2) {
+            g.beginPath();
+            g.moveTo(i + extent, -extent);
+            g.lineTo(i - extent, extent);
+            g.strokePath();
+        }
+    }
+    
+    // === CRISTAL: Linhas facetadas do centro aos vértices ===
+    drawCrystalFacets(g, shapeId, size, color, alpha) {
+        g.lineStyle(1, color, alpha);
+        
+        // Número de facetas baseado na forma
+        let facets = 6;
+        switch (shapeId) {
+            case 'triangulo': facets = 3; break;
+            case 'quadrado': facets = 4; break;
+            case 'pentagono': facets = 5; break;
+            case 'hexagono': facets = 6; break;
+            case 'circulo': facets = 8; break;
+            default: facets = 6;
+        }
+        
+        // Linhas do centro aos vértices
+        for (let i = 0; i < facets; i++) {
+            const angle = (i * (360 / facets) - 90) * Math.PI / 180;
+            const px = Math.cos(angle) * size * 0.85;
+            const py = Math.sin(angle) * size * 0.85;
+            
+            g.beginPath();
+            g.moveTo(0, 0);
+            g.lineTo(px, py);
+            g.strokePath();
+        }
+        
+        // Anel interno (estrutura cristalina)
+        g.lineStyle(0.5, color, alpha * 0.7);
+        g.strokeCircle(0, 0, size * 0.4);
+    }
+    
+    // === MERCÚRIO: Ondas líquidas ===
+    drawMercuryWaves(g, size, color, alpha) {
+        const time = Date.now() * 0.002;
+        
+        // Bolha interna pulsante
+        const pulseSize = size * 0.35 + Math.sin(time) * size * 0.08;
+        g.fillStyle(color, alpha * 0.6);
+        g.fillCircle(Math.sin(time * 1.3) * 3, Math.cos(time) * 3, pulseSize);
+        
+        // Ondas senoidais
+        g.lineStyle(1.5, color, alpha);
+        for (let wave = 0; wave < 3; wave++) {
+            g.beginPath();
+            const baseY = -size * 0.4 + wave * size * 0.35;
+            const waveOffset = time + wave * 0.7;
+            
+            for (let x = -size * 0.7; x <= size * 0.7; x += 3) {
+                const y = baseY + Math.sin(x * 0.15 + waveOffset) * 4;
+                if (x === -size * 0.7) g.moveTo(x, y);
+                else g.lineTo(x, y);
+            }
+            g.strokePath();
+        }
+    }
+    
+    // === SILÍCIO: Circuito impresso ===
+    drawSiliconCircuit(g, size, color, alpha) {
+        g.lineStyle(1, color, alpha);
+        
+        const s = size * 0.6;
+        
+        // Trilhas horizontais
+        g.beginPath();
+        g.moveTo(-s, -s * 0.5); g.lineTo(-s * 0.3, -s * 0.5);
+        g.lineTo(-s * 0.3, 0); g.lineTo(s * 0.3, 0);
+        g.lineTo(s * 0.3, s * 0.5); g.lineTo(s, s * 0.5);
+        g.strokePath();
+        
+        // Trilha vertical
+        g.beginPath();
+        g.moveTo(0, -s); g.lineTo(0, -s * 0.3);
+        g.lineTo(s * 0.5, -s * 0.3); g.lineTo(s * 0.5, s * 0.3);
+        g.lineTo(0, s * 0.3); g.lineTo(0, s);
+        g.strokePath();
+        
+        // Nós (conexões)
+        g.fillStyle(color, alpha * 1.5);
+        g.fillCircle(-s * 0.3, -s * 0.5, 2);
+        g.fillCircle(s * 0.3, 0, 2);
+        g.fillCircle(0, s * 0.3, 2);
+        g.fillCircle(s * 0.5, -s * 0.3, 2);
+        
+        // Chip central
+        g.lineStyle(1.5, color, alpha);
+        g.strokeRect(-s * 0.2, -s * 0.2, s * 0.4, s * 0.4);
+    }
+    
+    // === URÂNIO: Núcleo radioativo ===
+    drawUraniumCore(g, size, color, alpha) {
+        const time = Date.now() * 0.003;
+        
+        // Núcleo pulsante
+        const pulseAlpha = alpha * (0.7 + Math.sin(time * 2) * 0.3);
+        g.fillStyle(0x00FF00, pulseAlpha);
+        g.fillCircle(0, 0, size * 0.2);
+        
+        // Anéis de órbita
+        g.lineStyle(1, color, alpha * 0.7);
+        g.strokeCircle(0, 0, size * 0.4);
+        g.strokeCircle(0, 0, size * 0.6);
+        
+        // Elétrons orbitando
+        g.fillStyle(0xFFFF00, alpha * 1.2);
+        for (let i = 0; i < 3; i++) {
+            const angle = time * 2 + i * (Math.PI * 2 / 3);
+            const orbitRadius = size * 0.4 + (i % 2) * size * 0.2;
+            const ex = Math.cos(angle) * orbitRadius;
+            const ey = Math.sin(angle) * orbitRadius * 0.5; // Elipse
+            g.fillCircle(ex, ey, 3);
+        }
+    }
+    
+    // === CARBONO: Grid molecular sutil ===
+    drawCarbonGrid(g, size, color, alpha) {
+        g.lineStyle(0.5, color, alpha);
+        
+        const gridSize = 8;
+        const extent = size * 0.7;
+        
+        // Grid horizontal
+        for (let y = -extent; y <= extent; y += gridSize) {
+            g.beginPath();
+            g.moveTo(-extent, y);
+            g.lineTo(extent, y);
+            g.strokePath();
+        }
+        
+        // Grid vertical
+        for (let x = -extent; x <= extent; x += gridSize) {
+            g.beginPath();
+            g.moveTo(x, -extent);
+            g.lineTo(x, extent);
+            g.strokePath();
+        }
+    }
+    
+    // ═══ DLC: EXOTIC MATTER ═══
+    
+    // === BISMUTO: Degraus cristalinos iridescentes ===
+    drawBismutoCrystal(g, size, alpha) {
+        const time = Date.now() * 0.001;
+        const layers = 5;
+        
+        // Cores iridescentes (arco-íris metálico)
+        const iridescent = [
+            0xFF6B9D, // Rosa
+            0xFFB347, // Laranja
+            0xFFEB3B, // Amarelo
+            0x4ECDC4, // Turquesa
+            0x9B59B6, // Roxo
+            0x3498DB  // Azul
+        ];
+        
+        // Degraus quadrados concêntricos
+        for (let i = layers; i >= 0; i--) {
+            const layerSize = size * (0.2 + i * 0.15);
+            const offset = i * 2.5; // Deslocamento 3D
+            
+            // Cor muda com tempo (efeito holográfico)
+            const colorIndex = Math.floor((i + time) % iridescent.length);
+            const nextColor = iridescent[(colorIndex + 1) % iridescent.length];
+            const currentColor = iridescent[colorIndex];
+            
+            // Interpolação suave entre cores
+            const blend = (Math.sin(time * 2 + i) + 1) / 2;
+            const finalColor = this.blendColors(currentColor, nextColor, blend);
+            
+            // Face superior (mais clara)
+            g.fillStyle(finalColor, alpha * (0.4 + i * 0.08));
+            g.fillRect(-layerSize / 2 - offset, -layerSize / 2 - offset, layerSize, layerSize);
+            
+            // Borda (efeito de degrau)
+            g.lineStyle(1.5, 0xFFFFFF, alpha * 0.5);
+            g.strokeRect(-layerSize / 2 - offset, -layerSize / 2 - offset, layerSize, layerSize);
+        }
+        
+        // Brilho especular central
+        g.fillStyle(0xFFFFFF, alpha * 0.8);
+        g.fillCircle(-size * 0.2, -size * 0.2, 3);
+    }
+    
+    // === UTILITÁRIOS DE COR ===
+    
+    /**
+     * Clareia uma cor hexadecimal
+     */
+    lightenColor(color, amount) {
+        const r = Math.min(255, ((color >> 16) & 0xFF) + 255 * amount);
+        const gr = Math.min(255, ((color >> 8) & 0xFF) + 255 * amount);
+        const b = Math.min(255, (color & 0xFF) + 255 * amount);
+        return (Math.floor(r) << 16) | (Math.floor(gr) << 8) | Math.floor(b);
+    }
+    
+    /**
+     * Mistura duas cores com um peso
+     */
+    blendColors(color1, color2, weight) {
+        const r1 = (color1 >> 16) & 0xFF;
+        const g1 = (color1 >> 8) & 0xFF;
+        const b1 = color1 & 0xFF;
+        
+        const r2 = (color2 >> 16) & 0xFF;
+        const g2 = (color2 >> 8) & 0xFF;
+        const b2 = color2 & 0xFF;
+        
+        const r = Math.floor(r1 * (1 - weight) + r2 * weight);
+        const g = Math.floor(g1 * (1 - weight) + g2 * weight);
+        const b = Math.floor(b1 * (1 - weight) + b2 * weight);
+        
+        return (r << 16) | (g << 8) | b;
+    }
+
     // ══════════ SISTEMA DE ANOMALIA (GLITCH VISUAL) ══════════
     
     /**
@@ -514,6 +1111,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         g.fillStyle(bodyColor, fillAlpha);
         this.drawAnomalyPath(g, params, time);
         g.fillPath();
+        
+        // === CAMADA 3.5: Padrão Químico (mesmo em anomalias) ===
+        if (chemType) {
+            this.drawChemistryPattern(g, 'anomaly', chemType, 25, bodyColor);
+        }
         
         // === CAMADA 4: Aura pulsante ===
         const pulseSize = 6 + Math.sin(time * 2) * 2 * intensity;
@@ -596,7 +1198,7 @@ export default class Golem extends Phaser.GameObjects.Container {
     // ========== SISTEMA DE EXPRESSÃO (ROSTO) ==========
     
     drawFace() {
-        if (!this.faceGraphics || !this.expressionState) return; // Null check
+        if (!this.faceGraphics || !this.expressionState) return;
         
         const g = this.faceGraphics;
         g.clear();
@@ -604,7 +1206,12 @@ export default class Golem extends Phaser.GameObjects.Container {
         const state = this.expressionState;
         const lifePct = this.maxLife > 0 ? this.currentLife / this.maxLife : 1;
         
-        // Guarda o mood anterior para detectar transição
+        // INSTINTOS REATIVOS: Sobrepõe tudo quando ativo
+        if (this.instincts?.active && this.instincts.intensity > 0.05) {
+            this.drawInstinctFace(g, this.faceScale || 1);
+            return;
+        }
+        
         const previousMood = state.mood;
         
         // Determina o humor baseado na vida (se não há ação especial)
@@ -615,7 +1222,6 @@ export default class Golem extends Phaser.GameObjects.Container {
             else if (lifePct > 0) state.mood = 'dying';
             else state.mood = 'dead';
             
-            // Fala quando entra no estado dying (apenas uma vez)
             if (state.mood === 'dying' && previousMood !== 'dying' && !this.hasDyingSpoken) {
                 this.hasDyingSpoken = true;
                 this.speakContextual('dying');
@@ -824,11 +1430,301 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
     }
     
+    // ═══════════════════════════════════════════════════════════════════
+    // ROSTO DE INSTINTOS - Expressão dinâmica baseada na ferramenta próxima
+    // ═══════════════════════════════════════════════════════════════════
+    
+    drawInstinctFace(g, scale = 1) {
+        const s = scale;
+        const inst = this.instincts;
+        const intensity = inst.intensity || 0;
+        const tremor = inst.tremor || { x: 0, y: 0 };
+        const state = inst.state;
+        const lineWidth = Math.max(this.minLineWidth || 1.5, s * 1.5);
+        const baseColor = this.visualDNA?.detailColor || this.currentColor || 0x00ffff;
+        const time = Date.now();
+        
+        switch (state) {
+            case 'seeking':
+                this.drawSeekingFace(g, s, intensity, baseColor, time, lineWidth);
+                break;
+                
+            case 'fleeing':
+                this.drawFleeingFace(g, s, intensity, tremor, time, lineWidth);
+                break;
+                
+            case 'freezing':
+                this.drawFreezingFace(g, s, intensity, tremor, time, lineWidth);
+                break;
+                
+            case 'curious':
+                this.drawCuriousFace(g, s, intensity, baseColor, time, lineWidth);
+                break;
+                
+            default:
+                this.drawMoodFace(g, 'neutral', lineWidth, s);
+        }
+    }
+    
+    drawCuriousFace(g, s, intensity, color, time, lineWidth) {
+        const tilt = Math.sin(time / 200) * 3 * s * intensity;
+        const blink = Math.sin(time / 120);
+        
+        const mutateColor = 0xff66ff;
+        g.lineStyle(lineWidth + 3 * s, mutateColor, 0.4 * intensity);
+        
+        const eyeSize = (4 + intensity) * s;
+        g.strokeCircle(-8 * s + tilt, -5 * s, eyeSize);
+        g.strokeCircle(8 * s + tilt, -5 * s, eyeSize + blink * s);
+        
+        g.fillStyle(mutateColor, 0.8);
+        g.fillCircle(-7 * s + tilt, -6 * s, 2 * s);
+        g.fillCircle(9 * s + tilt, -6 * s, 2 * s);
+        
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.strokeCircle(-8 * s + tilt, -5 * s, eyeSize);
+        g.strokeCircle(8 * s + tilt, -5 * s, eyeSize + blink * s);
+        
+        g.fillStyle(0xffffff, 0.9);
+        g.fillCircle(-6 * s + tilt, -7 * s, 1 * s);
+        g.fillCircle(10 * s + tilt, -7 * s, 1 * s);
+        
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.beginPath();
+        g.moveTo(-4 * s, 8 * s);
+        g.lineTo(0, 10 * s);
+        g.lineTo(4 * s, 8 * s);
+        g.strokePath();
+        
+        g.lineStyle(lineWidth, 0xffffff, 0.8);
+        g.beginPath();
+        g.moveTo(-11 * s, -11 * s); g.lineTo(-5 * s, -9 * s);
+        g.moveTo(11 * s, -9 * s); g.lineTo(5 * s, -11 * s);
+        g.strokePath();
+        
+        if (intensity > 0.5) {
+            g.lineStyle(2, mutateColor, 0.3);
+            g.beginPath();
+            g.moveTo(14 * s, -8 * s);
+            g.lineTo(18 * s, -12 * s);
+            g.lineTo(16 * s, -8 * s);
+            g.strokePath();
+        }
+    }
+    
+    drawSeekingFace(g, s, intensity, color, time, lineWidth) {
+        // Olhos brilhando de excitação - pupilas dilatadas
+        const pupilGrow = 1 + intensity * 0.8;
+        const sparkle = Math.sin(time / 80) * 0.3 + 0.7;
+        const eyeBounce = Math.sin(time / 100) * 2 * intensity * s;
+        
+        // Glow dourado/verde de fome
+        const hungerColor = 0x88ff44;
+        g.lineStyle(lineWidth + 4 * s, hungerColor, 0.4 * intensity);
+        
+        // Olhos arregalados de expectativa
+        const eyeSize = (5 + intensity * 2) * s;
+        g.strokeCircle(-8 * s, -5 * s + eyeBounce, eyeSize);
+        g.strokeCircle(8 * s, -5 * s + eyeBounce, eyeSize);
+        
+        // Pupilas grandes e brilhantes (dilatadas de desejo)
+        g.fillStyle(hungerColor, sparkle);
+        g.fillCircle(-8 * s, -5 * s + eyeBounce, 3 * s * pupilGrow);
+        g.fillCircle(8 * s, -5 * s + eyeBounce, 3 * s * pupilGrow);
+        
+        // Brilho nos olhos (reflexo)
+        g.fillStyle(0xffffff, 0.9);
+        g.fillCircle(-6 * s, -7 * s + eyeBounce, 1.2 * s);
+        g.fillCircle(10 * s, -7 * s + eyeBounce, 1.2 * s);
+        
+        // Traço branco interno
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.strokeCircle(-8 * s, -5 * s + eyeBounce, eyeSize);
+        g.strokeCircle(8 * s, -5 * s + eyeBounce, eyeSize);
+        
+        // Boca: sorriso crescente de antecipação
+        const smileWidth = 0.3 + intensity * 0.5;
+        g.lineStyle(lineWidth + 2 * s, hungerColor, 0.3);
+        g.beginPath();
+        g.arc(0, 6 * s, 8 * s, smileWidth, Math.PI - smileWidth);
+        g.strokePath();
+        
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.beginPath();
+        g.arc(0, 6 * s, 8 * s, smileWidth, Math.PI - smileWidth);
+        g.strokePath();
+        
+        // Sobrancelhas levantadas (surpresa feliz)
+        g.lineStyle(lineWidth, 0xffffff, 0.8);
+        g.beginPath();
+        g.moveTo(-12 * s, -12 * s - intensity * 3 * s);
+        g.lineTo(-4 * s, -14 * s - intensity * 3 * s);
+        g.moveTo(4 * s, -14 * s - intensity * 3 * s);
+        g.lineTo(12 * s, -12 * s - intensity * 3 * s);
+        g.strokePath();
+        
+        // Gotinha de saliva (intensidade alta)
+        if (intensity > 0.6) {
+            const drip = Math.sin(time / 150) * 2 * s;
+            g.fillStyle(0x88ccff, 0.6);
+            g.fillCircle(6 * s, 14 * s + drip, 2 * s * intensity);
+        }
+    }
+    
+    drawFleeingFace(g, s, intensity, tremor, time, lineWidth) {
+        // TERROR PURO - olhos arregalados, pupilas minúsculas, boca aberta
+        const jitterX = (Math.random() - 0.5) * 4 * intensity;
+        const jitterY = (Math.random() - 0.5) * 3 * intensity;
+        
+        // Cor avermelhada de pânico
+        const terrorColor = 0xff4444;
+        
+        // Pupilas contráem com o medo (resposta primitiva)
+        const pupilSize = Math.max(0.5, 3 - intensity * 2.5) * s;
+        const eyeOpenness = (6 + intensity * 4) * s;
+        
+        // Glow vermelho de terror
+        g.lineStyle(lineWidth + 4 * s, terrorColor, 0.5 * intensity);
+        
+        // Olhos ARREGALADOS
+        const leftX = -8 * s + jitterX + tremor.x;
+        const leftY = -5 * s + jitterY + tremor.y;
+        const rightX = 8 * s + jitterX + tremor.x;
+        const rightY = -5 * s + jitterY + tremor.y;
+        
+        g.strokeCircle(leftX, leftY, eyeOpenness);
+        g.strokeCircle(rightX, rightY, eyeOpenness);
+        
+        // Pupilas minúsculas (contraídas pelo terror)
+        g.fillStyle(terrorColor, 1);
+        g.fillCircle(leftX, leftY, pupilSize);
+        g.fillCircle(rightX, rightY, pupilSize);
+        
+        // Traço branco
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.strokeCircle(leftX, leftY, eyeOpenness);
+        g.strokeCircle(rightX, rightY, eyeOpenness);
+        g.fillStyle(0xffffff, 0.9);
+        g.fillCircle(leftX, leftY, pupilSize * 0.6);
+        g.fillCircle(rightX, rightY, pupilSize * 0.6);
+        
+        // Boca: "O" de horror (grito silencioso)
+        const mouthWobble = Math.sin(time / 40) * 3 * s * intensity;
+        const mouthSize = (5 + intensity * 3) * s;
+        
+        g.lineStyle(lineWidth + 2 * s, terrorColor, 0.4 * intensity);
+        g.strokeCircle(mouthWobble + tremor.x, 10 * s + tremor.y, mouthSize);
+        
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.strokeCircle(mouthWobble + tremor.x, 10 * s + tremor.y, mouthSize);
+        
+        // Sobrancelhas: levantadas e arqueadas (medo)
+        const browRaise = intensity * 5 * s;
+        g.lineStyle(lineWidth * 1.5, 0xffffff, 0.9);
+        g.beginPath();
+        g.moveTo(-14 * s + tremor.x, -10 * s - browRaise + tremor.y);
+        g.lineTo(-8 * s + tremor.x, -14 * s - browRaise + tremor.y);
+        g.lineTo(-2 * s + tremor.x, -11 * s - browRaise + tremor.y);
+        g.moveTo(2 * s + tremor.x, -11 * s - browRaise + tremor.y);
+        g.lineTo(8 * s + tremor.x, -14 * s - browRaise + tremor.y);
+        g.lineTo(14 * s + tremor.x, -10 * s - browRaise + tremor.y);
+        g.strokePath();
+        
+        // Lágrimas de medo
+        if (intensity > 0.4) {
+            const tearDrop = Math.sin(time / 120) * 2 * s;
+            g.fillStyle(0x88ccff, 0.7);
+            g.fillCircle(leftX - 4 * s, leftY + 10 * s + tearDrop, 2.5 * s * intensity);
+            g.fillCircle(rightX + 4 * s, rightY + 10 * s + tearDrop, 2.5 * s * intensity);
+        }
+        
+        // Linhas de estresse (intensidade muito alta)
+        if (intensity > 0.7) {
+            g.lineStyle(1, terrorColor, 0.4);
+            for (let i = 0; i < 4; i++) {
+                const angle = (Math.PI * 2 / 4) * i + time / 400;
+                g.beginPath();
+                g.moveTo(Math.cos(angle) * 18 * s, Math.sin(angle) * 18 * s);
+                g.lineTo(Math.cos(angle) * 25 * s, Math.sin(angle) * 25 * s);
+                g.strokePath();
+            }
+        }
+    }
+    
+    drawFreezingFace(g, s, intensity, tremor, time, lineWidth) {
+        // Tremendo de frio - olhos semicerrados, boca tensa
+        const shiver = Math.sin(time / 30) * 2 * intensity;
+        
+        // Cor azulada de frio
+        const coldColor = 0x66ccff;
+        
+        g.lineStyle(lineWidth + 3 * s, coldColor, 0.4 * intensity);
+        
+        // Olhos semicerrados (tentando se proteger)
+        const eyeSquint = 3 + (1 - intensity) * 3;
+        g.strokeCircle(-8 * s + tremor.x + shiver, -5 * s + tremor.y, eyeSquint * s);
+        g.strokeCircle(8 * s + tremor.x + shiver, -5 * s + tremor.y, eyeSquint * s);
+        
+        // Pupilas pequenas
+        g.fillStyle(coldColor, 0.8);
+        g.fillCircle(-8 * s + tremor.x + shiver, -5 * s + tremor.y, 1.5 * s);
+        g.fillCircle(8 * s + tremor.x + shiver, -5 * s + tremor.y, 1.5 * s);
+        
+        // Traço branco
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.strokeCircle(-8 * s + tremor.x + shiver, -5 * s + tremor.y, eyeSquint * s);
+        g.strokeCircle(8 * s + tremor.x + shiver, -5 * s + tremor.y, eyeSquint * s);
+        
+        // Boca: linha tremendo
+        const mouthWobble = Math.sin(time / 50) * 4 * s * intensity;
+        g.lineStyle(lineWidth + 1 * s, coldColor, 0.3);
+        g.beginPath();
+        g.moveTo(-6 * s + tremor.x + mouthWobble, 10 * s + tremor.y);
+        g.lineTo(-2 * s + tremor.x - mouthWobble, 12 * s + tremor.y);
+        g.lineTo(2 * s + tremor.x + mouthWobble, 10 * s + tremor.y);
+        g.lineTo(6 * s + tremor.x - mouthWobble, 12 * s + tremor.y);
+        g.strokePath();
+        
+        g.lineStyle(lineWidth, 0xffffff, 1);
+        g.beginPath();
+        g.moveTo(-6 * s + tremor.x + mouthWobble, 10 * s + tremor.y);
+        g.lineTo(-2 * s + tremor.x - mouthWobble, 12 * s + tremor.y);
+        g.lineTo(2 * s + tremor.x + mouthWobble, 10 * s + tremor.y);
+        g.lineTo(6 * s + tremor.x - mouthWobble, 12 * s + tremor.y);
+        g.strokePath();
+        
+        // Sobrancelhas tensas (preocupadas)
+        g.lineStyle(lineWidth, 0xffffff, 0.8);
+        g.beginPath();
+        g.moveTo(-12 * s + tremor.x, -10 * s + tremor.y);
+        g.lineTo(-4 * s + tremor.x, -12 * s + tremor.y);
+        g.moveTo(4 * s + tremor.x, -12 * s + tremor.y);
+        g.lineTo(12 * s + tremor.x, -10 * s + tremor.y);
+        g.strokePath();
+        
+        // Cristais de gelo ao redor
+        if (intensity > 0.3) {
+            g.lineStyle(1, coldColor, 0.5);
+            const crystals = Math.floor(3 + intensity * 3);
+            for (let i = 0; i < crystals; i++) {
+                const angle = (Math.PI * 2 / crystals) * i + time / 1000;
+                const dist = 16 * s;
+                const cx = Math.cos(angle) * dist + tremor.x;
+                const cy = Math.sin(angle) * dist + tremor.y;
+                
+                g.beginPath();
+                g.moveTo(cx, cy - 3 * s); g.lineTo(cx, cy + 3 * s);
+                g.moveTo(cx - 2 * s, cy - 1 * s); g.lineTo(cx + 2 * s, cy + 1 * s);
+                g.moveTo(cx - 2 * s, cy + 1 * s); g.lineTo(cx + 2 * s, cy - 1 * s);
+                g.strokePath();
+            }
+        }
+    }
+    
     drawActionFace(g, action, lineWidth, scale = 1) {
         const color = this.currentColor || 0x00ffff;
         const s = scale;
         
-        // Glow
         g.lineStyle(lineWidth + 4*s, color, 0.3);
         
         switch(action) {
@@ -906,17 +1802,49 @@ export default class Golem extends Phaser.GameObjects.Container {
                 break;
                 
             case 'breed':
-                // Olhos de coração ♥ ♥
                 this.drawHeart(g, -8*s, -5*s, 6*s);
                 this.drawHeart(g, 8*s, -5*s, 6*s);
-                // Boca: 3 (beijinho)
                 g.beginPath();
                 g.arc(-2*s, 8*s, 4*s, -Math.PI/2, Math.PI/2);
                 g.strokePath();
                 break;
+                
+            case 'begging':
+                const blink = Math.sin(Date.now() / 150);
+                const eyeY = -5*s + blink * 2 * s;
+                g.strokeCircle(-8*s, eyeY, 5*s);
+                g.strokeCircle(8*s, eyeY, 5*s);
+                g.fillStyle(color, 0.9);
+                g.fillCircle(-6*s, eyeY - 1*s, 2*s);
+                g.fillCircle(10*s, eyeY - 1*s, 2*s);
+                const wobble = Math.sin(Date.now() / 100) * 2 * s;
+                g.beginPath();
+                g.arc(0, 12*s, 5*s, Math.PI + 0.4, -0.4);
+                g.strokePath();
+                g.beginPath();
+                g.moveTo(-12*s, -12*s); g.lineTo(-6*s, -8*s);
+                g.moveTo(12*s, -12*s); g.lineTo(6*s, -8*s);
+                g.strokePath();
+                break;
+                
+            case 'panic':
+                const tremor = this.instincts?.tremor || { x: 0, y: 0 };
+                const intensity = this.instincts?.intensity || 0.5;
+                const pupilSize = Math.max(1, 3 - intensity * 2) * s;
+                g.strokeCircle(-8*s + tremor.x, -5*s + tremor.y, 7*s);
+                g.strokeCircle(8*s + tremor.x, -5*s + tremor.y, 7*s);
+                g.fillStyle(0xff3333, 0.8);
+                g.fillCircle(-8*s + tremor.x, -5*s + tremor.y, pupilSize);
+                g.fillCircle(8*s + tremor.x, -5*s + tremor.y, pupilSize);
+                const mouthWobble = Math.sin(Date.now() / 40) * 3 * s * intensity;
+                g.strokeCircle(mouthWobble + tremor.x, 10*s + tremor.y, 6*s);
+                g.lineStyle(Math.max(1, s), 0x88ccff, 0.6);
+                g.fillStyle(0x88ccff, 0.5);
+                g.fillCircle(-12*s, 4*s, 2*s);
+                g.fillCircle(12*s, 4*s, 2*s);
+                break;
         }
         
-        // Traço branco
         g.lineStyle(lineWidth, 0xffffff, 1);
         this.drawActionFaceInner(g, action, s);
     }
@@ -983,6 +1911,36 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.arc(-2*s, 8*s, 4*s, -Math.PI/2, Math.PI/2);
                 g.strokePath();
                 break;
+                
+            case 'begging':
+                const blink = Math.sin(Date.now() / 150);
+                const eyeY = -5*s + blink * 2 * s;
+                g.strokeCircle(-8*s, eyeY, 5*s);
+                g.strokeCircle(8*s, eyeY, 5*s);
+                g.fillStyle(0xffffff, 1);
+                g.fillCircle(-6*s, eyeY - 1*s, 1.5*s);
+                g.fillCircle(10*s, eyeY - 1*s, 1.5*s);
+                g.beginPath();
+                g.arc(0, 12*s, 5*s, Math.PI + 0.4, -0.4);
+                g.strokePath();
+                g.beginPath();
+                g.moveTo(-12*s, -12*s); g.lineTo(-6*s, -8*s);
+                g.moveTo(12*s, -12*s); g.lineTo(6*s, -8*s);
+                g.strokePath();
+                break;
+                
+            case 'panic':
+                const tremor = this.instincts?.tremor || { x: 0, y: 0 };
+                const intensity = this.instincts?.intensity || 0.5;
+                const pupilSize = Math.max(0.8, 2.5 - intensity * 1.5) * s;
+                g.strokeCircle(-8*s + tremor.x, -5*s + tremor.y, 7*s);
+                g.strokeCircle(8*s + tremor.x, -5*s + tremor.y, 7*s);
+                g.fillStyle(0xffffff, 1);
+                g.fillCircle(-8*s + tremor.x, -5*s + tremor.y, pupilSize);
+                g.fillCircle(8*s + tremor.x, -5*s + tremor.y, pupilSize);
+                const mouthWobble = Math.sin(Date.now() / 40) * 3 * s * intensity;
+                g.strokeCircle(mouthWobble + tremor.x, 10*s + tremor.y, 6*s);
+                break;
         }
     }
     
@@ -1039,12 +1997,17 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.expressionState.action = null;
         }
         
+        // ═══ DLC: EXOTIC MATTER - Efeitos de Física Especial ═══
+        this.applyExoticPhysicsEffects();
+        
         // Piscar aleatório (mais lento se gravidade, mais rápido se eletricidade)
         this.blinkTimer++;
         let blinkInterval = 60; // ~3 segundos em 50ms ticks
         if (this.currentPhysics === 'eletricidade') blinkInterval = 30;
         if (this.currentPhysics === 'gravidade') blinkInterval = 100;
         if (this.currentPhysics === 'frio') blinkInterval = 120;
+        if (this.currentPhysics === 'entropia') blinkInterval = 20; // Piscar errático
+        if (this.currentPhysics === 'sonico') blinkInterval = 45;
         
         if (this.blinkTimer >= blinkInterval) {
             this.isBlinking = true;
@@ -1054,6 +2017,61 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         // Redesenha o rosto
         this.drawFace();
+    }
+    
+    // ═══ DLC: EXOTIC MATTER - Efeitos visuais de física exótica ═══
+    applyExoticPhysicsEffects() {
+        const time = Date.now();
+        
+        // ENTROPIA: Glitch visual - vértices tremem aleatoriamente
+        if (this.currentPhysics === 'entropia') {
+            // Tremor do graphics (corpo)
+            const glitchX = (Math.random() - 0.5) * 4;
+            const glitchY = (Math.random() - 0.5) * 4;
+            this.graphics.x = glitchX;
+            this.graphics.y = glitchY;
+            
+            // Ocasionalmente, glitch de cor (força redesenho com cor alterada)
+            if (Math.random() < 0.08) {
+                const glitchColors = [0xFF0000, 0x00FF00, 0x0000FF, 0x2a0033];
+                this.entropyGlitchColor = glitchColors[Math.floor(Math.random() * glitchColors.length)];
+                // Força redesenho do shape com cor glitchada
+                this.drawNeonShape(this.currentShape, this.entropyGlitchColor, this.currentChem);
+            } else if (this.entropyGlitchColor) {
+                // Restaura cor original
+                this.entropyGlitchColor = null;
+                this.drawNeonShape(this.currentShape, this.currentColor, this.currentChem);
+            }
+            
+            // Partículas de dissolução (pixels se soltando)
+            if (this.emitter && Math.random() < 0.15) {
+                this.emitter.explode(1);
+            }
+        }
+        
+        // SÔNICO: Vibração senoidal das bordas
+        else if (this.currentPhysics === 'sonico') {
+            // Vibração harmônica
+            const vibration = Math.sin(time * 0.02) * 2;
+            const secondHarmonic = Math.sin(time * 0.04) * 1;
+            
+            this.graphics.x = vibration + secondHarmonic;
+            this.graphics.y = Math.cos(time * 0.015) * 1.5;
+            
+            // Escala pulsante (como onda sonora)
+            const pulseScale = 1 + Math.sin(time * 0.01) * 0.03;
+            this.graphics.setScale(pulseScale);
+        }
+        
+        // Resetar efeitos para outras físicas
+        else if (this.graphics.x !== 0 || this.graphics.y !== 0) {
+            // Só reseta se estiver deslocado
+            if (this.currentPhysics !== 'entropia' && this.currentPhysics !== 'sonico') {
+                this.graphics.x = 0;
+                this.graphics.y = 0;
+                this.graphics.setScale(1);
+            }
+        }
     }
 
     // Ações e logging de vida

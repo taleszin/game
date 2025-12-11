@@ -27,32 +27,92 @@
       </div>
       
       <div id="creation-panel" class="hidden">
-        <div class="slots-container">
-            <div class="slot active" id="slot-forma" data-target="forma">
-                <div class="slot-label">1. FORMA</div>
-                <div class="slot-icon">?</div>
-                <div class="slot-name">Selecione</div>
+        <!-- === ESTAÇÃO DE MONTAGEM HOLOGRÁFICA === -->
+        <div class="hologram-header">
+            <div class="header-line"></div>
+            <h2 class="hologram-title">ESTAÇÃO DE SÍNTESE</h2>
+            <div class="header-line"></div>
+        </div>
+        
+        <div class="assembly-station">
+            <!-- PREVIEW CENTRAL (Canvas Holográfico) -->
+            <div class="preview-container">
+                <div class="preview-frame">
+                    <div class="corner-decor tl"></div>
+                    <div class="corner-decor tr"></div>
+                    <div class="corner-decor bl"></div>
+                    <div class="corner-decor br"></div>
+                    <canvas id="golem-preview" width="160" height="160"></canvas>
+                    <div class="preview-scanline"></div>
+                </div>
+                <div class="preview-status">
+                    <span class="status-dot"></span>
+                    <span id="preview-status-text">AGUARDANDO DADOS...</span>
+                </div>
+                <div class="stability-bar">
+                    <div class="stability-label">ESTABILIDADE</div>
+                    <div class="stability-track">
+                        <div class="stability-fill" id="stability-fill"></div>
+                    </div>
+                    <span class="stability-value" id="stability-value">---%</span>
+                </div>
             </div>
-            <div class="arrow">➜</div>
-            <div class="slot" id="slot-chem" data-target="quimica">
-                <div class="slot-label">2. ESTRUTURA</div>
-                <div class="slot-icon">?</div>
-                <div class="slot-name">Selecione</div>
-            </div>
-            <div class="arrow">➜</div>
-            <div class="slot" id="slot-phys" data-target="fisica">
-                <div class="slot-label">3. ENERGIA</div>
-                <div class="slot-icon">?</div>
-                <div class="slot-name">Selecione</div>
+            
+            <!-- SELETORES EM COLUNAS -->
+            <div class="selectors-panel">
+                <!-- Coluna 1: FORMA -->
+                <div class="selector-column" id="col-forma">
+                    <div class="column-header">
+                        <span class="col-number">01</span>
+                        <span class="col-title">GEOMETRIA BASE</span>
+                    </div>
+                    <div class="column-status" id="status-forma">
+                        <span class="status-icon">◇</span>
+                        <span class="status-text">Não Definida</span>
+                    </div>
+                    <div class="column-options" id="options-forma"></div>
+                </div>
+                
+                <!-- Coluna 2: QUÍMICA -->
+                <div class="selector-column" id="col-quimica">
+                    <div class="column-header">
+                        <span class="col-number">02</span>
+                        <span class="col-title">ESTRUTURA MOLECULAR</span>
+                    </div>
+                    <div class="column-status" id="status-quimica">
+                        <span class="status-icon">◇</span>
+                        <span class="status-text">Não Vinculada</span>
+                    </div>
+                    <div class="column-options" id="options-quimica"></div>
+                </div>
+                
+                <!-- Coluna 3: FÍSICA -->
+                <div class="selector-column" id="col-fisica">
+                    <div class="column-header">
+                        <span class="col-number">03</span>
+                        <span class="col-title">NÚCLEO DE ENERGIA</span>
+                    </div>
+                    <div class="column-status" id="status-fisica">
+                        <span class="status-icon">◇</span>
+                        <span class="status-text">Vazio</span>
+                    </div>
+                    <div class="column-options" id="options-fisica"></div>
+                </div>
             </div>
         </div>
-
-        <div id="options-grid" class="options-grid"></div>
-
+        
+        <!-- BARRA DE AÇÕES -->
         <div class="panel-actions">
-            <button id="btn-cancel" class="pixel-btn btn-red">CANCELAR</button>
-            <div class="summary" id="recipe-summary">...</div>
-            <button id="btn-synthesize" class="pixel-btn btn-green" disabled>SINTETIZAR</button>
+            <button id="btn-cancel" class="pixel-btn btn-red">
+                <span class="btn-icon">✕</span> ABORTAR
+            </button>
+            <div class="synthesis-info">
+                <div class="recipe-label">FÓRMULA:</div>
+                <div class="recipe-formula" id="recipe-summary">[ ? ] + [ ? ] + [ ? ]</div>
+            </div>
+            <button id="btn-synthesize" class="pixel-btn btn-green" disabled>
+                <span class="btn-icon">⚡</span> SINTETIZAR
+            </button>
         </div>
       </div>
 
