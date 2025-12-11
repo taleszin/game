@@ -550,7 +550,7 @@ function calculateStrength(areaRaw, baseStrength = 10) {
 export function generateGolemData(ingredients) {
     return new Promise((resolve) => {
         setTimeout(() => {
-            const baseLife = 30000;
+            const baseLife = 80000; // Aumentado de 30s para 80s (com 5x speed = 16s)
             const scaleX = 0.7 + Math.random() * 0.8;
             const scaleY = 0.7 + Math.random() * 0.8;
             const avgScale = (scaleX + scaleY) / 2;
@@ -687,7 +687,7 @@ export function breedGolemData(parent1, parent2) {
                 forca: Math.floor(inheritWithMutation(p1Stats.forca || 10, p2Stats.forca || 10, 0.3, 0.1) * hybridBonus * anomalyMultiplier),
                 resistencia: Math.floor(inheritWithMutation(p1Stats.resistencia || 10, p2Stats.resistencia || 10, 0.3, 0.1) * hybridBonus * (isAnomaly ? 0.7 : 1)), // Anomalias são frágeis
                 energia: Math.floor(inheritWithMutation(p1Stats.energia || 20, p2Stats.energia || 20, 0.3, 0.1) * anomalyMultiplier),
-                lifespan: inheritWithMutation(p1Stats.maxLifespan || 30000, p2Stats.maxLifespan || 30000, 0.2, 0.1) * lifespanPenalty,
+                lifespan: inheritWithMutation(p1Stats.maxLifespan || 80000, p2Stats.maxLifespan || 80000, 0.2, 0.1) * lifespanPenalty,
                 scaleX: newScaleX,
                 scaleY: newScaleY,
                 scale: ((newScaleX + newScaleY) / 2).toFixed(2),

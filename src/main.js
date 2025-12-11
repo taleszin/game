@@ -326,6 +326,114 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    // CHRONO-DECK: Controle Temporal Minimal
+    // ═══════════════════════════════════════════════════════════════════
+    
+    const chronoButtons = document.querySelectorAll('.chrono-icon');
+    const chronoDeck = document.getElementById('chrono-deck');
+    
+    // Estado para Time Dilation on Creation
+    let savedTimeSpeed = 1;
+    let isCreationMode = false;
+    
+    // Função para tocar som de clique (8-bits)
+    function playChronoClick(speed) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            // Frequência baseada no botão
+            const freqs = { 0: 200, 1: 400, 5: 600 };
+            osc.frequency.value = freqs[speed] || 400;
+            osc.type = 'square';
+            
+            gain.gain.setValueAtTime(0.12, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start();
+            osc.stop(ctx.currentTime + 0.08);
+        } catch (e) {
+            // Audio não disponível, ignora
+        }
+    }
+    
+    // Salva velocidade atual e bloqueia controles
+    function enterCreationMode() {
+        if (isCreationMode) return;
+        isCreationMode = true;
+        
+        // Salva velocidade atual
+        const activeBtn = document.querySelector('.chrono-icon.active');
+        savedTimeSpeed = activeBtn ? parseFloat(activeBtn.dataset.speed) : 1;
+        
+        // Força velocidade para 1x (normal) durante criação
+        if (savedTimeSpeed !== 1) {
+            chronoButtons.forEach(b => b.classList.remove('active'));
+            const playBtn = document.querySelector('.chrono-icon[data-speed="1"]');
+            if (playBtn) playBtn.classList.add('active');
+            game.events.emit('update-time-scale', 1);
+        }
+        
+        // Bloqueia controles de tempo
+        if (chronoDeck) chronoDeck.classList.add('disabled');
+        console.log('[CHRONO] Creation mode: locked at 1x');
+    }
+    
+    /**
+     * Sai do modo de criação e gerencia velocidade do tempo
+     * @param {boolean} shouldRestoreSpeed - Se true, restaura velocidade anterior.
+     *                                       Se false, força 1x (para ver spawn com calma)
+     */
+    function exitCreationMode(shouldRestoreSpeed = true) {
+        if (!isCreationMode) return;
+        isCreationMode = false;
+        
+        // Desbloqueia controles
+        if (chronoDeck) chronoDeck.classList.remove('disabled');
+        
+        if (shouldRestoreSpeed && savedTimeSpeed !== 1) {
+            // CANCELAR: Restaura velocidade anterior (ex: volta para 5x)
+            chronoButtons.forEach(b => b.classList.remove('active'));
+            const targetBtn = document.querySelector(`.chrono-icon[data-speed="${savedTimeSpeed}"]`);
+            if (targetBtn) targetBtn.classList.add('active');
+            game.events.emit('update-time-scale', savedTimeSpeed);
+            console.log(`[CHRONO] Restored speed: ${savedTimeSpeed}x`);
+        } else {
+            // SINTETIZAR: Mantém 1x para ver nascimento com calma
+            // Descarta velocidade salva
+            savedTimeSpeed = 1;
+            console.log('[CHRONO] Kept at 1x for spawn observation');
+        }
+    }
+    
+    chronoButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Previne propagação
+            
+            // Bloqueia cliques durante modo de criação
+            if (isCreationMode) return;
+            
+            const speed = parseFloat(btn.dataset.speed);
+            
+            // Feedback sonoro
+            playChronoClick(speed);
+            
+            // Atualiza estado visual dos botões
+            chronoButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            
+            // Emite evento para a cena
+            game.events.emit('update-time-scale', speed);
+            
+            console.log(`[CHRONO] Speed: ${speed}x`);
+        });
+    });
+
     game.events.on('update-tree', (familyData) => {
         renderFamilyTree(familyData);
     });
@@ -1352,6 +1460,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnOpen.addEventListener('click', () => {
         creationPanel.classList.remove('hidden');
         btnOpen.classList.add('hidden');
+        enterCreationMode(); // Time Dilation: bloqueia tempo durante criação
         initHolographicPanel();
     });
 
@@ -1359,6 +1468,7 @@ document.addEventListener('DOMContentLoaded', () => {
         stopPreviewAnimation();
         creationPanel.classList.add('hidden');
         btnOpen.classList.remove('hidden');
+        exitCreationMode(true); // CANCELAR: Restaura velocidade anterior
         resetSelection();
     });
     
@@ -1433,6 +1543,7 @@ document.addEventListener('DOMContentLoaded', () => {
             stopPreviewAnimation();
             creationPanel.classList.add('hidden');
             btnOpen.classList.remove('hidden');
+            exitCreationMode(false); // SINTETIZAR: Mantém 1x para observar spawn
             resetSelection();
             btnSynthesize.innerHTML = '<span class="btn-icon">✨</span> SINTETIZAR';
         }, 800);
@@ -1472,10 +1583,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Referência ao Golem atualmente inspecionado para atualização dinâmica
+    let currentInspectedGolem = null;
+    let inspectUpdateInterval = null;
+
     game.events.on('inspect-golem', (data) => {
         const stats = data.stats || {};
         const att = stats.stats || { forca: '?', resistencia: '?', energia: '?' };
         const visual = data.visual || {};
+        const liveData = data.liveData || {};
+
+        // Armazena referência para atualização dinâmica
+        currentInspectedGolem = liveData.golemRef || null;
 
         elName.innerText = stats.name || "ANALISANDO...";
         elDesc.innerText = stats.description || "Forma de vida detectada.";
@@ -1485,49 +1604,69 @@ document.addEventListener('DOMContentLoaded', () => {
         elEng.innerText = att.energia;
         elDiag.innerText = stats.dialogo || "...";
 
-        // === VISUAL GRANDE: Usa generateGolemSVG (Render Engine Unificada) ===
-        if (elVisualLarge) {
-            const shapeId = visual.forma?.id || 'quadrado';
-            const chemId = visual.quimica?.id || 'carbono';
-            const physId = visual.fisica?.id || 'luz';
-            const scX = att.scaleX || parseFloat(att.scale) || 1;
-            const scY = att.scaleY || parseFloat(att.scale) || 1;
-            
-            // Usa a render engine unificada
-            const svgHtml = generateGolemSVG(shapeId, chemId, physId, scX, scY, 120);
-            elVisualLarge.innerHTML = svgHtml;
-            
-            // Efeito de brilho baseado na física
-            const physColor = PHYSICS_COLORS[physId] || '#00ffff';
-            elVisualLarge.style.boxShadow = `0 0 25px ${physColor}50`;
-            elVisualLarge.style.borderColor = physColor;
-        }
+        // Função para atualizar dados dinâmicos (geometria e visual)
+        function updateDynamicData() {
+            // Usa escala em tempo real do Golem se disponível
+            const currentScaleX = currentInspectedGolem?.currentScale || liveData.currentScaleX || att.scaleX || parseFloat(att.scale) || 1;
+            const currentScaleY = currentInspectedGolem?.currentScale || liveData.currentScaleY || att.scaleY || parseFloat(att.scale) || 1;
+            const lifePhase = currentInspectedGolem?.lifePhase || liveData.lifePhase || 'adult';
 
-        // === MATEMÁTICA: Usa calculateGeometry do GeometryMath ===
-        if (visual && visual.forma) {
-            const sX = att.scaleX || parseFloat(att.scale) || 1;
-            const sY = att.scaleY || parseFloat(att.scale) || 1;
-            
-            try {
-                const geoResult = calculateGeometry(visual.forma.id, sX, sY, visual.forma.params);
+            // === VISUAL GRANDE: Atualiza com escala atual ===
+            if (elVisualLarge) {
+                const shapeId = visual.forma?.id || 'quadrado';
+                const chemId = visual.quimica?.id || 'carbono';
+                const physId = visual.fisica?.id || 'luz';
                 
-                elArea.innerText = geoResult.areaFormatted;
-                elPeri.innerText = geoResult.perimeterFormatted;
-                elScale.innerText = `${sX.toFixed(2)}× / ${sY.toFixed(2)}×`;
-                elFormula.innerText = geoResult.formula;
-            } catch (e) {
-                console.warn('[Inspect] Geometry calc error:', e);
+                const svgHtml = generateGolemSVG(shapeId, chemId, physId, currentScaleX, currentScaleY, 120);
+                elVisualLarge.innerHTML = svgHtml;
+                
+                const physColor = PHYSICS_COLORS[physId] || '#00ffff';
+                elVisualLarge.style.boxShadow = `0 0 25px ${physColor}50`;
+                elVisualLarge.style.borderColor = physColor;
+            }
+
+            // === MATEMÁTICA DINÂMICA: Recalcula com escala atual ===
+            if (visual && visual.forma) {
+                try {
+                    const geoResult = calculateGeometry(visual.forma.id, currentScaleX, currentScaleY, visual.forma.params);
+                    
+                    elArea.innerText = geoResult.areaFormatted;
+                    elPeri.innerText = geoResult.perimeterFormatted;
+                    
+                    // Mostra fase de vida junto com escala
+                    const phaseLabel = { child: '👶', adult: '🧑', old: '👴' }[lifePhase] || '';
+                    elScale.innerText = `${currentScaleX.toFixed(2)}× ${phaseLabel}`;
+                    
+                    elFormula.innerText = geoResult.formula;
+                } catch (e) {
+                    console.warn('[Inspect] Geometry calc error:', e);
+                    elArea.innerText = '--';
+                    elPeri.innerText = '--';
+                    elScale.innerText = `${currentScaleX.toFixed(2)}×`;
+                    elFormula.innerText = 'Erro no cálculo geométrico.';
+                }
+            } else {
                 elArea.innerText = '--';
                 elPeri.innerText = '--';
-                elScale.innerText = `${sX.toFixed(2)}× / ${sY.toFixed(2)}×`;
-                elFormula.innerText = 'Erro no cálculo geométrico.';
+                elScale.innerText = '—';
+                elFormula.innerText = 'Selecione uma forma para habilitar cálculo.';
             }
-        } else {
-            elArea.innerText = '--';
-            elPeri.innerText = '--';
-            elScale.innerText = '—';
-            elFormula.innerText = 'Selecione uma forma para habilitar cálculo.';
         }
+
+        // Atualização inicial
+        updateDynamicData();
+
+        // Limpa intervalo anterior se existir
+        if (inspectUpdateInterval) {
+            clearInterval(inspectUpdateInterval);
+        }
+
+        // Inicia atualização contínua enquanto o modal estiver aberto (a cada 200ms)
+        inspectUpdateInterval = setInterval(() => {
+            if (!inspectModal.classList.contains('hidden') && currentInspectedGolem?.active) {
+                updateDynamicData();
+            }
+        }, 200);
 
         // Render life history timeline (animated)
         function renderHistory(log) {
@@ -1566,6 +1705,13 @@ document.addEventListener('DOMContentLoaded', () => {
     game.events.on('hide-inspect', () => {
         inspectModal.classList.add('hidden');
         inspectModal.classList.remove('modal-large');
+        
+        // Limpa atualização dinâmica
+        currentInspectedGolem = null;
+        if (inspectUpdateInterval) {
+            clearInterval(inspectUpdateInterval);
+            inspectUpdateInterval = null;
+        }
     });
 
     const tools = document.querySelectorAll('.tool-slot');

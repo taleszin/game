@@ -7,6 +7,11 @@ export default class SanctuaryScene extends Phaser.Scene {
     super('SanctuaryScene');
     this.isPlacingMode = false;
     this.pendingData = null;
+    
+    // ═══ ENGINE DE TEMPO ═══
+    this.simulationSpeed = 1.0;
+    this.isPaused = false;
+    this.pauseOverlay = null;
   }
 
   preload() {
@@ -41,6 +46,11 @@ export default class SanctuaryScene extends Phaser.Scene {
 
     this.game.events.on('tool-used', (data) => {
         this.handleToolAction(data.x, data.y, data.action);
+    });
+
+    // ═══ CONTROLE DE TEMPO ═══
+    this.game.events.on('update-time-scale', (speed) => {
+        this.setSimulationSpeed(speed);
     });
 
     this.input.on('pointerdown', (pointer) => {
@@ -270,9 +280,126 @@ export default class SanctuaryScene extends Phaser.Scene {
   }
 
   spawnGolem(x, y, data) {
+    // ═══ SPAWN SEGURO: Garante velocidade estável antes de criar ═══
+    // Previne "saltos" de física no primeiro frame
+    const previousSpeed = this.simulationSpeed;
+    if (previousSpeed !== 1) {
+      this.setSimulationSpeed(1);
+    }
+    
     new Golem(this, x, y, data);
+    
     const circle = this.add.circle(x, y, 5);
     circle.setStrokeStyle(2, 0xffffff);
     this.tweens.add({ targets: circle, scale: 8, alpha: 0, duration: 400, onComplete: () => circle.destroy() });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ENGINE DE TEMPO - Controle Global de Simulação
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * Define a velocidade da simulação (afeta física, timers e ciclos de vida)
+   * ACTIVE PAUSE: Input e hover continuam funcionando, só simulação para
+   * @param {number} speed - Velocidade (0 = pausa, 1 = normal, 5 = rápido)
+   */
+  setSimulationSpeed(speed) {
+    const previousSpeed = this.simulationSpeed;
+    this.simulationSpeed = speed;
+    this.isPaused = (speed === 0);
+
+    // ═══ ACTIVE PAUSE: NÃO pausamos physics.world diretamente ═══
+    // Isso permite que pointer events continuem funcionando
+    // Em vez disso, cada Golem checa isPaused antes de mover/decair vida
+    
+    if (speed === 0) {
+      // Pausa: Golems param de se mover via flag, não via physics
+      // Mantemos physics rodando para permitir hover/click detection
+      this.physics.world.timeScale = 1; // Mantém normal para detecção
+    } else {
+      // Velocidade ativa: ajusta timeScale invertido
+      this.physics.world.timeScale = 1 / speed;
+    }
+
+    // ═══ TIMERS: Ajusta com proteção contra valores inválidos ═══
+    const safeSpeed = Math.max(0.001, speed); // Evita divisão por zero
+    
+    if (this.idleChatterTimer) {
+      if (speed === 0) {
+        this.idleChatterTimer.paused = true;
+      } else {
+        this.idleChatterTimer.paused = false;
+        this.idleChatterTimer.timeScale = safeSpeed;
+      }
+    }
+
+    // ═══ GOLEMS: Notifica com debounce para evitar crash ═══
+    if (this._speedChangeTimeout) {
+      clearTimeout(this._speedChangeTimeout);
+    }
+    
+    this._speedChangeTimeout = setTimeout(() => {
+      const golems = this.golemsGroup?.getChildren() || [];
+      golems.forEach(golem => {
+        if (golem.active && golem.onSimulationSpeedChanged) {
+          golem.onSimulationSpeedChanged(speed);
+        }
+      });
+    }, 50); // Debounce de 50ms
+
+    // ═══ EFEITO VISUAL DE PAUSA (sutil, sem bloquear input) ═══
+    if (this.isPaused) {
+      this.showPauseOverlay();
+    } else {
+      this.hidePauseOverlay();
+    }
+
+    console.log(`[TIME] Speed: ${speed}x | Paused: ${this.isPaused}`);
+  }
+
+  /**
+   * Exibe overlay visual de pausa - SUTIL, não bloqueia input
+   */
+  showPauseOverlay() {
+    if (this.pauseOverlay) return;
+
+    // Overlay MUITO sutil - apenas um véu visual
+    this.pauseOverlay = this.add.graphics();
+    this.pauseOverlay.setDepth(50); // Abaixo dos Golems para não bloquear
+    this.pauseOverlay.fillStyle(0x000000, 0.15); // Bem transparente
+    this.pauseOverlay.fillRect(0, 0, 800, 600);
+
+    // Ícone de pausa no canto (não centralizado para não atrapalhar)
+    const pauseIcon = this.add.text(780, 20, '⏸', {
+      fontFamily: 'Arial',
+      fontSize: '24px',
+      fill: '#ff4400'
+    }).setOrigin(1, 0).setDepth(51).setAlpha(0.8);
+
+    // Animação sutil
+    this.tweens.add({
+      targets: pauseIcon,
+      alpha: { from: 0.8, to: 0.4 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+
+    this.pauseOverlay.pauseIcon = pauseIcon;
+  }
+
+  /**
+   * Remove o overlay de pausa
+   */
+  hidePauseOverlay() {
+    if (!this.pauseOverlay) return;
+
+    if (this.pauseOverlay.pauseIcon) {
+      this.tweens.killTweensOf(this.pauseOverlay.pauseIcon);
+      this.pauseOverlay.pauseIcon.destroy();
+    }
+    this.pauseOverlay.destroy();
+    this.pauseOverlay = null;
   }
 }

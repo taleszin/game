@@ -10,9 +10,31 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.id = `golem_${Date.now()}_${Math.floor(Math.random()*1000)}`;
         this.lifeLog = [];
         
+        // ═══ SISTEMA DESACOPLADO: IDADE vs VITALIDADE ═══
+        // age: acumulador de tempo vivido (sempre cresce)
+        // vitality: energia vital (decai com tempo, sobe com feed)
+        // Crescimento visual depende APENAS de age
+        // Morte ocorre se vitality <= 0 OU age >= maxLifespan
+        
+        this.lifePhase = 'child'; // 'child', 'adult', 'old'
+        this.currentScale = 0.5; // Começa pequeno
+        this.isAdult = false;
+        this.hasSpokenGrowth = false;
+        this.hasSpokenDying = false;
+        
         const stats = data.aiData ? data.aiData.stats : {};
-        this.maxLife = stats.lifespan || 30000;
-        this.currentLife = this.maxLife;
+        
+        // Idade: tempo vivido em ms (sempre cresce)
+        this.age = 0;
+        this.maxLifespan = stats.lifespan || 80000; // Tempo máximo de vida
+        
+        // Vitalidade: energia vital (decai, restaurável com feed)
+        this.maxVitality = this.maxLifespan * 0.6; // 60% do lifespan como reserva
+        this.vitality = this.maxVitality;
+        
+        // Mantém currentLife e maxLife para compatibilidade com barra de vida
+        this.maxLife = this.maxVitality;
+        this.currentLife = this.vitality;
         
         // Escala (Dimensões Únicas)
         this.targetScaleX = stats.scaleX ? parseFloat(stats.scaleX) : (stats.scale ? parseFloat(stats.scale) : 1);
@@ -210,7 +232,23 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.on('pointerover', () => {
                 if (!this.isDragging) {
                     scene.selectedGolem = this;
-                    scene.game.events.emit('inspect-golem', { visual: this.dataAttributes, stats: data.aiData, lifeLog: this.lifeLog });
+                    // Envia dados dinâmicos incluindo escala atual em tempo real
+                    scene.game.events.emit('inspect-golem', { 
+                        visual: this.dataAttributes, 
+                        stats: data.aiData, 
+                        lifeLog: this.lifeLog,
+                        // Dados dinâmicos em tempo real
+                        liveData: {
+                            currentScaleX: this.currentScale || this.targetScale,
+                            currentScaleY: this.currentScale || this.targetScale,
+                            lifePhase: this.lifePhase,
+                            age: this.age,
+                            maxLifespan: this.maxLifespan,
+                            vitality: this.vitality,
+                            maxVitality: this.maxVitality,
+                            golemRef: this // Referência ao Golem vivo
+                        }
+                    });
                     this.graphics.alpha = 1;
                 }
             });
@@ -2087,10 +2125,14 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
 
     feed() {
-        this.currentLife = this.maxLife;
+        // Restaura VITALIDADE (energia), não IDADE
+        // Golem não rejuvenesce, apenas recupera forças
+        this.vitality = this.maxVitality;
+        this.currentLife = this.vitality; // Sincroniza para compatibilidade
+        
         this.scene.tweens.add({ targets: this, scale: this.targetScale * 1.3, yoyo: true, duration: 200 });
         this.setActionExpression('feed', 2000);
-        this.addLifeEvent('feed', 'Nutriu - vida restaurada');
+        this.addLifeEvent('feed', 'Nutriu - vitalidade restaurada (idade mantida)');
         this.speakContextual('feed');
     }
 
@@ -2135,20 +2177,194 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
     
     startLifeCycle() {
+        // Inicia com 50% do tamanho (fase infantil)
+        this.currentScale = 0.5;
+        this.setScale(this.targetScaleX * this.currentScale, this.targetScaleY * this.currentScale);
+        
+        // Armazena velocidade anterior para detectar mudanças
+        this._lastVelocity = { x: 0, y: 0 };
+        
         this.lifeTimer = this.scene.time.addEvent({ delay: 100, loop: true, callback: () => {
-            const decay = 100 * (this.lifeTimer.timeScale||1);
-            this.currentLife -= decay;
-            const pct = Math.max(0, this.currentLife / this.maxLife);
-            this.lifeBar.width = 22 * pct;
-            if (pct < 0.3) this.lifeBar.setFillStyle(0xff0000); else this.lifeBar.setFillStyle(this.lifeBar.fillColor);
-            if (this.currentLife <= 0) this.die();
+            // ═══ ACTIVE PAUSE: Checa flag da cena ═══
+            if (this.scene.isPaused) {
+                // Durante pausa: PARA movimento e decaimento
+                if (this.body && this.body.velocity) {
+                    if (this.body.velocity.x !== 0 || this.body.velocity.y !== 0) {
+                        this._lastVelocity = { x: this.body.velocity.x, y: this.body.velocity.y };
+                    }
+                    this.body.setVelocity(0, 0);
+                }
+                return; // Pula decaimento durante pausa
+            } else {
+                // Restaura velocidade ao despausar
+                if (this._lastVelocity && (this._lastVelocity.x !== 0 || this._lastVelocity.y !== 0)) {
+                    if (this.body && this.body.velocity.x === 0 && this.body.velocity.y === 0) {
+                        this.body.setVelocity(this._lastVelocity.x, this._lastVelocity.y);
+                    }
+                    this._lastVelocity = { x: 0, y: 0 };
+                }
+            }
+            
+            const simSpeed = this.scene.simulationSpeed || 1.0;
+            const deltaTime = 100 * simSpeed; // ms passados neste tick
+            
+            // ═══ IDADE: Sempre cresce (independente de feed) ═══
+            this.age += deltaTime;
+            
+            // ═══ VITALIDADE: Decai com o tempo ═══
+            const vitalityDecay = deltaTime * 0.8; // Taxa de consumo de energia
+            this.vitality -= vitalityDecay;
+            this.vitality = Math.max(0, this.vitality);
+            
+            // Sincroniza currentLife para compatibilidade com barra
+            this.currentLife = this.vitality;
+            
+            // ═══ BARRA DE VIDA: Mostra vitalidade ═══
+            const vitalityPct = this.vitality / this.maxVitality;
+            this.lifeBar.width = 22 * vitalityPct;
+            
+            // ═══ FASES DA VIDA: Baseadas em IDADE, não vitalidade ═══
+            const agePct = this.age / this.maxLifespan; // 0 = nasceu, 1 = velho
+            this.updateLifePhase(agePct);
+            
+            // Barra muda de cor em emergência de vitalidade
+            if (vitalityPct < 0.2) {
+                this.lifeBar.setFillStyle(0xff0000);
+            } else {
+                this.lifeBar.setFillStyle(this.visualDNA.bodyColor);
+            }
+            
+            // ═══ MORTE: Por fome (vitality=0) OU velhice (age>=maxLifespan) ═══
+            if (this.vitality <= 0) {
+                this.addLifeEvent('starved', 'Morreu de fome - vitalidade esgotada');
+                this.die();
+            } else if (this.age >= this.maxLifespan) {
+                this.addLifeEvent('oldAge', 'Morreu de velhice natural');
+                this.die();
+            }
         }});
+    }
+    
+    /**
+     * Atualiza a fase da vida do Golem com feedback visual e comportamental
+     * REFATORADO: Agora baseado em IDADE (agePct), não vitalidade
+     * @param {number} agePct - Percentual de idade (0 = nasceu, 1 = máximo)
+     */
+    updateLifePhase(agePct) {
+        // agePct já está no formato correto: 0 = nasceu, 1 = fim da vida
+        
+        // ═══ FASE 1: INFÂNCIA (0% a 20% da vida) ═══
+        if (agePct <= 0.2) {
+            const growthProgress = agePct / 0.2; // 0 a 1
+            this.currentScale = Phaser.Math.Linear(0.5, 1.0, growthProgress);
+            this.setScale(this.targetScaleX * this.currentScale, this.targetScaleY * this.currentScale);
+            
+            // Voz mais aguda (ajustado em playVoiceBeep)
+            this.lifePhase = 'child';
+            
+            // Se ainda não falou sobre crescimento e está quase adulto
+            if (growthProgress > 0.8 && !this.hasSpokenGrowth) {
+                this.hasSpokenGrowth = true;
+            }
+        }
+        // ═══ FASE 2: ADULTO (20% a 80% da vida) ═══
+        else if (agePct <= 0.8) {
+            if (!this.isAdult) {
+                this.isAdult = true;
+                this.currentScale = 1.0;
+                this.setScale(this.targetScaleX, this.targetScaleY);
+            }
+            this.lifePhase = 'adult';
+            
+            // Cores vibrantes (mantém DNA original)
+            if (this.graphics) {
+                this.graphics.alpha = 1.0;
+            }
+        }
+        // ═══ FASE 3: VELHICE (80% a 100% da vida) ═══
+        else {
+            this.lifePhase = 'old';
+            
+            const ageProgress = (agePct - 0.8) / 0.2; // 0 a 1 dentro da velhice
+            
+            // Desaceleração gradual (só se não pausado)
+            if (!this.scene.isPaused) {
+                const slowdownFactor = Phaser.Math.Linear(1.0, 0.5, ageProgress);
+                if (this.body && this.baseSpeed) {
+                    const currentSpeed = this.body.velocity.length();
+                    if (currentSpeed > 0) {
+                        const targetSpeed = this.baseSpeed * slowdownFactor;
+                        this.body.velocity.normalize().scale(targetSpeed);
+                    }
+                }
+            }
+            
+            // Perda de saturação (tende ao cinza)
+            if (this.graphics) {
+                this.graphics.alpha = Phaser.Math.Linear(1.0, 0.6, ageProgress);
+            }
+            
+            // Reduz brilho das partículas
+            if (this.emitter) {
+                this.emitter.setAlpha(Phaser.Math.Linear(1.0, 0.3, ageProgress));
+            }
+            
+            // Pulso cardíaco irregular (modifica o tween de pulse)
+            if (this.pulseTween && ageProgress > 0.5 && !this.scene.isPaused) {
+                this.pulseTween.timeScale = 0.6 + Math.random() * 0.4; // Irregular
+            }
+            
+            // Expressão de morte iminente
+            if (ageProgress > 0.7 && !this.hasSpokenDying) {
+                this.hasSpokenDying = true;
+                this.expressionState.mood = 'dying';
+                this.drawFace();
+                if (Math.random() < 0.5 && !this.scene.isPaused) {
+                    this.scene.time.delayedCall(500, () => this.speakContextual('dying'));
+                }
+            }
+        }
+    }
+    
+    /**
+     * Callback quando a velocidade da simulação muda
+     * @param {number} speed - Nova velocidade (0, 1 ou 5)
+     */
+    onSimulationSpeedChanged(speed) {
+        const isPaused = (speed === 0);
+        const safeSpeed = isPaused ? 1 : speed; // Mantém animações durante pausa
+        
+        // Ajusta timeScale dos timers com proteção
+        if (this.lifeTimer) {
+            // Timer continua rodando, mas callback checa isPaused
+            this.lifeTimer.timeScale = safeSpeed;
+        }
+        
+        // Expressões continuam em velocidade 1 durante pausa (idle animation)
+        if (this.expressionTimer) {
+            this.expressionTimer.timeScale = isPaused ? 0.5 : safeSpeed; // Lento durante pausa
+        }
+        
+        // Pulse tween: mantém rodando lentamente durante pausa (mostra que está "vivo")
+        if (this.pulseTween) {
+            this.pulseTween.timeScale = isPaused ? 0.3 : safeSpeed;
+        }
+        
+        // Partículas: reduz mas não para durante pausa
+        if (this.emitter) {
+            if (isPaused) {
+                this.emitter.setFrequency(200); // Lento
+            } else {
+                this.emitter.setFrequency(100 / speed);
+            }
+        }
     }
     startRoaming() {
         if(!this.body || this.isFrozen) return;
         this.body.setVelocity(Phaser.Math.Between(-this.baseSpeed, this.baseSpeed), Phaser.Math.Between(-this.baseSpeed, this.baseSpeed));
-        this.scene.time.addEvent({ delay: 2000, loop: true, callback: () => {
-            if(this.active && !this.isDragging && !this.isFrozen && this.body) {
+        this.roamingTimer = this.scene.time.addEvent({ delay: 2000, loop: true, callback: () => {
+            // Guard adicional: verifica scene
+            if(this.active && this.scene && !this.isDragging && !this.isFrozen && this.body) {
                 this.body.setVelocity(Phaser.Math.Between(-this.baseSpeed, this.baseSpeed), Phaser.Math.Between(-this.baseSpeed, this.baseSpeed));
             }
         }});
@@ -2156,8 +2372,22 @@ export default class Golem extends Phaser.GameObjects.Container {
     die() {
         if (this.lifeTimer) this.lifeTimer.remove();
         if (this.expressionTimer) this.expressionTimer.remove();
+        if (this.roamingTimer) this.roamingTimer.remove();
         if (this.emitter) this.emitter.stop();
         if (this.body) this.body.setVelocity(0);
+        
+        // ═══ CLEANUP COMPLETO DE SISTEMA DE FALA ═══
+        // Cancela timer de typewriter se estiver ativo
+        if (this.typewriterEvent) {
+            this.typewriterEvent.remove();
+            this.typewriterEvent = null;
+        }
+        
+        // Cancela timer de fade out pendente
+        if (this.speechFadeTimer) {
+            this.speechFadeTimer.remove();
+            this.speechFadeTimer = null;
+        }
         
         // Limpa balão de fala se existir
         this.clearSpeechBubble();
@@ -2286,7 +2516,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         const ctx = this.audioContext;
         const now = ctx.currentTime;
 
-        // === PITCH DINÂMICO POR TAMANHO + FÍSICA ===
+        // === PITCH DINÂMICO POR TAMANHO + FÍSICA + FASE DE VIDA ===
         let basePitch = 400;
         
         // Tamanho afeta o pitch base
@@ -2296,6 +2526,13 @@ export default class Golem extends Phaser.GameObjects.Container {
             basePitch = Phaser.Math.Between(150, 300); // Grande = grave
         } else {
             basePitch = Phaser.Math.Between(350, 500); // Médio
+        }
+        
+        // === FASE DE VIDA AFETA O PITCH ===
+        if (this.lifePhase === 'child') {
+            basePitch += 200; // Crianças têm voz mais aguda
+        } else if (this.lifePhase === 'old') {
+            basePitch -= 80; // Idosos têm voz mais grave e cansada
         }
         
         // Física modifica ainda mais
@@ -2465,6 +2702,15 @@ export default class Golem extends Phaser.GameObjects.Container {
             delay: 16,
             loop: true,
             callback: () => {
+                // Guard: Golem foi destruído
+                if (!this.active || !this.scene) {
+                    if (this.speechUpdateEvent) {
+                        this.speechUpdateEvent.remove();
+                        this.speechUpdateEvent = null;
+                    }
+                    return;
+                }
+                
                 if (this.speechContainer && this.active) {
                     this.speechContainer.setPosition(this.x, this.y - offsetY);
                 }
@@ -2479,6 +2725,15 @@ export default class Golem extends Phaser.GameObjects.Container {
             delay: 40,
             loop: true,
             callback: () => {
+                // Guard: Golem foi destruído durante typewriter
+                if (!this.active || !this.scene) {
+                    if (this.typewriterEvent) {
+                        this.typewriterEvent.remove();
+                        this.typewriterEvent = null;
+                    }
+                    return;
+                }
+                
                 if (charIndex < text.length) {
                     displayText += text[charIndex];
                     this.speechText.setText(displayText);
@@ -2493,8 +2748,12 @@ export default class Golem extends Phaser.GameObjects.Container {
                     this.typewriterEvent.remove();
                     this.typewriterEvent = null;
                     
+                    // Guard: Verifica novamente antes de criar novo timer
+                    if (!this.active || !this.scene) return;
+                    
                     // Aguarda 2.5s e faz fade out
-                    this.scene.time.delayedCall(2500, () => {
+                    // Armazena referência para poder cancelar no die()
+                    this.speechFadeTimer = this.scene.time.delayedCall(2500, () => {
                         this.fadeOutSpeechBubble();
                     });
                 }
@@ -2539,9 +2798,18 @@ export default class Golem extends Phaser.GameObjects.Container {
 
     /**
      * Fade out suave do balão de fala
+     * GUARD: Verifica se Golem ainda existe antes de acessar scene
      */
     fadeOutSpeechBubble() {
+        // Guard 1: Balao inexistente
         if (!this.speechContainer) {
+            this.finishSpeaking();
+            return;
+        }
+        
+        // Guard 2: Golem foi destruído (scene = undefined)
+        if (!this.scene || !this.active) {
+            this.clearSpeechBubble();
             this.finishSpeaking();
             return;
         }
@@ -2562,8 +2830,14 @@ export default class Golem extends Phaser.GameObjects.Container {
 
     /**
      * Finaliza o estado de fala e processa a fila
+     * GUARD: Não processa se Golem foi destruído
      */
     finishSpeaking() {
+        // Guard: Golem foi destruído
+        if (!this.active || !this.scene) {
+            return;
+        }
+        
         this.isSpeaking = false;
         
         // Processa próxima fala da fila
@@ -2578,6 +2852,7 @@ export default class Golem extends Phaser.GameObjects.Container {
 
     /**
      * Limpa todos os elementos do balão de fala
+     * SAFE: Pode ser chamado mesmo após destroy()
      */
     clearSpeechBubble() {
         if (this.typewriterEvent) {
@@ -2587,6 +2862,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         if (this.speechUpdateEvent) {
             this.speechUpdateEvent.remove();
             this.speechUpdateEvent = null;
+        }
+        // Limpa timer de fade se existir
+        if (this.speechFadeTimer) {
+            this.speechFadeTimer.remove();
+            this.speechFadeTimer = null;
         }
         if (this.speechContainer) {
             this.speechContainer.destroy();
