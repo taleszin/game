@@ -54,7 +54,8 @@ export default class Golem extends Phaser.GameObjects.Container {
             eyeJitter: data?.visualDNA?.eyeJitter || 1,
             blinkRate: data?.visualDNA?.blinkRate || 1,
             lineWidth: data?.visualDNA?.lineWidth || 2,
-            faceGenes: data?.visualDNA?.faceGenes || { eyeType: 'circle', mouthType: 'simple' }
+            faceGenes: data?.visualDNA?.faceGenes || { eyeType: 'circle', mouthType: 'simple' },
+            asymmetry: (Math.random() - 0.5) * 0.15 // Personalidade assimétrica
         };
         
         const neonColor = this.visualDNA.bodyColor;
@@ -83,7 +84,8 @@ export default class Golem extends Phaser.GameObjects.Container {
             mouthCurve: 0.5,
             pupilSize: 1,
             focusOffset: { x: 0, y: 0 },
-            tremor: 0
+            tremor: 0,
+            breathY: 0
         };
 
         this.eyeOffset = { x: 0, y: 0 };
@@ -119,6 +121,14 @@ export default class Golem extends Phaser.GameObjects.Container {
             tremor: { x: 0, y: 0 },
             lastUpdate: 0
         };
+
+        // Eating/feeding visual state and timers
+        this.isBeingFed = false;
+        this.eatingChew = 0; // 0..1 phase driven by tween for chew motion
+        this.eatingTween = null; // tween for mouth movement during feeding
+        this.chewMouthTween = null; // tween for mouth curvature while chewing
+        this.eatingAudioEvent = null; // repeated munch sound while feeding
+        this.munchEmitter = null; // particle emitter for crumbs
         
         this.INSTINCT_RADIUS = 200;
         this.MAX_STEERING_FORCE = 150;
@@ -274,7 +284,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
         
         this.instincts.active = true;
-        this.instincts.targetPos = mousePos;
+        this.instincts.targetPos = mousePos; // Salva alvo para os olhos
+        this.instincts.activeTool = activeTool; // Salva ferramenta para emoção
         this.instincts.intensity = Math.pow(1 - (distance / this.INSTINCT_RADIUS), 1.5);
         
         let steeringX = 0, steeringY = 0;
@@ -285,6 +296,14 @@ export default class Golem extends Phaser.GameObjects.Container {
                 const seekForce = this.calculateSeek(mousePos);
                 steeringX = seekForce.x;
                 steeringY = seekForce.y;
+
+                // If the food/tool is very close, show a 'begging' expression, but don't actually chew until dropped
+                const feedDist = Phaser.Math.Distance.Between(this.x, this.y, mousePos.x, mousePos.y);
+                const FEED_ANIMATE_DIST = 72 * (this.targetScale || 1); // increase threshold for easier feeding
+                const isNearFood = feedDist < (FEED_ANIMATE_DIST * 0.6);
+                if (isNearFood) {
+                    this.setActionExpression('begging', 1000);
+                }
                 break;
                 
             case 'burn':
@@ -420,11 +439,16 @@ export default class Golem extends Phaser.GameObjects.Container {
                 this.instincts.state = null;
                 this.instincts.tremor = { x: 0, y: 0 };
                 this.instincts.steeringForce = { x: 0, y: 0 };
+                this.instincts.targetPos = null;
+                this.instincts.activeTool = null;
                 
                 this.graphics.x = 0;
                 this.graphics.y = 0;
                 this.faceGraphics.x = 0;
                 this.faceGraphics.y = 0;
+
+                // Stop any feeding/eating animations when instincts clear
+                try { this.stopEatingAnimation(); } catch(e) { /* ignore */ }
             }
         });
     }
@@ -1029,7 +1053,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         if (this.expressionState.action === 'breed' || 
             this.expressionState.action === 'mutate' || 
-            this.expressionState.action === 'born') {
+            this.expressionState.action === 'born' || 
+            this.expressionState.action === 'feed') {
             const s = this.faceScale || 1;
             const lineWidth = Math.max(this.minLineWidth, 2 * s);
             this.drawActionFace(g, this.expressionState.action, lineWidth, s);
@@ -1046,23 +1071,46 @@ export default class Golem extends Phaser.GameObjects.Container {
     drawEyes(g, s) {
         const genes = this.visualDNA.faceGenes;
         const p = this.faceParams;
-        const ox = this.eyeOffset.x + (Math.random()-0.5) * p.tremor * 10;
-        const oy = this.eyeOffset.y + (Math.random()-0.5) * p.tremor * 10;
+        
+        // --- 1. Parallax & Breathing ---
+        // Olhos movem MENOS que o foco para simular profundidade (fundo move menos)
+        // Respiração adiciona um bob vertical constante
+        const ox = this.eyeOffset.x + (p.focusOffset.x * 0.7) + (Math.random()-0.5) * p.tremor * 10;
+        const oy = this.eyeOffset.y + (p.focusOffset.y * 0.7) + p.breathY + (Math.random()-0.5) * p.tremor * 10;
+        
         const color = this.visualDNA.detailColor;
         const lineWidth = Math.max(this.minLineWidth, 2 * s);
         
+        // --- 2. Sclera (Fundo do Olho) para Contraste ---
+        // Cria um brilho sutil atrás do olho para destacá-lo em corpos escuros
+        // Só desenha se não estiver piscando
+        if (!this.isBlinking) {
+            const scleraAlpha = 0.15;
+            g.fillStyle(0xffffff, scleraAlpha);
+            const w = 5 * s;
+            const h = 5 * s * p.eyeOpenness;
+            
+            // Fundo difuso atrás dos olhos
+            if (genes.eyeType !== 'visor') {
+                g.fillCircle(-8*s + ox, -5*s + oy, w * 1.5);
+                g.fillCircle(8*s + ox, -5*s + oy, w * 1.5);
+            }
+        }
+
         g.lineStyle(lineWidth, color, 1);
         
         if (this.isBlinking) {
+            // Squash visual ao piscar (linha curva em vez de reta)
             g.beginPath();
-            g.moveTo(-12*s + ox, -5*s + oy); g.lineTo(-4*s + ox, -5*s + oy);
-            g.moveTo(4*s + ox, -5*s + oy); g.lineTo(12*s + ox, -5*s + oy);
+            this.drawQuadCurve(g, -12*s + ox, -5*s + oy, -8*s + ox, -4*s + oy, -4*s + ox, -5*s + oy);
+            this.drawQuadCurve(g, 4*s + ox, -5*s + oy, 8*s + ox, -4*s + oy, 12*s + ox, -5*s + oy);
             g.strokePath();
             return;
         }
 
         const h = 5 * s * p.eyeOpenness; 
         const w = 5 * s;
+        // Pupilas reagem à emoção (midríase/miose)
         const pupSize = 2 * s * p.pupilSize;
 
         switch(genes.eyeType) {
@@ -1070,41 +1118,60 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.strokeEllipse(-8*s + ox, -5*s + oy, w, h);
                 g.strokeEllipse(8*s + ox, -5*s + oy, w, h);
                 g.fillStyle(color, 1);
-                g.fillCircle(-8*s + ox, -5*s + oy, pupSize);
-                g.fillCircle(8*s + ox, -5*s + oy, pupSize);
+                // Pupilas seguem o foco com mais intensidade (paralaxe da pupila)
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.4, -5*s + oy + p.focusOffset.y * 0.4, pupSize);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.4, -5*s + oy + p.focusOffset.y * 0.4, pupSize);
+                
+                // Brilho especular na pupila (vida!)
+                g.fillStyle(0xffffff, 0.7);
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.4 - 1*s, -5*s + oy + p.focusOffset.y * 0.4 - 1*s, pupSize * 0.4);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.4 - 1*s, -5*s + oy + p.focusOffset.y * 0.4 - 1*s, pupSize * 0.4);
                 break;
             case 'slit':
                 g.strokeEllipse(-8*s + ox, -5*s + oy, w * 0.6, h);
                 g.strokeEllipse(8*s + ox, -5*s + oy, w * 0.6, h);
                 g.lineStyle(lineWidth, color, 1);
                 g.beginPath();
-                g.moveTo(-8*s + ox, -5*s + oy - h + 2*s); g.lineTo(-8*s + ox, -5*s + oy + h - 2*s);
-                g.moveTo(8*s + ox, -5*s + oy - h + 2*s); g.lineTo(8*s + ox, -5*s + oy + h - 2*s);
+                g.moveTo(-8*s + ox + p.focusOffset.x, -5*s + oy - h + 2*s + p.focusOffset.y); 
+                g.lineTo(-8*s + ox + p.focusOffset.x, -5*s + oy + h - 2*s + p.focusOffset.y);
+                g.moveTo(8*s + ox + p.focusOffset.x, -5*s + oy - h + 2*s + p.focusOffset.y); 
+                g.lineTo(8*s + ox + p.focusOffset.x, -5*s + oy + h - 2*s + p.focusOffset.y);
                 g.strokePath();
                 break;
             case 'pixel':
                 g.strokeRect(-12*s + ox, -5*s + oy - h, w*1.5, h*2);
                 g.strokeRect(4*s + ox, -5*s + oy - h, w*1.5, h*2);
                 g.fillStyle(color, 1);
-                g.fillRect(-10*s + ox, -5*s + oy - pupSize, pupSize*2, pupSize*2);
-                g.fillRect(6*s + ox, -5*s + oy - pupSize, pupSize*2, pupSize*2);
+                g.fillRect(-10*s + ox + p.focusOffset.x, -5*s + oy - pupSize + p.focusOffset.y, pupSize*2, pupSize*2);
+                g.fillRect(6*s + ox + p.focusOffset.x, -5*s + oy - pupSize + p.focusOffset.y, pupSize*2, pupSize*2);
                 break;
             case 'dot':
                 g.fillStyle(color, 1);
-                g.fillCircle(-8*s + ox, -5*s + oy, w * p.eyeOpenness);
-                g.fillCircle(8*s + ox, -5*s + oy, w * p.eyeOpenness);
+                const dotSize = Math.max(w * p.eyeOpenness, 2*s);
+                g.fillCircle(-8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, dotSize);
+                g.fillCircle(8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, dotSize);
                 break;
             case 'visor':
                 g.lineStyle(lineWidth + 2*s, color, 1);
                 g.beginPath();
-                g.moveTo(-15*s + ox, -5*s + oy); g.lineTo(15*s + ox, -5*s + oy);
+                // Visor curva com o rosto
+                this.drawQuadCurve(g, -15*s + ox, -5*s + oy, 0 + ox, -6*s + oy, 15*s + ox, -5*s + oy);
+                g.strokePath();
+                // Scanner light que se move
+                g.lineStyle(lineWidth + 1*s, 0xffffff, 0.7);
+                g.beginPath();
+                const visorX = p.focusOffset.x * 3;
+                g.moveTo(visorX - 2*s + ox, -5*s + oy); g.lineTo(visorX + 2*s + ox, -5*s + oy);
                 g.strokePath();
                 break;
             case 'hollow':
                 g.strokeCircle(-8*s + ox, -5*s + oy, w * p.eyeOpenness);
                 g.strokeCircle(8*s + ox, -5*s + oy, w * p.eyeOpenness);
+                g.fillStyle(color, 0.3);
+                g.fillCircle(-8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, 1.5*s);
+                g.fillCircle(8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, 1.5*s);
                 break;
-            default: // circle fallback
+            default: 
                 g.strokeCircle(-8*s + ox, -5*s + oy, w * p.eyeOpenness);
                 g.strokeCircle(8*s + ox, -5*s + oy, w * p.eyeOpenness);
         }
@@ -1116,59 +1183,62 @@ export default class Golem extends Phaser.GameObjects.Container {
         const color = this.visualDNA.detailColor;
         const lineWidth = Math.max(this.minLineWidth, 2 * s);
         
+        // Boca move um pouco menos que os olhos (fundo do rosto)
+        const ox = (p.focusOffset.x * 0.5) + (Math.random()-0.5) * p.tremor * 5;
+        const oy = 8 * s + (p.focusOffset.y * 0.5) + p.breathY + (Math.random()-0.5) * p.tremor * 5;
+        
         g.lineStyle(lineWidth, color, 1);
-        const oy = 8 * s + (Math.random()-0.5) * p.tremor * 5;
         const curve = p.mouthCurve * 8 * s;
 
         switch(genes.mouthType) {
             case 'simple':
                 g.beginPath();
                 if (Math.abs(curve) < 1) {
-                    g.moveTo(-6*s, oy); g.lineTo(6*s, oy);
+                    g.moveTo(-6*s + ox, oy); g.lineTo(6*s + ox, oy);
                 } else {
-                    g.moveTo(-6*s, oy - curve*0.5);
-                    this.drawQuadCurve(g, -6*s, oy - curve*0.5, 0, oy + curve, 6*s, oy - curve*0.5);
+                    g.moveTo(-6*s + ox, oy - curve*0.5);
+                    this.drawQuadCurve(g, -6*s + ox, oy - curve*0.5, 0 + ox, oy + curve, 6*s + ox, oy - curve*0.5);
                 }
                 g.strokePath();
                 break;
             case 'stitch':
                 g.beginPath();
-                g.moveTo(-8*s, oy); g.lineTo(8*s, oy);
+                g.moveTo(-8*s + ox, oy); g.lineTo(8*s + ox, oy);
                 g.strokePath();
                 g.lineStyle(1, color, 1);
                 for(let i=-6; i<=6; i+=4) {
-                    g.beginPath(); g.moveTo(i*s, oy-2*s); g.lineTo(i*s, oy+2*s); g.strokePath();
+                    g.beginPath(); g.moveTo(i*s + ox, oy-2*s); g.lineTo(i*s + ox, oy+2*s); g.strokePath();
                 }
                 break;
             case 'beak':
                 g.beginPath();
-                g.moveTo(-4*s, oy - 2*s);
-                g.lineTo(0, oy + 4*s);
-                g.lineTo(4*s, oy - 2*s);
-                g.lineTo(0, oy - 4*s);
+                g.moveTo(-4*s + ox, oy - 2*s);
+                g.lineTo(0 + ox, oy + 4*s);
+                g.lineTo(4*s + ox, oy - 2*s);
+                g.lineTo(0 + ox, oy - 4*s);
                 g.closePath();
                 g.strokePath();
                 break;
             case 'void':
                 g.fillStyle(0x000000, 1);
-                g.fillEllipse(0, oy + 2*s, 6*s, 4*s * (0.5 + Math.abs(p.mouthCurve)));
-                g.strokeEllipse(0, oy + 2*s, 6*s, 4*s * (0.5 + Math.abs(p.mouthCurve)));
+                g.fillEllipse(0 + ox, oy + 2*s, 6*s, 4*s * (0.5 + Math.abs(p.mouthCurve)));
+                g.strokeEllipse(0 + ox, oy + 2*s, 6*s, 4*s * (0.5 + Math.abs(p.mouthCurve)));
                 break;
             case 'speaker':
-                g.strokeRect(-8*s, oy - 2*s, 16*s, 6*s);
+                g.strokeRect(-8*s + ox, oy - 2*s, 16*s, 6*s);
                 g.lineStyle(1, color, 0.5);
-                g.beginPath(); g.moveTo(-8*s, oy+1*s); g.lineTo(8*s, oy+1*s); g.strokePath();
+                g.beginPath(); g.moveTo(-8*s + ox, oy+1*s); g.lineTo(8*s + ox, oy+1*s); g.strokePath();
                 break;
             case 'digital':
                 const moodY = curve > 0 ? -1 : 1;
                 g.beginPath();
-                g.moveTo(-6*s, oy - 2*s*moodY); g.lineTo(-2*s, oy + 2*s*moodY);
-                g.lineTo(2*s, oy + 2*s*moodY); g.lineTo(6*s, oy - 2*s*moodY);
+                g.moveTo(-6*s + ox, oy - 2*s*moodY); g.lineTo(-2*s + ox, oy + 2*s*moodY);
+                g.lineTo(2*s + ox, oy + 2*s*moodY); g.lineTo(6*s + ox, oy - 2*s*moodY);
                 g.strokePath();
                 break;
             default:
                 g.beginPath();
-                g.moveTo(-6*s, oy); g.lineTo(6*s, oy);
+                g.moveTo(-6*s + ox, oy); g.lineTo(6*s + ox, oy);
                 g.strokePath();
         }
     }
@@ -1180,15 +1250,26 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         g.lineStyle(lineWidth, color, 0.8);
         
-        const yBase = -14 * s + p.browY * 0.2; 
+        // Sobrancelhas movem MAIS que os olhos (ficam "saltadas" do rosto)
+        const ox = p.focusOffset.x * 0.9;
+        const oyOffset = p.focusOffset.y * 0.9 + p.breathY;
+        
+        const yBase = -14 * s + p.browY * 0.2 + oyOffset; 
         const angle = p.browAngle * 5 * s; 
         
+        // Aplica assimetria genética (uma sobrancelha mais alta/arqueada)
+        const asym = this.visualDNA.asymmetry * 10 * s;
+        
+        // Esquerda
         g.beginPath();
-        g.moveTo(-12*s, yBase - angle); g.lineTo(-4*s, yBase + angle);
+        // Curva quadrática para expressão (triste = U invertido, bravo = V)
+        const browCurve = p.browAngle * 2 * s; 
+        this.drawQuadCurve(g, -12*s + ox, yBase - angle - asym, -8*s + ox, yBase - browCurve - asym, -4*s + ox, yBase + angle - asym);
         g.strokePath();
         
+        // Direita
         g.beginPath();
-        g.moveTo(4*s, yBase + angle); g.lineTo(12*s, yBase - angle);
+        this.drawQuadCurve(g, 4*s + ox, yBase + angle + asym, 8*s + ox, yBase - browCurve + asym, 12*s + ox, yBase - angle + asym);
         g.strokePath();
     }
     
@@ -1203,6 +1284,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
         
         this.applyExoticPhysicsEffects();
+        
+        // --- RESPIRAÇÃO (Idle Animation) ---
+        const time = Date.now() * 0.002;
+        // Um leve bob vertical para dar vida
+        this.faceParams.breathY = Math.sin(time) * 1.5; 
         
         this.blinkTimer++;
         let blinkInterval = 60;
@@ -1230,34 +1316,83 @@ export default class Golem extends Phaser.GameObjects.Container {
 
         let target = { open: 1, curve: 0, brow: 0, pupil: 1, tremor: 0, y: 0 };
         
-        if (this.instincts.active) {
-            if (this.instincts.state === 'fleeing') {
-                target = { open: 1.5, curve: -0.5, brow: 0.8, pupil: 0.3, tremor: 1.0, y: -2 };
-            } else if (this.instincts.state === 'seeking') {
-                target = { open: 1.2, curve: 0.5, brow: -0.2, pupil: 1.2, tremor: 0.2, y: 0 };
-            } else if (this.instincts.state === 'freezing') {
-                target = { open: 0.4, curve: 0.1, brow: 0.2, pupil: 1.0, tremor: 0.8, y: 0 };
+        // --- LÓGICA DE EYE TRACKING E REAÇÃO A FERRAMENTAS ---
+        let lookTarget = null;
+        let lookIntensity = 0; // 0 a 1
+
+        // Prioridade 1: Instintos Ativos (Ferramenta sendo arrastada)
+        if (this.instincts.active && this.instincts.targetPos) {
+            lookTarget = this.instincts.targetPos;
+            lookIntensity = 1.0; // Foco total na ameaça/comida
+
+            // Modificadores emocionais baseados na ferramenta ativa
+            const tool = this.instincts.activeTool;
+            
+            if (tool === 'burn' || tool === 'kill') {
+                // TERROR: Olhos arregalados, pupilas minúsculas (miose), sobrancelhas arqueadas
+                target = { open: 1.4, curve: -0.8, brow: 0.8, pupil: 0.4, tremor: 1.2, y: -3 };
+            } else if (tool === 'feed') {
+                // FOME: Olhos abertos, pupilas dilatadas (midríase), "begging"
+                target = { open: 1.2, curve: 0.5, brow: -0.3, pupil: 1.4, tremor: 0.1, y: 0 };
+            } else if (tool === 'mutate' || tool === 'freeze') {
+                // CURIOSIDADE/DÚVIDA: Olhos normais, sobrancelha levantada
+                target = { open: 1.0, curve: 0.0, brow: 0.4, pupil: 0.9, tremor: 0.3, y: -1 };
             }
-        } else if (this.expressionState.action) {
-            const act = this.expressionState.action;
-            if (act === 'feed') target = { open: 0.2, curve: 1.0, brow: -0.5, pupil: 1, tremor: 0, y: 0 };
-            else if (act === 'burn') target = { open: 1.5, curve: -1.0, brow: 0.8, pupil: 0.5, tremor: 1.0, y: -5 };
-            else if (act === 'freeze') target = { open: 0.8, curve: 0, brow: 0.5, pupil: 1, tremor: 0.5, y: 0 };
-            else if (act === 'poke') target = { open: 1.2, curve: -0.2, brow: 0.5, pupil: 0.8, tremor: 0.2, y: -2 };
-        } else {
-            switch(mood) {
-                case 'happy': target = { open: 1, curve: 0.6, brow: -0.2, pupil: 1, tremor: 0, y: 0 }; break;
-                case 'neutral': target = { open: 0.9, curve: 0, brow: 0, pupil: 1, tremor: 0, y: 0 }; break;
-                case 'sad': target = { open: 0.7, curve: -0.5, brow: 0.4, pupil: 1, tremor: 0, y: 0 }; break;
-                case 'dying': target = { open: 0.5, curve: -0.3, brow: 0.6, pupil: 0.8, tremor: 0.5, y: 2 }; break;
-                case 'dead': target = { open: 0.1, curve: 0, brow: 0, pupil: 0, tremor: 0, y: 0 }; break;
+        
+        } 
+        // Prioridade 2: Mouse Idle (Olhar casual se estiver perto)
+        else {
+            const pointer = this.scene.input.activePointer;
+            // Verifica se o mouse moveu recentemente para não travar em posição morta
+            const isActive = (Date.now() - pointer.moveTime < 3000) || pointer.isDown;
+            
+            if (isActive) {
+                const dist = Phaser.Math.Distance.Between(this.x, this.y, pointer.worldX, pointer.worldY);
+                if (dist < 250) { // Raio de visão casual
+                    lookTarget = { x: pointer.worldX, y: pointer.worldY };
+                    lookIntensity = Math.max(0, 1 - (dist / 250)); // Foco diminui com distância
+                }
+            }
+            
+            // Mood padrão se não houver instinto forte
+            if (!this.instincts.active && !this.expressionState.action) {
+                switch(mood) {
+                    case 'happy': target = { open: 1, curve: 0.6, brow: -0.2, pupil: 1, tremor: 0, y: 0 }; break;
+                    case 'neutral': target = { open: 0.9, curve: 0, brow: 0, pupil: 1, tremor: 0, y: 0 }; break;
+                    case 'sad': target = { open: 0.7, curve: -0.5, brow: 0.4, pupil: 1, tremor: 0, y: 0 }; break;
+                    case 'dying': target = { open: 0.5, curve: -0.3, brow: 0.6, pupil: 0.8, tremor: 0.5, y: 2 }; break;
+                    case 'dead': target = { open: 0.1, curve: 0, brow: 0, pupil: 0, tremor: 0, y: 0 }; break;
+                }
             }
         }
 
+        // Aplica modificadores de física (mantém identidade elemental)
         if (this.currentPhysics === 'eletricidade') { target.tremor += 0.2; target.open = 0.8 + Math.random()*0.4; }
         if (this.currentPhysics === 'calor') { target.curve += (Math.random()-0.5)*0.2; }
         if (this.currentPhysics === 'frio') { target.tremor += 0.1; }
 
+        // --- CÁLCULO VETORIAL DO OLHAR ---
+        if (lookTarget) {
+            const dx = lookTarget.x - this.x;
+            const dy = lookTarget.y - this.y;
+            const angle = Math.atan2(dy, dx);
+            
+            // Limite de movimento do olho (em pixels relativos à escala)
+            const maxEyeMove = 4; 
+            
+            const targetFocusX = Math.cos(angle) * maxEyeMove * lookIntensity;
+            const targetFocusY = Math.sin(angle) * maxEyeMove * lookIntensity;
+            
+            // Lerp suave para o alvo
+            this.faceParams.focusOffset.x = Phaser.Math.Linear(this.faceParams.focusOffset.x, targetFocusX, 0.2);
+            this.faceParams.focusOffset.y = Phaser.Math.Linear(this.faceParams.focusOffset.y, targetFocusY, 0.2);
+        } else {
+            // Retorna suavemente ao centro
+            this.faceParams.focusOffset.x = Phaser.Math.Linear(this.faceParams.focusOffset.x, 0, 0.1);
+            this.faceParams.focusOffset.y = Phaser.Math.Linear(this.faceParams.focusOffset.y, 0, 0.1);
+        }
+
+        // Interpolação dos parâmetros faciais (Lerp)
         const lerp = 0.2;
         this.faceParams.eyeOpenness = Phaser.Math.Linear(this.faceParams.eyeOpenness, target.open, lerp);
         this.faceParams.mouthCurve = Phaser.Math.Linear(this.faceParams.mouthCurve, target.curve, lerp);
@@ -1314,12 +1449,25 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
 
     feed() {
+        // Visual feedback for feeding: ensure chewing animation starts
+        this.startEatingAnimation();
         this.vitality = this.maxVitality;
         this.currentLife = this.vitality; 
         this.scene.tweens.add({ targets: this, scale: this.targetScale * 1.3, yoyo: true, duration: 200 });
         this.setActionExpression('feed', 2000);
+        // small burst of particles from the mouth to reinforce feedback
+        try {
+            if (this.munchEmitter) {
+                this.munchEmitter.explode(6, this.x, this.y + (12 * (this.faceScale || 1)));
+            } else if (this.emitter) {
+                this.emitter.explode(8);
+            }
+        } catch (e) { }
         this.addLifeEvent('feed', 'Nutriu - vitalidade restaurada (idade mantida)');
         this.speakContextual('feed');
+
+        // stop chewing after setActionExpression duration
+        try { this.scene.time.delayedCall(1200, () => this.stopEatingAnimation()); } catch(e) {}
     }
 
     burn() {
@@ -1358,6 +1506,79 @@ export default class Golem extends Phaser.GameObjects.Container {
                 this.addLifeEvent('mutate', `Mutado: sides=${newSides}`);
             }
         });
+    }
+
+    startEatingAnimation() {
+        if (this.isBeingFed) return;
+        this.isBeingFed = true;
+        // Make the face go into the feed expression
+        this.setActionExpression('feed', 999999);
+
+        // Create a subtle eater emitter for crumbs if not present
+        try {
+            if (!this.munchEmitter && this.scene) {
+                this.munchEmitter = this.scene.add.particles(0, 0, 'pixel', {
+                    speed: 26 * this.targetScale,
+                    scale: { start: 0.28 * this.targetScale, end: 0 },
+                    blendMode: 'ADD', lifespan: 400, tint: this.visualDNA.detailColor, quantity: 1
+                });
+            }
+            if (this.munchEmitter) {
+                this.munchEmitter.startFollow(this, 0, 12 * (this.faceScale || 1));
+            }
+        } catch(e) { }
+
+        // Animates chewing phase: 0..1 continuous
+        if (!this.eatingTween && this.scene) {
+            this.eatingTween = this.scene.tweens.add({
+                targets: this,
+                eatingChew: 1,
+                duration: 220,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        }
+
+        // Also animate the mouth curve for a more fluid chew
+        if (!this.chewMouthTween && this.scene) {
+            this.chewMouthTween = this.scene.tweens.add({
+                targets: this.faceParams,
+                mouthCurve: 1.2,
+                duration: 180,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        }
+
+        // Periodic munch sound and particle bursts (tighter rhythm while chewing)
+        if (!this.eatingAudioEvent && this.scene) {
+            this.eatingAudioEvent = this.scene.time.addEvent({ delay: 160, loop: true, callback: () => {
+                try { this.playMunchSound(); } catch(e) {}
+                try { if (this.munchEmitter) this.munchEmitter.explode(3, this.x, this.y + (14 * (this.faceScale || 1))); } catch(e) {}
+            }});
+        }
+    }
+
+    stopEatingAnimation() {
+        if (!this.isBeingFed) return;
+        this.isBeingFed = false;
+
+        try {
+            if (this.eatingTween) { this.eatingTween.stop(); this.eatingTween = null; }
+            if (this.chewMouthTween) { this.chewMouthTween.stop(); this.chewMouthTween = null; }
+            if (this.eatingAudioEvent) { this.eatingAudioEvent.remove(); this.eatingAudioEvent = null; }
+            if (this.munchEmitter) { this.munchEmitter.stop(); this.munchEmitter.destroy(); this.munchEmitter = null; }
+            this.eatingChew = 0;
+            // reset faceParams mouthCurve smoothing
+            if (this.faceParams) this.faceParams.mouthCurve = Phaser.Math.Linear(this.faceParams.mouthCurve, 0.5, 0.6);
+        } catch (e) { }
+
+        // Revert expression if it was exclusively feed
+        if (this.expressionState && this.expressionState.action === 'feed') {
+            this.expressionState.action = null;
+        }
     }
     
     startLifeCycle() {
@@ -1505,6 +1726,11 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.speechFadeTimer = null;
         }
         this.clearSpeechBubble();
+        // Ensure we stop any in-progress eating/feeding animation
+        try { this.stopEatingAnimation(); } catch(e) { }
+        // Detach event handlers
+        try { if (this.scene && this.toolDragMoveHandler) this.scene.game.events.off('tool-drag-move', this.toolDragMoveHandler); } catch(e) {}
+        try { if (this.scene && this.toolDragEndHandler) this.scene.game.events.off('tool-drag-end', this.toolDragEndHandler); } catch(e) {}
         this.isSpeaking = false;
         this.speechQueue = [];
         this.expressionState.mood = 'dead';
@@ -1608,6 +1834,28 @@ export default class Golem extends Phaser.GameObjects.Container {
         gainNode.connect(this.masterGain);
         osc.start(now);
         osc.stop(now + 0.055);
+    }
+
+    playMunchSound() {
+        this.initAudio();
+        if (!this.audioContext) return;
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume();
+        }
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        const pitch = Phaser.Math.Between(300, 650);
+        osc.frequency.setValueAtTime(pitch, now);
+        const gainNode = ctx.createGain();
+        gainNode.gain.setValueAtTime(0.0001, now);
+        gainNode.gain.exponentialRampToValueAtTime(0.18, now + 0.006);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+        osc.connect(gainNode);
+        gainNode.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.12);
     }
 
     speak(text) {
@@ -1865,124 +2113,16 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.arc(-8*s, -5*s, 5*s, Math.PI + 0.5, -0.5);
                 g.arc(8*s, -5*s, 5*s, Math.PI + 0.5, -0.5);
                 g.strokePath();
-                const chew = Math.sin(Date.now() / 80) * 2 * s;
+                const chewAmplitude = (this.isBeingFed ? 5 : 2) * s;
+                // If a tween drives `eatingChew` (0..1), map to 0..2pi for sin wave
+                const phase = Phaser.Math.Clamp(this.eatingChew || 0, 0, 1);
+                const chew = Math.sin(phase * Math.PI * 2) * chewAmplitude;
                 g.beginPath();
                 g.arc(-4*s, 8*s + chew, 4*s, 0, Math.PI);
                 g.arc(4*s, 8*s + chew, 4*s, 0, Math.PI);
                 g.strokePath();
                 break;
                 
-            case 'burn':
-                const spiral = Date.now() / 50;
-                for (let i = 0; i < 2; i++) {
-                    const ex = (i === 0 ? -8 : 8) * s;
-                    g.beginPath();
-                    for (let a = 0; a < Math.PI * 4; a += 0.3) {
-                        const r = (a / 3) * s;
-                        const px = ex + Math.cos(a + spiral) * r;
-                        const py = -5*s + Math.sin(a + spiral) * r;
-                        if (a === 0) g.moveTo(px, py);
-                        else g.lineTo(px, py);
-                    }
-                    g.strokePath();
-                }
-                g.beginPath();
-                g.moveTo(-8*s, 8*s); g.lineTo(-4*s, 12*s); g.lineTo(0, 8*s); g.lineTo(4*s, 12*s); g.lineTo(8*s, 8*s);
-                g.strokePath();
-                break;
-                
-            case 'freeze':
-                g.strokeCircle(-8*s, -5*s, 5*s);
-                g.strokeCircle(8*s, -5*s, 5*s);
-                g.fillStyle(0x88ccff, 0.8);
-                g.fillCircle(-8*s, -5*s, 2*s);
-                g.fillCircle(8*s, -5*s, 2*s);
-                g.strokeCircle(0, 10*s, 3*s);
-                g.lineStyle(Math.max(1, s), 0x88ccff, 0.5);
-                g.beginPath();
-                g.moveTo(-15*s, -10*s); g.lineTo(-12*s, -5*s); g.lineTo(-15*s, 0);
-                g.moveTo(15*s, -10*s); g.lineTo(12*s, -5*s); g.lineTo(15*s, 0);
-                g.strokePath();
-                break;
-                
-            case 'mutate':
-                this.drawStar(g, -8*s, -5*s, 5*s, 5*s, 4);
-                this.drawStar(g, 8*s, -5*s, 5*s, 5*s, 4);
-                g.beginPath();
-                g.arc(0, 8*s, 8*s, -Math.PI/2, Math.PI/2);
-                g.strokePath();
-                break;
-                
-            case 'breed':
-                this.drawHeart(g, -8*s, -5*s, 6*s);
-                this.drawHeart(g, 8*s, -5*s, 6*s);
-                g.beginPath();
-                g.arc(-2*s, 8*s, 4*s, -Math.PI/2, Math.PI/2);
-                g.strokePath();
-                break;
-                
-            case 'begging':
-                const blink = Math.sin(Date.now() / 150);
-                const eyeY = -5*s + blink * 2 * s;
-                g.strokeCircle(-8*s, eyeY, 5*s);
-                g.strokeCircle(8*s, eyeY, 5*s);
-                g.fillStyle(color, 0.9);
-                g.fillCircle(-6*s, eyeY - 1*s, 2*s);
-                g.fillCircle(10*s, eyeY - 1*s, 2*s);
-                const wobble = Math.sin(Date.now() / 100) * 2 * s;
-                g.beginPath();
-                g.arc(0, 12*s, 5*s, Math.PI + 0.4, -0.4);
-                g.strokePath();
-                g.beginPath();
-                g.moveTo(-12*s, -12*s); g.lineTo(-6*s, -8*s);
-                g.moveTo(12*s, -12*s); g.lineTo(6*s, -8*s);
-                g.strokePath();
-                break;
-                
-            case 'panic':
-                const tremor = this.instincts?.tremor || { x: 0, y: 0 };
-                const intensity = this.instincts?.intensity || 0.5;
-                const pupilSize = Math.max(0.8, 2.5 - intensity * 1.5) * s;
-                g.strokeCircle(-8*s + tremor.x, -5*s + tremor.y, 7*s);
-                g.strokeCircle(8*s + tremor.x, -5*s + tremor.y, 7*s);
-                g.fillStyle(0xff3333, 0.8);
-                g.fillCircle(-8*s + tremor.x, -5*s + tremor.y, pupilSize);
-                g.fillCircle(8*s + tremor.x, -5*s + tremor.y, pupilSize);
-                const mouthWobble = Math.sin(Date.now() / 40) * 3 * s * intensity;
-                g.strokeCircle(mouthWobble + tremor.x, 10*s + tremor.y, 6*s);
-                g.lineStyle(Math.max(1, s), 0x88ccff, 0.6);
-                g.fillStyle(0x88ccff, 0.5);
-                g.fillCircle(-12*s, 4*s, 2*s);
-                g.fillCircle(12*s, 4*s, 2*s);
-                break;
-        }
-        
-        g.lineStyle(lineWidth, 0xffffff, 1);
-        this.drawActionFaceInner(g, action, s);
-    }
-    
-    drawActionFaceInner(g, action, scale = 1) {
-        const s = scale;
-        switch(action) {
-            case 'born':
-                g.strokeCircle(-8*s, -5*s, 6*s);
-                g.strokeCircle(8*s, -5*s, 6*s);
-                g.fillStyle(0xffffff, 1);
-                g.fillCircle(-8*s, -5*s, 2*s);
-                g.fillCircle(8*s, -5*s, 2*s);
-                g.strokeCircle(0, 10*s, 4*s);
-                break;
-            case 'feed':
-                g.beginPath();
-                g.arc(-8*s, -5*s, 5*s, Math.PI + 0.5, -0.5);
-                g.arc(8*s, -5*s, 5*s, Math.PI + 0.5, -0.5);
-                g.strokePath();
-                const chew = Math.sin(Date.now() / 80) * 2 * s;
-                g.beginPath();
-                g.arc(-4*s, 8*s + chew, 4*s, 0, Math.PI);
-                g.arc(4*s, 8*s + chew, 4*s, 0, Math.PI);
-                g.strokePath();
-                break;
             case 'burn':
                 const spiral = Date.now() / 50;
                 for (let i = 0; i < 2; i++) {
@@ -2047,7 +2187,7 @@ export default class Golem extends Phaser.GameObjects.Container {
                 const pupilSize = Math.max(0.8, 2.5 - intensity * 1.5) * s;
                 g.strokeCircle(-8*s + tremor.x, -5*s + tremor.y, 7*s);
                 g.strokeCircle(8*s + tremor.x, -5*s + tremor.y, 7*s);
-                g.fillStyle(0xffffff, 1);
+                g.fillStyle(0xff3333, 0.8);
                 g.fillCircle(-8*s + tremor.x, -5*s + tremor.y, pupilSize);
                 g.fillCircle(8*s + tremor.x, -5*s + tremor.y, pupilSize);
                 const mouthWobble = Math.sin(Date.now() / 40) * 3 * s * intensity;
