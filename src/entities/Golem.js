@@ -10,6 +10,14 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.id = `golem_${Date.now()}_${Math.floor(Math.random()*1000)}`;
         this.lifeLog = [];
         
+        // ═══════════════════════════════════════════════════════════════════
+        // SISTEMA DE PETTING (Interação Tátil)
+        // ═══════════════════════════════════════════════════════════════════
+        this.pettingActive = false;
+        this.lastMousePos = { x: 0, y: 0 };
+        this.pettingVelocity = 0;
+        this.pettingHistory = []; // Últimas 3 posições para detectar scrubbing
+        
         this.lifePhase = 'child';
         this.currentScale = 0.5;
         this.isAdult = false;
@@ -244,12 +252,48 @@ export default class Golem extends Phaser.GameObjects.Container {
             });
             
             this.on('dragstart', () => { 
-                this.isDragging = true; this.body.setVelocity(0); this.alpha = 0.6; 
+                this.isDragging = true; 
+                this.body.setVelocity(0); 
+                this.alpha = 0.6; 
+                this.pettingActive = true;
+                this.pettingHistory = [];
                 scene.game.events.emit('hide-inspect');
             });
-            this.on('drag', (p, x, y) => { this.x = x; this.y = y; });
+            this.on('drag', (p, x, y) => { 
+                this.x = x; 
+                this.y = y;
+                
+                // ═══════════════════════════════════════════════════════════════════
+                // DETECÇÃO DE PETTING (Scrubbing rápido)
+                // ═══════════════════════════════════════════════════════════════════
+                const currentPos = { x, y };
+                this.pettingHistory.push(currentPos);
+                if (this.pettingHistory.length > 3) this.pettingHistory.shift();
+                
+                // Se tem histórico suficiente, calcula velocidade
+                if (this.pettingHistory.length >= 2) {
+                    const prev = this.pettingHistory[this.pettingHistory.length - 2];
+                    const dx = currentPos.x - prev.x;
+                    const dy = currentPos.y - prev.y;
+                    this.pettingVelocity = Math.sqrt(dx*dx + dy*dy);
+                    
+                    // Petting rápido = fechar olhos e emitir corações
+                    if (this.pettingVelocity > 8) {
+                        this.isBlinking = true;
+                        
+                        // Emite corações
+                        if (Math.random() < 0.3) {
+                            this.emitHearts();
+                        }
+                    }
+                }
+            });
             this.on('dragend', () => {
-                this.isDragging = false; this.alpha = 1;
+                this.isDragging = false; 
+                this.alpha = 1;
+                this.pettingActive = false;
+                this.isBlinking = false;
+                
                 const others = scene.golemsGroup.getChildren();
                 let mated = false;
                 for (let other of others) {
@@ -1856,6 +1900,44 @@ export default class Golem extends Phaser.GameObjects.Container {
         gainNode.connect(this.masterGain);
         osc.start(now);
         osc.stop(now + 0.12);
+    }
+
+    /**
+     * Emite corações flutuantes ao redor do Golem (efeito de carinho)
+     * Usado quando o jogador faz petting/scrubbing rápido
+     */
+    emitHearts() {
+        const heartCount = 3 + Math.floor(Math.random() * 2); // 3-4 corações
+        
+        for (let i = 0; i < heartCount; i++) {
+            // Posição aleatória ao redor do Golem
+            const angle = (Math.random() * Math.PI * 2);
+            const dist = 30 + Math.random() * 20;
+            const startX = this.x + Math.cos(angle) * dist;
+            const startY = this.y + Math.sin(angle) * dist - 40;
+            
+            // Cria um texto com coração
+            const heart = this.scene.add.text(startX, startY, '♥', {
+                fontFamily: 'Arial',
+                fontSize: '20px',
+                fill: '#ff6b9d',
+                fontStyle: 'bold'
+            });
+            heart.setOrigin(0.5, 0.5);
+            heart.setDepth(100);
+            
+            // Animação: flutua para cima e desaparece
+            this.scene.tweens.add({
+                targets: heart,
+                y: startY - 40,
+                alpha: 0,
+                duration: 1000,
+                ease: 'Quad.easeOut',
+                onComplete: () => {
+                    heart.destroy();
+                }
+            });
+        }
     }
 
     speak(text) {

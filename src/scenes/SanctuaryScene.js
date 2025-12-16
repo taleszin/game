@@ -267,6 +267,11 @@ export default class SanctuaryScene extends Phaser.Scene {
           // Limpa partículas de resultado
           resultParticles.destroy();
 
+          // Emite evento para desbloquear forma evoluída se aplicável
+          if (childData.forma) {
+            this.game.events.emit('golem-created-with-form', { formId: childData.forma.id });
+          }
+
           this.spawnGolem(x, y + 30, childData);
           
           if(parent1.body) parent1.body.setVelocity(-150, -150);

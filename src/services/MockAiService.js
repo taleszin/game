@@ -275,33 +275,55 @@ function getShapeFamily(shapeId) {
 /**
  * TABELA DE ALQUIMIA PRIMÁRIA
  * Combinações exatas conhecidas (Receitas Perfeitas)
+ * 
+ * RECEITAS OTIMIZADAS:
+ * Círculo + Quadrado = Cilindro (fusão smooth + angular)
+ * Círculo + Triângulo = Cone (ponta focada)
+ * Quadrado + Triângulo = Pirâmide (estrutura dual)
+ * Círculo + Círculo = Esfera (simetria máxima)
+ * Quadrado + Quadrado = Tesseract (dimensão extra)
  */
 const ALCHEMY_RECIPES = {
-    // Receitas Clássicas (Dimensionalização)
+    // === RECEITAS PRIMORDIAIS (Síntese básica de 2 primordiais) ===
     'circulo+quadrado': 'cilindro',
-    'circulo+triangulo': 'cone',
-    'quadrado+triangulo': 'piramide',
+    'quadrado+circulo': 'cilindro',
     
-    // Receitas de Duplicação (Evolução)
+    'circulo+triangulo': 'cone',
+    'triangulo+circulo': 'cone',
+    
+    'quadrado+triangulo': 'piramide',
+    'triangulo+quadrado': 'piramide',
+    
+    // === RECEITAS DE EVOLUÇÃO (Duplicação rara) ===
     'circulo+circulo': 'esfera',
     'quadrado+quadrado': 'tesseract',
     'triangulo+triangulo': 'fractal',
     
-    // Receitas Especiais
-    'losango+circulo': 'olho',
-    'cruz+circulo': 'mira',
-    'losango+quadrado': 'cristal',
-    'cruz+quadrado': 'obelisco',
-    'pentagono+hexagono': 'estrela',
-    'triangulo+losango': 'piramide',
-    
-    // Receitas Avançadas (Formas 3D)
-    'esfera+cilindro': 'capsula',
-    'piramide+quadrado': 'obelisco',
+    // === RECEITAS AVANÇADAS (3D + híbridos) ===
+    'cilindro+cone': 'domo',
     'cone+cilindro': 'domo',
+    
+    'cilindro+esfera': 'capsula',
+    'esfera+cilindro': 'capsula',
+    
+    'piramide+quadrado': 'obelisco',
+    'quadrado+piramide': 'obelisco',
+    
     'tesseract+piramide': 'monolito',
-    'esfera+cone': 'domo',
-    'cilindro+piramide': 'obelisco'
+    'piramide+tesseract': 'monolito',
+    
+    'cone+triangulo': 'piramide',
+    'triangulo+cone': 'piramide',
+    
+    // === RECEITAS ESPECIAIS (Formas complexas) ===
+    'pentagono+hexagono': 'estrela',
+    'hexagono+pentagono': 'estrela',
+    
+    'cruz+circulo': 'cristal',
+    'circulo+cruz': 'cristal',
+    
+    'losango+losango': 'hexagono',
+    'pentagono+pentagono': 'cristal'
 };
 
 /**

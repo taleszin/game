@@ -3,6 +3,8 @@ import { generateGolemData } from './services/MockAiService.js';
 import SanctuaryScene from './scenes/SanctuaryScene';
 import { ELEMENTS } from './data/gameData.js';
 import { calculateGeometry } from './utils/GeometryMath.js';
+import { initEvolvedFormsUI, setupModalBackdropClose, unlockForm } from './ui/evolved-forms-ui.js';
+import { UISoundSystem } from './systems/UISoundSystem.js';
 import './style.css';
 
 const config = {
@@ -26,6 +28,242 @@ const game = new Phaser.Game(config);
 document.addEventListener('DOMContentLoaded', () => {
     let currentSelection = { forma: null, quimica: null, fisica: null };
     let activeCategory = 'forma';
+
+    // ═══════════════════════════════════════════════════════════════════
+    // INICIALIZAÇÃO DA UI DE FORMAS EVOLUÍDAS
+    // Painel flutuante com catálogo de formas desbloqueáveis
+    // ═══════════════════════════════════════════════════════════════════
+    
+    let evolvedFormsUI = null;
+    try {
+        evolvedFormsUI = initEvolvedFormsUI();
+        setupModalBackdropClose(evolvedFormsUI);
+        
+        // Listener para quando uma forma é selecionada no catálogo
+        document.addEventListener('evolved-form-selected', (e) => {
+            console.log(`[EvolvedForms] Forma selecionada: ${e.detail.formId}`);
+            // Aqui você pode adicionar ações adicionais, como:
+            // - Mostrar tutorial
+            // - Registrar estatísticas
+            // - Highlight no painel de seleção quando forma for obtida
+        });
+        
+        // Listener para desbloqueio de formas via Alquimia (reprodução)
+        game.events.on('golem-created-with-form', (data) => {
+            if (evolvedFormsUI && data.formId) {
+                const isEvolvedForm = ELEMENTS.formaEvoluida.some(f => f.id === data.formId);
+                if (isEvolvedForm) {
+                    const wasNewUnlock = unlockForm(evolvedFormsUI, data.formId);
+                    if (wasNewUnlock) {
+                        console.log(`[EvolvedForms] Nova forma desbloqueada via Alquimia: ${data.formId}!`);
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.warn('[EvolvedFormsUI] Não foi possível inicializar:', error);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SISTEMA DE FEEDBACK SENSORIAL - Audio + Tooltips
+    // Dopamina garantida ao interagir com a UI
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // Inicializa o sistema de som na primeira interação do usuário
+    document.addEventListener('click', () => UISoundSystem.init(), { once: true });
+    document.addEventListener('keydown', () => UISoundSystem.init(), { once: true });
+    
+    // Cria o elemento de Tooltip global
+    const techTooltip = createTechTooltip();
+    document.body.appendChild(techTooltip);
+    
+    /**
+     * Cria o elemento de tooltip estilo terminal sci-fi
+     */
+    function createTechTooltip() {
+        const tooltip = document.createElement('div');
+        tooltip.className = 'tech-tooltip';
+        tooltip.id = 'tech-tooltip';
+        tooltip.innerHTML = `
+            <div class="tech-tooltip-header">
+                <span class="tech-tooltip-icon">◆</span>
+                <span class="tech-tooltip-title">SCANNING...</span>
+            </div>
+            <div class="tech-tooltip-body">Carregando dados...</div>
+            <div class="tech-tooltip-tag">SISTEMA</div>
+        `;
+        return tooltip;
+    }
+    
+    /**
+     * Atualiza e mostra o tooltip
+     */
+    function showTooltip(element, mouseX, mouseY) {
+        const title = element.dataset.name || element.dataset.id || element.title || element.textContent?.trim() || 'ITEM';
+        const desc = element.dataset.desc || element.title || 'Sem descrição disponível';
+        const category = element.dataset.category || 'default';
+        const icon = element.querySelector('.option-icon')?.textContent || '◆';
+        
+        // Atualiza conteúdo
+        techTooltip.querySelector('.tech-tooltip-icon').textContent = icon;
+        techTooltip.querySelector('.tech-tooltip-title').textContent = title.toUpperCase();
+        techTooltip.querySelector('.tech-tooltip-body').textContent = desc;
+        techTooltip.querySelector('.tech-tooltip-tag').textContent = category.toUpperCase();
+        
+        // Atualiza classe de categoria para cor
+        techTooltip.className = 'tech-tooltip';
+        if (category) {
+            techTooltip.classList.add(`category-${category}`);
+        }
+        
+        // Posiciona próximo ao mouse
+        const offsetX = 15;
+        const offsetY = 15;
+        let x = mouseX + offsetX;
+        let y = mouseY + offsetY;
+        
+        // Evita sair da tela
+        const tooltipRect = { width: 280, height: 120 }; // Estimativa
+        if (x + tooltipRect.width > window.innerWidth - 20) {
+            x = mouseX - tooltipRect.width - offsetX;
+        }
+        if (y + tooltipRect.height > window.innerHeight - 20) {
+            y = mouseY - tooltipRect.height - offsetY;
+        }
+        
+        techTooltip.style.left = `${x}px`;
+        techTooltip.style.top = `${y}px`;
+        
+        // Mostra com animação
+        techTooltip.classList.add('visible');
+    }
+    
+    /**
+     * Esconde o tooltip
+     */
+    function hideTooltip() {
+        techTooltip.classList.remove('visible');
+    }
+    
+    /**
+     * Atualiza posição do tooltip seguindo o mouse
+     */
+    function updateTooltipPosition(mouseX, mouseY) {
+        if (!techTooltip.classList.contains('visible')) return;
+        
+        const offsetX = 15;
+        const offsetY = 15;
+        let x = mouseX + offsetX;
+        let y = mouseY + offsetY;
+        
+        const rect = techTooltip.getBoundingClientRect();
+        if (x + rect.width > window.innerWidth - 20) {
+            x = mouseX - rect.width - offsetX;
+        }
+        if (y + rect.height > window.innerHeight - 20) {
+            y = mouseY - rect.height - offsetY;
+        }
+        
+        techTooltip.style.left = `${x}px`;
+        techTooltip.style.top = `${y}px`;
+    }
+    
+    // ═══ EVENT DELEGATION para hover/click em elementos interativos ═══
+    // Mais eficiente que adicionar listeners individuais
+    
+    let currentHoveredElement = null;
+    
+    document.addEventListener('mouseover', (e) => {
+        const target = e.target.closest('.option-item, .pixel-btn, .tool-slot');
+        
+        if (target && target !== currentHoveredElement) {
+            currentHoveredElement = target;
+            
+            // Som de hover
+            const category = target.dataset.category || 'default';
+            UISoundSystem.playHover(category);
+            
+            // Mostra tooltip se tiver dados
+            if (target.dataset.desc || target.dataset.name || target.title) {
+                showTooltip(target, e.clientX, e.clientY);
+            }
+        }
+    });
+    
+    document.addEventListener('mouseout', (e) => {
+        const target = e.target.closest('.option-item, .pixel-btn, .tool-slot');
+        
+        if (target && !target.contains(e.relatedTarget)) {
+            currentHoveredElement = null;
+            hideTooltip();
+        }
+    });
+    
+    document.addEventListener('mousemove', (e) => {
+        if (currentHoveredElement) {
+            updateTooltipPosition(e.clientX, e.clientY);
+        }
+    });
+    
+    // Som de clique via delegation
+    document.addEventListener('mousedown', (e) => {
+        const target = e.target.closest('.option-item, .pixel-btn, .tool-slot');
+        
+        if (target) {
+            // Determina o tipo de clique pelo elemento
+            if (target.classList.contains('option-item')) {
+                UISoundSystem.playSelect();
+            } else if (target.classList.contains('tool-slot')) {
+                UISoundSystem.playClick('special');
+            } else {
+                UISoundSystem.playClick('confirm');
+            }
+        }
+    });
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SISTEMA DE AUDIO UI - BEEPS E SONS SATISFATÓRIOS (LEGACY)
+    // ═══════════════════════════════════════════════════════════════════
+    
+    /**
+     * Reproduz um beep curto e satisfatório com WebAudio
+     * @param {number} frequency - Frequência em Hz (padrão 800)
+     * @param {number} duration - Duração em segundos (padrão 0.1)
+     * @param {number} volume - Volume 0-1 (padrão 0.1)
+     */
+    function playUIBeep(frequency = 800, duration = 0.1, volume = 0.1) {
+        try {
+            // Tenta usar o audioContext do Phaser game se disponível
+            let audioContext = null;
+            if (game && game.sound && game.sound.context) {
+                audioContext = game.sound.context;
+            } else {
+                // Fallback: cria um novo AudioContext
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) audioContext = new AudioContext();
+            }
+            
+            if (!audioContext) return; // AudioContext não disponível
+            
+            const now = audioContext.currentTime;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            
+            osc.frequency.value = frequency;
+            osc.type = 'sine';
+            
+            gain.gain.setValueAtTime(volume, now);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + duration);
+            
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            
+            osc.start(now);
+            osc.stop(now + duration);
+        } catch (e) {
+            // Silenciosamente ignora erros de áudio
+        }
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     // CONSTANTES DE CORES E ÍCONES
@@ -758,6 +996,8 @@ document.addEventListener('DOMContentLoaded', () => {
             div.className = 'option-item';
             div.dataset.id = item.id;
             div.dataset.category = category;
+            div.dataset.name = item.name;
+            div.dataset.desc = item.desc || `Selecione ${item.name} como ${category}`;
             
             if (currentSelection[category] && currentSelection[category].id === item.id) {
                 div.classList.add('selected');
@@ -817,26 +1057,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function playSelectionBeep(category) {
-        try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            
-            // Frequência baseada na categoria
-            const freqs = { forma: 440, quimica: 550, fisica: 660 };
-            osc.frequency.value = freqs[category] || 500;
-            osc.type = 'sine';
-            
-            gain.gain.value = 0.1;
-            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
-            
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start();
-            osc.stop(ctx.currentTime + 0.1);
-        } catch (e) {
-            // Silencia erros de áudio
-        }
+        // Frequência baseada na categoria
+        const freqs = { forma: 440, quimica: 550, fisica: 660 };
+        const frequency = freqs[category] || 500;
+        playUIBeep(frequency, 0.12, 0.12);
     }
     
     // ═══════════════════════════════════════════════════════════════════
@@ -1458,6 +1682,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════════════════
 
     btnOpen.addEventListener('click', () => {
+        // Som de abertura (sweep ascendente)
+        UISoundSystem.playOpen();
+        
         creationPanel.classList.remove('hidden');
         btnOpen.classList.add('hidden');
         enterCreationMode(); // Time Dilation: bloqueia tempo durante criação
@@ -1465,6 +1692,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnCancel.addEventListener('click', () => {
+        // Som de fechamento (sweep descendente)
+        UISoundSystem.playClose();
+        
         stopPreviewAnimation();
         creationPanel.classList.add('hidden');
         btnOpen.classList.remove('hidden');
@@ -1520,6 +1750,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btnSynthesize.addEventListener('click', () => {
+        // Som de síntese (especial, energético)
+        UISoundSystem.playClick('synthesize');
+        
         btnSynthesize.innerHTML = '<span class="btn-icon">⚡</span> SINTETIZANDO...';
         btnSynthesize.disabled = true;
         
@@ -1533,6 +1766,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const golemData = { ...currentSelection, aiData: aiResult };
             
             game.events.emit('spawn-golem', golemData);
+            
+            // ═══ SISTEMA DE DESBLOQUEIO DE FORMAS EVOLUÍDAS ═══
+            // Verifica se a forma criada é uma forma evoluída e desbloqueia
+            if (evolvedFormsUI && golemData.forma) {
+                const formId = golemData.forma.id;
+                const isEvolvedForm = ELEMENTS.formaEvoluida.some(f => f.id === formId);
+                if (isEvolvedForm) {
+                    const wasNewUnlock = unlockForm(evolvedFormsUI, formId);
+                    if (wasNewUnlock) {
+                        console.log(`[EvolvedForms] Nova forma desbloqueada: ${formId}!`);
+                    }
+                }
+            }
             
             // Remove efeito de síntese
             if (previewContainer) {

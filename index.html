@@ -5,25 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <title>Geometry Creator</title>
+    <title>HYLOMORPH</title>
   </head>
   <body>
     <div id="game-container"></div>
 
     <div id="ui-layer">
       <div class="hud-top">
-        <h1>Geometry Creator</h1>
+        <h1>HYLOMORPH</h1>
         <p>Status: Sistema Online</p>
       </div>
       
-      <button id="btn-tree" class="round-btn" title="Genealogia">🌳</button>
+      <button id="btn-tree" class="round-btn pixel-btn" data-name="Genealogia" data-desc="Abre o Registro de Vida. Visualize a linhagem e histórico de todos os Golems criados." title="Genealogia">🌳</button>
 
       <!-- ═══ CHRONO-DECK: Controle Temporal Minimal ═══ -->
       <div id="chrono-deck">
         <div class="chrono-pill">
-          <button class="chrono-icon" data-speed="0" title="Pausar">⏸</button>
-          <button class="chrono-icon active" data-speed="1" title="Normal">▶</button>
-          <button class="chrono-icon" data-speed="5" title="Acelerar">⏩</button>
+          <button class="chrono-icon pixel-btn" data-speed="0" data-name="Pausar" data-desc="Congela o tempo. Golems ficam paralisados mas você ainda pode interagir." title="Pausar">⏸</button>
+          <button class="chrono-icon pixel-btn active" data-speed="1" data-name="Normal" data-desc="Tempo flui na velocidade padrão. 1 segundo real = 1 segundo no santuário." title="Normal">▶</button>
+          <button class="chrono-icon pixel-btn" data-speed="5" data-name="Acelerar" data-desc="Acelera o tempo em 5x. Ideal para observar ciclos de vida mais rapidamente." title="Acelerar">⏩</button>
         </div>
       </div>
 
@@ -112,14 +112,14 @@
         
         <!-- BARRA DE AÇÕES -->
         <div class="panel-actions">
-            <button id="btn-cancel" class="pixel-btn btn-red">
+            <button id="btn-cancel" class="pixel-btn btn-red" data-name="Abortar" data-desc="Cancela a síntese e fecha o laboratório. Nenhum progresso será salvo.">
                 <span class="btn-icon">✕</span> ABORTAR
             </button>
             <div class="synthesis-info">
                 <div class="recipe-label">FÓRMULA:</div>
                 <div class="recipe-formula" id="recipe-summary">[ ? ] + [ ? ] + [ ? ]</div>
             </div>
-            <button id="btn-synthesize" class="pixel-btn btn-green" disabled>
+            <button id="btn-synthesize" class="pixel-btn btn-green" data-name="Sintetizar" data-desc="Combina Forma, Química e Física para criar um novo Golem. Requer todos os elementos selecionados." disabled>
                 <span class="btn-icon">⚡</span> SINTETIZAR
             </button>
         </div>
@@ -159,16 +159,41 @@
 
       <div id="god-menu">
           <div class="god-options">
-            <div class="tool-slot" data-action="feed" title="Nutrir"><div class="tool-icon">🍖</div></div>
-            <div class="tool-slot" data-action="burn" title="Incendiar"><div class="tool-icon">🔥</div></div>
-            <div class="tool-slot" data-action="freeze" title="Congelar"><div class="tool-icon">❄️</div></div>
-            <div class="tool-slot" data-action="mutate" title="Mutar DNA"><div class="tool-icon">🧬</div></div>
-            <div class="tool-slot" data-action="kill" title="Eliminar"><div class="tool-icon">💀</div></div>
+            <div class="tool-slot" data-action="feed" data-name="Nutrir" data-desc="Restaura vitalidade do Golem. Arraste até uma criatura para alimentá-la." title="Nutrir"><div class="tool-icon">🍖</div></div>
+            <div class="tool-slot" data-action="burn" data-name="Incendiar" data-desc="Aplica dano térmico. Pode causar mutações ou destruir o Golem." title="Incendiar"><div class="tool-icon">🔥</div></div>
+            <div class="tool-slot" data-action="freeze" data-name="Congelar" data-desc="Paralisa temporariamente o Golem. Metabolismo entra em hibernação." title="Congelar"><div class="tool-icon">❄️</div></div>
+            <div class="tool-slot" data-action="mutate" data-name="Mutar DNA" data-desc="Força uma mutação genética aleatória. Resultados imprevisíveis!" title="Mutar DNA"><div class="tool-icon">🧬</div></div>
+            <div class="tool-slot" data-action="kill" data-name="Eliminar" data-desc="Termina instantaneamente a existência do Golem. Irreversível." title="Eliminar"><div class="tool-icon">💀</div></div>
           </div>
           <div class="god-trigger">⚡</div>
       </div>
 
-      <button id="btn-open-lab" class="pixel-btn">NOVO EXPERIMENTO</button>
+      <button id="btn-open-lab" class="pixel-btn" data-name="Novo Experimento" data-desc="Abre o Laboratório de Síntese para criar um novo Golem.">NOVO EXPERIMENTO</button>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           BOTÃO FLUTUANTE: FORMAS EVOLUÍDAS (DESCOBRIR)
+           ═══════════════════════════════════════════════════════════════════ -->
+      <button id="btn-evolved-forms" class="floating-btn pixel-btn" data-name="Catálogo" data-desc="Abre o catálogo de Formas Evoluídas. Combine formas primordiais para desbloquear novas!" title="Catálogo de Formas Evoluídas">
+        <span class="form-icon">◆</span>
+      </button>
+
+      <!-- MODAL: GALERIA DE FORMAS EVOLUÍDAS -->
+      <div id="evolved-forms-modal" class="hidden evolved-modal">
+        <div class="evolved-modal-header">
+          <h2>FORMAS EVOLUÍDAS</h2>
+          <p class="evolved-subtitle">Combina primordiais para desbloquear</p>
+          <button class="close-btn evolved-close" title="Fechar">✕</button>
+        </div>
+        
+        <div class="evolved-forms-grid" id="evolved-forms-grid">
+          <!-- Cards de formas será injetado aqui via JavaScript -->
+        </div>
+
+        <div class="evolved-legend">
+          <p class="legend-text">🔓 = Forma desbloqueável via Alquimia</p>
+          <p class="legend-text">💡 = Passe o mouse para ver receita</p>
+        </div>
+      </div>
     </div>
 
     <script type="module" src="/src/main.js"></script>
