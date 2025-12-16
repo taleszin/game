@@ -276,7 +276,25 @@ document.addEventListener('DOMContentLoaded', () => {
         'gravidade': '#9d00ff',
         'luz': '#ffffff',
         'frio': '#0088ff',
-        'magnetismo': '#ff00aa'
+        'magnetismo': '#ff00aa',
+        'entropia': '#888888',
+        'sonico': '#ff8800'
+    };
+
+    const CHEMISTRY_COLORS = {
+        'carbono': '#444444',
+        'ferro': '#708090',
+        'silicio': '#4a6fa5',
+        'ouro': '#ffd700',
+        'cristal': '#88ddff',
+        'mercurio': '#c0c0c0',
+        'bismuto': '#ff69b4'
+    };
+
+    const FORMA_COLORS = {
+        'circulo': '#00ffff',
+        'quadrado': '#00ff88',
+        'triangulo': '#ff8800'
     };
     
     // ═══════════════════════════════════════════════════════════════════
@@ -999,6 +1017,17 @@ document.addEventListener('DOMContentLoaded', () => {
             div.dataset.name = item.name;
             div.dataset.desc = item.desc || `Selecione ${item.name} como ${category}`;
             
+            // Aplica cor dinâmica baseada na categoria
+            let itemColor = '#0ff'; // cyan padrão
+            if (category === 'fisica') {
+                itemColor = PHYSICS_COLORS[item.id] || '#0ff';
+            } else if (category === 'quimica') {
+                itemColor = CHEMISTRY_COLORS[item.id] || item.color || '#888';
+            } else if (category === 'forma') {
+                itemColor = FORMA_COLORS[item.id] || '#0ff';
+            }
+            div.style.setProperty('--item-color', itemColor);
+            
             if (currentSelection[category] && currentSelection[category].id === item.id) {
                 div.classList.add('selected');
             }
@@ -1053,7 +1082,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const quimica = currentSelection.quimica?.name || '?';
         const fisica = currentSelection.fisica?.name || '?';
         
-        recipeSummary.innerHTML = `[ ${forma} ] + [ ${quimica} ] + [ ${fisica} ]`;
+        // Usa classes coloridas para cada elemento da fórmula
+        const formaClass = currentSelection.forma ? 'formula-geo' : 'formula-empty';
+        const quimicaClass = currentSelection.quimica ? 'formula-chem' : 'formula-empty';
+        const fisicaClass = currentSelection.fisica ? 'formula-phys' : 'formula-empty';
+        
+        recipeSummary.innerHTML = `
+            <span class="${formaClass}">[ ${forma} ]</span>
+            <span class="formula-plus">+</span>
+            <span class="${quimicaClass}">[ ${quimica} ]</span>
+            <span class="formula-plus">+</span>
+            <span class="${fisicaClass}">[ ${fisica} ]</span>
+        `;
     }
     
     function playSelectionBeep(category) {
@@ -1731,11 +1771,20 @@ document.addEventListener('DOMContentLoaded', () => {
         drawPreview();
         
         // Reset fórmula
-        if (recipeSummary) recipeSummary.innerHTML = '[ ? ] + [ ? ] + [ ? ]';
+        if (recipeSummary) {
+            recipeSummary.innerHTML = `
+                <span class="formula-empty">[ ? ]</span>
+                <span class="formula-plus">+</span>
+                <span class="formula-empty">[ ? ]</span>
+                <span class="formula-plus">+</span>
+                <span class="formula-empty">[ ? ]</span>
+            `;
+        }
         
         // Reset botão
         btnSynthesize.disabled = true;
         btnSynthesize.innerHTML = '<span class="btn-icon">⏳</span> INCOMPLETO';
+        btnSynthesize.classList.remove('synthesis-ready');
     }
 
     function checkCraftingReady() {
@@ -1743,9 +1792,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isReady) {
             btnSynthesize.disabled = false;
             btnSynthesize.innerHTML = '<span class="btn-icon">✨</span> SINTETIZAR';
+            btnSynthesize.classList.add('synthesis-ready');
         } else {
             btnSynthesize.disabled = true;
             btnSynthesize.innerHTML = '<span class="btn-icon">⏳</span> INCOMPLETO';
+            btnSynthesize.classList.remove('synthesis-ready');
         }
     }
 

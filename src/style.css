@@ -17,6 +17,16 @@ body {
   position: relative;
   line-height: 1.6;
   letter-spacing: 0.5px;
+  
+  /* ═══ PILARES CROMÁTICOS - SISTEMA DE CORES ═══ */
+  --col-geo: #00ffff;     /* Ciano - Geometria */
+  --col-chem: #00ff88;    /* Verde Neon - Química */
+  --col-phys: #bd00ff;    /* Roxo Elétrico - Física */
+  
+  /* Variantes com transparência */
+  --col-geo-dim: rgba(0, 255, 255, 0.3);
+  --col-chem-dim: rgba(0, 255, 136, 0.3);
+  --col-phys-dim: rgba(189, 0, 255, 0.3);
 }
 
 body.grabbing, body.grabbing * {
@@ -347,41 +357,47 @@ body::after {
 }
 
 .selector-column {
+  --col-accent: var(--col-geo); /* Cor padrão, sobrescrita por classe */
   flex: 1;
   display: flex;
   flex-direction: column;
   background: rgba(0, 20, 30, 0.4);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(0, 255, 255, 0.2);
+  border: 1px solid color-mix(in srgb, var(--col-accent) 25%, transparent);
   border-radius: 4px;
   overflow: hidden;
   transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   box-shadow: inset 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
+/* ═══ PILARES CROMÁTICOS - CLASSES DE COLUNA ═══ */
+.selector-column.col-geo { --col-accent: var(--col-geo); }
+.selector-column.col-chem { --col-accent: var(--col-chem); }
+.selector-column.col-phys { --col-accent: var(--col-phys); }
+
 .selector-column:hover {
-  border-color: rgba(0, 255, 255, 0.5);
+  border-color: color-mix(in srgb, var(--col-accent) 60%, transparent);
   background: rgba(0, 20, 30, 0.5);
   box-shadow: 
     inset 0 0 1px rgba(255, 255, 255, 0.05),
-    0 0 15px rgba(0, 255, 255, 0.1);
+    0 0 15px color-mix(in srgb, var(--col-accent) 15%, transparent);
 }
 
 .selector-column.active {
-  border-color: #0ff;
+  border-color: var(--col-accent);
   background: rgba(0, 30, 50, 0.6);
   box-shadow: 
-    0 0 20px rgba(0, 255, 255, 0.2),
+    0 0 20px color-mix(in srgb, var(--col-accent) 25%, transparent),
     inset 0 0 1px rgba(255, 255, 255, 0.1),
-    inset 0 0 20px rgba(0, 255, 255, 0.05);
+    inset 0 0 20px color-mix(in srgb, var(--col-accent) 8%, transparent);
 }
 
 .selector-column.filled {
-  border-color: #0f08;
+  border-color: color-mix(in srgb, var(--col-accent) 70%, transparent);
 }
 
 .selector-column.filled .column-header {
-  background: linear-gradient(90deg, rgba(0, 255, 0, 0.1), transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--col-accent) 20%, transparent), transparent);
 }
 
 .column-header {
@@ -389,20 +405,31 @@ body::after {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: rgba(0, 50, 80, 0.3);
-  border-bottom: 1px solid #234;
+  background: linear-gradient(90deg, 
+    color-mix(in srgb, var(--col-accent) 10%, rgba(0, 50, 80, 0.3)),
+    rgba(0, 50, 80, 0.3)
+  );
+  border-bottom: 1px solid color-mix(in srgb, var(--col-accent) 30%, #234);
+  transition: background 0.3s;
 }
 
 .col-number {
   font-size: 10px;
-  color: #0ff;
+  color: var(--col-accent);
   font-weight: bold;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--col-accent) 50%, transparent);
 }
 
 .col-title {
   font-size: 7px;
-  color: #888;
+  color: color-mix(in srgb, var(--col-accent) 60%, #888);
   letter-spacing: 1px;
+  transition: color 0.2s;
+}
+
+.selector-column:hover .col-title,
+.selector-column.active .col-title {
+  color: color-mix(in srgb, var(--col-accent) 80%, #fff);
 }
 
 .column-status {
@@ -422,8 +449,8 @@ body::after {
 }
 
 .selector-column.filled .status-icon {
-  color: #0f0;
-  text-shadow: 0 0 8px #0f0;
+  color: var(--col-accent);
+  text-shadow: 0 0 8px var(--col-accent);
 }
 
 .column-status .status-text {
@@ -433,7 +460,7 @@ body::after {
 }
 
 .selector-column.filled .status-text {
-  color: #fff;
+  color: color-mix(in srgb, var(--col-accent) 80%, #fff);
 }
 
 .column-options {
@@ -450,57 +477,135 @@ body::after {
   width: 4px;
 }
 
-.column-options::-webkit-scrollbar-thumb {
-  background: #0888;
+.column-options::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 2px;
 }
 
-/* === OPÇÕES DE SELEÇÃO === */
+.column-options::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--col-accent) 50%, transparent);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+
+.column-options::-webkit-scrollbar-thumb:hover {
+  background: var(--col-accent);
+}
+
+/* === OPÇÕES DE SELEÇÃO COM COR DINÂMICA === */
 .option-item {
+  --item-color: #0ff; /* Cor padrão, sobrescrita por JS */
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.3);
+  padding: 6px 10px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.4) 0%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
   border: 1px solid #234;
+  border-left: 3px solid color-mix(in srgb, var(--item-color) 60%, transparent);
   border-radius: 3px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.2s ease-out;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scanline decorativa */
+.option-item::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 4px
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.option-item:hover::after {
+  opacity: 1;
 }
 
 .option-item:hover {
-  background: rgba(0, 80, 120, 0.3);
-  border-color: #0888;
-  transform: translateX(3px);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--item-color) 15%, transparent) 0%,
+    rgba(0, 0, 0, 0.3) 100%
+  );
+  border-left-color: var(--item-color);
+  border-color: color-mix(in srgb, var(--item-color) 40%, #234);
+  transform: translateX(4px);
+  box-shadow: 
+    0 0 15px color-mix(in srgb, var(--item-color) 20%, transparent),
+    inset 0 0 20px color-mix(in srgb, var(--item-color) 5%, transparent);
 }
 
 .option-item.selected {
-  background: rgba(0, 255, 255, 0.1);
-  border-color: #0ff;
-  box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.1);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--item-color) 25%, transparent) 0%,
+    rgba(0, 0, 0, 0.2) 100%
+  );
+  border-left: 3px solid var(--item-color);
+  border-color: color-mix(in srgb, var(--item-color) 70%, #234);
+  box-shadow: 
+    0 0 20px color-mix(in srgb, var(--item-color) 30%, transparent),
+    inset 0 0 25px color-mix(in srgb, var(--item-color) 10%, transparent);
 }
 
 .option-item.selected::before {
   content: '▶';
   font-size: 6px;
-  color: #0ff;
+  color: var(--item-color);
   margin-right: -4px;
+  text-shadow: 0 0 8px var(--item-color);
+  animation: pulse-indicator 1.5s infinite;
+}
+
+@keyframes pulse-indicator {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .option-icon {
   font-size: 12px;
   width: 18px;
   text-align: center;
+  color: var(--item-color);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--item-color) 50%, transparent);
+  transition: all 0.2s;
+}
+
+.option-item:hover .option-icon {
+  transform: scale(1.1);
+  text-shadow: 0 0 10px var(--item-color);
 }
 
 .option-name {
   font-size: 8px;
-  color: #ccc;
+  color: #999;
   flex: 1;
+  transition: color 0.2s;
+}
+
+.option-item:hover .option-name {
+  color: color-mix(in srgb, var(--item-color) 80%, #fff);
 }
 
 .option-item.selected .option-name {
-  color: #fff;
+  color: var(--item-color);
+  text-shadow: 0 0 4px color-mix(in srgb, var(--item-color) 30%, transparent);
 }
 
 /* === BARRA DE AÇÕES REFATORADA === */
@@ -527,8 +632,33 @@ body::after {
 
 .recipe-formula {
   font-size: 9px;
-  color: #0ff;
-  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  color: #aaa;
+}
+
+/* Spans coloridos para cada elemento da fórmula */
+.recipe-formula .formula-geo {
+  color: var(--col-geo);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--col-geo) 50%, transparent);
+}
+
+.recipe-formula .formula-chem {
+  color: var(--col-chem);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--col-chem) 50%, transparent);
+}
+
+.recipe-formula .formula-phys {
+  color: var(--col-phys);
+  text-shadow: 0 0 8px color-mix(in srgb, var(--col-phys) 50%, transparent);
+}
+
+.recipe-formula .formula-empty {
+  color: #444;
+  text-shadow: none;
+}
+
+.recipe-formula .formula-plus {
+  color: #666;
+  margin: 0 4px;
 }
 
 .btn-icon {
@@ -667,6 +797,82 @@ body::after {
   cursor: not-allowed; 
   box-shadow: none;
   transform: none;
+}
+
+/* ═══ BOTÃO SINTETIZAR - ESTADO PRONTO ═══ */
+.btn-green.synthesis-ready {
+  position: relative;
+  background: linear-gradient(90deg, #050, #030, #050);
+  border-color: transparent;
+  overflow: hidden;
+}
+
+.btn-green.synthesis-ready::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(
+    90deg,
+    var(--col-geo),
+    var(--col-chem),
+    var(--col-phys),
+    var(--col-geo)
+  );
+  background-size: 300% 100%;
+  animation: synthesis-gradient-flow 2s linear infinite;
+  z-index: -1;
+  border-radius: 2px;
+}
+
+.btn-green.synthesis-ready::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: linear-gradient(180deg, #050, #030);
+  border-radius: 1px;
+  z-index: -1;
+}
+
+@keyframes synthesis-gradient-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+
+.btn-green.synthesis-ready:hover {
+  background: transparent;
+  color: #fff;
+  text-shadow: 
+    0 0 10px var(--col-geo),
+    0 0 20px var(--col-chem),
+    0 0 30px var(--col-phys);
+  transform: translateY(-2px);
+  box-shadow: 
+    0 6px 0 #030,
+    0 0 30px color-mix(in srgb, var(--col-geo) 30%, transparent),
+    0 0 40px color-mix(in srgb, var(--col-chem) 20%, transparent),
+    0 0 50px color-mix(in srgb, var(--col-phys) 20%, transparent);
+}
+
+.btn-green.synthesis-ready .btn-icon {
+  animation: icon-pulse 1s ease-in-out infinite;
+}
+
+@keyframes icon-pulse {
+  0%, 100% { 
+    text-shadow: 0 0 5px var(--col-geo);
+    transform: scale(1);
+  }
+  33% { 
+    text-shadow: 0 0 10px var(--col-chem);
+    transform: scale(1.1);
+  }
+  66% { 
+    text-shadow: 0 0 10px var(--col-phys);
+    transform: scale(1.05);
+  }
 }
 
 #btn-open-lab {
