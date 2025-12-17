@@ -93,6 +93,119 @@ document.addEventListener('DOMContentLoaded', () => {
     const techTooltip = createTechTooltip();
     document.body.appendChild(techTooltip);
     
+    // ═══════════════════════════════════════════════════════════════════
+    // DRAGGABLE UI: permite arrastar btn-evolved-forms e chrono-deck
+    // Persiste posições no localStorage e reposiciona modal próximo ao botão
+    // ═══════════════════════════════════════════════════════════════════
+
+    function enableDrag(el, storageKey) {
+        if (!el) return;
+        el.classList.add('draggable');
+        el.style.touchAction = 'none';
+        el.style.cursor = 'grab';
+
+        // Apply saved position if exists
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            if (saved && saved.left) el.style.left = saved.left;
+            if (saved && saved.top) el.style.top = saved.top;
+            if (saved && saved.right) el.style.right = saved.right;
+            if (saved && saved.bottom) el.style.bottom = saved.bottom;
+        } catch (e) { /* ignore */ }
+
+        let dragging = false;
+        let startX = 0, startY = 0, origX = 0, origY = 0, prevZ = '';
+
+        function onDown(ev) {
+            ev.preventDefault();
+            const p = ev.touches ? ev.touches[0] : ev;
+            startX = p.clientX; startY = p.clientY;
+            const r = el.getBoundingClientRect();
+            origX = r.left; origY = r.top;
+            dragging = true;
+            el.classList.add('dragging');
+            prevZ = el.style.zIndex || '';
+            el.style.zIndex = 2000;
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('mouseup', onUp);
+            window.addEventListener('touchend', onUp);
+        }
+
+        function onMove(ev) {
+            if (!dragging) return;
+            ev.preventDefault();
+            const p = ev.touches ? ev.touches[0] : ev;
+            const dx = p.clientX - startX; const dy = p.clientY - startY;
+            let newLeft = origX + dx; let newTop = origY + dy;
+            const margin = 8;
+            newLeft = Math.max(margin, Math.min(window.innerWidth - el.offsetWidth - margin, newLeft));
+            newTop = Math.max(margin, Math.min(window.innerHeight - el.offsetHeight - margin, newTop));
+            el.style.left = newLeft + 'px';
+            el.style.top = newTop + 'px';
+            el.style.right = 'auto';
+            el.style.bottom = 'auto';
+        }
+
+        function onUp() {
+            if (!dragging) return;
+            dragging = false;
+            el.classList.remove('dragging');
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('touchmove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            window.removeEventListener('touchend', onUp);
+            // Persist position
+            localStorage.setItem(storageKey, JSON.stringify({ left: el.style.left, top: el.style.top }));
+            // restore z after a tick
+            setTimeout(() => { el.style.zIndex = prevZ; }, 10);
+            // If evolved button moved, reposition modal
+            if (el.id === 'btn-evolved-forms') positionEvolvedModalNearButton();
+        }
+
+        el.addEventListener('mousedown', onDown);
+        el.addEventListener('touchstart', onDown, { passive: false });
+
+        // Double-click resets to defaults
+        el.addEventListener('dblclick', () => {
+            localStorage.removeItem(storageKey);
+            if (el.id === 'btn-evolved-forms') {
+                el.style.left = '30px'; el.style.bottom = '30px'; el.style.top = 'auto'; el.style.right = 'auto';
+            } else if (el.id === 'chrono-deck') {
+                el.style.left = '20px'; el.style.bottom = '20px'; el.style.top = 'auto'; el.style.right = 'auto';
+            }
+        });
+    }
+
+    function positionEvolvedModalNearButton() {
+        const btn = document.getElementById('btn-evolved-forms');
+        const modal = document.getElementById('evolved-forms-modal');
+        if (!btn || !modal) return;
+        const rect = btn.getBoundingClientRect();
+        modal.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - modal.offsetWidth - 8)) + 'px';
+        modal.style.bottom = (window.innerHeight - rect.top + 12) + 'px';
+    }
+
+    // Initialize draggables
+    enableDrag(document.getElementById('btn-evolved-forms'), 'ui_pos_evolved_forms');
+    enableDrag(document.getElementById('chrono-deck'), 'ui_pos_chrono_deck');
+
+    // Reposition modal when catalog button is used or window resizes
+    const evolvedBtn = document.getElementById('btn-evolved-forms');
+    evolvedBtn?.addEventListener('click', () => setTimeout(positionEvolvedModalNearButton, 60));
+    window.addEventListener('resize', () => {
+        [document.getElementById('btn-evolved-forms'), document.getElementById('chrono-deck')].forEach(el => {
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            const margin = 8;
+            const maxLeft = window.innerWidth - el.offsetWidth - margin;
+            const maxTop = window.innerHeight - el.offsetHeight - margin;
+            if (rect.left > maxLeft) el.style.left = maxLeft + 'px';
+            if (rect.top > maxTop) el.style.top = maxTop + 'px';
+        });
+        positionEvolvedModalNearButton();
+    }, { passive: true });
+
     /**
      * Cria o elemento de tooltip estilo terminal sci-fi
      */

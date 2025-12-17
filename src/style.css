@@ -1475,7 +1475,11 @@ body.grabbing * {
   transform: none;
   z-index: 1000;
   pointer-events: auto !important;
+  cursor: grab;
+  touch-action: none;
 }
+
+#chrono-deck.dragging { cursor: grabbing; transform: translateZ(0) scale(1.02); box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
 
 #chrono-deck.disabled {
   opacity: 0.4;
@@ -2642,49 +2646,82 @@ body.grabbing * {
 
 /* ═══════════════════════════════════════════════════════════════════
    BOTÃO FLUTUANTE: FORMAS EVOLUÍDAS
+   Posicionado na esquerda para não conflitar com tool-rack
    ═══════════════════════════════════════════════════════════════════ */
 
 #btn-evolved-forms {
   position: fixed;
-  bottom: 200px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, rgba(0, 255, 200, 0.2), rgba(157, 0, 255, 0.2));
+  bottom: 30px;
+  left: 30px;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(0, 255, 200, 0.15), rgba(157, 0, 255, 0.15));
   backdrop-filter: blur(8px);
   border: 2px solid rgba(0, 255, 200, 0.5);
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
+  font-size: 24px;
   color: #0ff;
   box-shadow: 
-    0 0 20px rgba(0, 255, 200, 0.3),
+    0 0 15px rgba(0, 255, 200, 0.3),
     inset 0 0 1px rgba(255, 255, 255, 0.1);
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  z-index: 300;
+  z-index: 600;
   pointer-events: all;
 }
 
+#btn-evolved-forms.dragging { cursor: grabbing; transform: scale(1.02); box-shadow: 0 10px 40px rgba(0,0,0,0.6); }
+
+.draggable { user-select: none; -webkit-user-select: none; }
+
+
+#btn-evolved-forms::after {
+  content: 'CATÁLOGO';
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 5px;
+  color: #0ff;
+  letter-spacing: 1px;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
 #btn-evolved-forms:hover {
-  transform: scale(1.15);
-  background: linear-gradient(135deg, rgba(0, 255, 200, 0.4), rgba(157, 0, 255, 0.3));
+  transform: scale(1.1);
+  background: linear-gradient(135deg, rgba(0, 255, 200, 0.3), rgba(157, 0, 255, 0.25));
   border-color: #0ff;
   box-shadow: 
-    0 0 30px rgba(0, 255, 200, 0.6),
-    0 0 60px rgba(157, 0, 255, 0.4),
+    0 0 25px rgba(0, 255, 200, 0.5),
+    0 0 50px rgba(157, 0, 255, 0.3),
     inset 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+#btn-evolved-forms:hover::after {
+  opacity: 1;
 }
 
 #btn-evolved-forms:active {
   transform: scale(0.95);
 }
 
+#btn-evolved-forms.active {
+  background: linear-gradient(135deg, rgba(0, 255, 200, 0.4), rgba(157, 0, 255, 0.3));
+  border-color: #0ff;
+  box-shadow: 
+    0 0 25px rgba(0, 255, 200, 0.6),
+    inset 0 0 10px rgba(0, 255, 200, 0.2);
+}
+
 .form-icon {
   display: block;
-  font-size: 32px;
+  font-size: 26px;
   animation: pulse-btn 2s ease-in-out infinite;
 }
 
@@ -2697,23 +2734,23 @@ body.grabbing * {
 
 .evolved-modal {
   position: fixed;
-  bottom: 30px;
-  right: 30px;
-  width: 580px;
-  max-height: 650px;
-  background: linear-gradient(135deg, rgba(5, 15, 25, 0.95), rgba(10, 30, 40, 0.95));
+  bottom: 100px;
+  left: 30px;
+  width: 520px;
+  max-height: 550px;
+  background: linear-gradient(135deg, rgba(5, 15, 25, 0.97), rgba(10, 30, 40, 0.97));
   backdrop-filter: blur(15px);
-  border: 2px solid rgba(0, 255, 200, 0.4);
+  border: 2px solid rgba(0, 255, 200, 0.5);
   border-radius: 8px;
   box-shadow: 
-    0 20px 60px rgba(0, 0, 0, 0.7),
-    0 0 40px rgba(0, 255, 200, 0.2),
+    0 20px 60px rgba(0, 0, 0, 0.8),
+    0 0 40px rgba(0, 255, 200, 0.25),
     inset 0 0 1px rgba(255, 255, 255, 0.1);
   display: flex;
   flex-direction: column;
-  z-index: 350;
+  z-index: 700;
   pointer-events: all;
-  animation: slideUpModal 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: slideUpModal 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes slideUpModal {

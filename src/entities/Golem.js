@@ -157,6 +157,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.chewMouthTween = null; // tween for mouth curvature while chewing
         this.eatingAudioEvent = null; // repeated munch sound while feeding
         this.munchEmitter = null; // particle emitter for crumbs
+        this.feedCooldown = 0; // Proteção temporária contra decay após alimentar
         
         this.INSTINCT_RADIUS = 200;
         this.MAX_STEERING_FORCE = 150;
@@ -1702,12 +1703,15 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.vitality = this.maxVitality;
         this.currentLife = this.vitality;
         
-        // IMPORTANTE: Atualiza a barra de vida IMEDIATAMENTE
-        // Isso garante que o visual reflita o valor real
+        // Cooldown de 2 segundos (tempo real, não simulado) para proteger contra decay
+        // Isso garante que a barra de vida mostre 100% por tempo suficiente
+        this.feedCooldown = 2000;
+        
+        // Atualiza a barra de vida IMEDIATAMENTE
         if (this.lifeBar) {
             const vitalityPct = this.vitality / this.maxVitality;
-            this.lifeBar.width = 22 * vitalityPct; // Barra cheia
-            this.lifeBar.setFillStyle(this.visualDNA.bodyColor); // Restaura cor (pode estar vermelha)
+            this.lifeBar.width = 22 * vitalityPct;
+            this.lifeBar.setFillStyle(this.visualDNA.bodyColor);
         }
         
         this.scene.tweens.add({ targets: this, scale: this.targetScale * 1.3, yoyo: true, duration: 200 });
@@ -1926,9 +1930,19 @@ export default class Golem extends Phaser.GameObjects.Container {
             const simSpeed = this.scene.simulationSpeed || 1.0;
             const deltaTime = 100 * simSpeed; 
             this.age += deltaTime;
-            const vitalityDecay = deltaTime * 0.8; 
-            this.vitality -= vitalityDecay;
-            this.vitality = Math.max(0, this.vitality);
+            
+            // Decrementa cooldown de alimentação (tempo real, não simulado)
+            if (this.feedCooldown > 0) {
+                this.feedCooldown -= 100; // 100ms por tick (tempo real)
+            }
+            
+            // Só decai vitalidade se não estiver em cooldown de alimentação
+            if (this.feedCooldown <= 0) {
+                const vitalityDecay = deltaTime * 0.8; 
+                this.vitality -= vitalityDecay;
+                this.vitality = Math.max(0, this.vitality);
+            }
+            
             this.currentLife = this.vitality;
             const vitalityPct = this.vitality / this.maxVitality;
             this.lifeBar.width = 22 * vitalityPct;

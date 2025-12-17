@@ -1,33 +1,38 @@
 /**
  * ═══════════════════════════════════════════════════════════════════════════════
- * HYLOMORPH - START SCENE (BIOS Pattern)
+ * HYLOMORPH - START SCENE (Retro Console Style)
  * ═══════════════════════════════════════════════════════════════════════════════
  * 
- * Sequência de inicialização estilo SNES/16-bit:
+ * Sequência estilo Super Mario 3 / Bomberman:
  * 1. "Power Off" - Tela preta com botão "INITIALIZE SYSTEM"
- * 2. "Title Screen" - Vídeo + Áudio sincronizados após clique
- * 3. "Press Start" - Segundo clique inicia o jogo
+ * 2. "Attract Mode" - Vídeo + Logo + "PRESS START" piscando
+ * 3. "Menu Mode" - Opções aparecem no lugar do PRESS START (sem transição)
  */
 
 export class StartScene extends Phaser.Scene {
     constructor() {
         super({ key: 'StartScene' });
         
-        // Estado
-        this.isTitleScreenActive = false;
+        // Estado da cena
+        this.state = 'boot'; // 'boot' | 'attract' | 'menu'
         this.isTransitioning = false;
+        
+        // Menu state
+        this.selectedIndex = 0;
+        this.menuOptions = [];
+        this.hasSaveData = false;
         
         // Elementos DOM
         this.videoElement = null;
         this.audioElement = null;
         this.bootOverlay = null;
-        this.pressStartOverlay = null;
+        this.gameOverlay = null;
         this.styleElement = null;
         
         // Bind handlers
         this._handlePowerOn = this._handlePowerOn.bind(this);
-        this._handleStartGame = this._handleStartGame.bind(this);
         this._handleKeydown = this._handleKeydown.bind(this);
+        this._handleClick = this._handleClick.bind(this);
     }
     
     preload() {
@@ -35,30 +40,24 @@ export class StartScene extends Phaser.Scene {
     }
     
     create() {
-        // ═══════════════════════════════════════════════════════════════
-        // INJETA CSS
-        // ═══════════════════════════════════════════════════════════════
+        // Verifica se existe save
+        this.hasSaveData = !!localStorage.getItem('hylomorph_data');
+        
+        // Define opções do menu
+        this.menuOptions = [
+            { id: 'continue', label: 'CONTINUAR', enabled: this.hasSaveData },
+            { id: 'new', label: 'NOVO EXPERIMENTO', enabled: true },
+            { id: 'settings', label: 'CONFIGURAÇÕES', enabled: true }
+        ];
+        
+        // Seleciona primeira opção habilitada
+        this.selectedIndex = this.hasSaveData ? 0 : 1;
+        
         this._injectStyles();
-        
-        // ═══════════════════════════════════════════════════════════════
-        // CRIA VÍDEO (PAUSADO)
-        // ═══════════════════════════════════════════════════════════════
         this._createVideo();
-        
-        // ═══════════════════════════════════════════════════════════════
-        // CRIA ÁUDIO (PAUSADO)
-        // ═══════════════════════════════════════════════════════════════
         this._createAudio();
-        
-        // ═══════════════════════════════════════════════════════════════
-        // CRIA BOOT OVERLAY ("POWER OFF" STATE)
-        // ═══════════════════════════════════════════════════════════════
         this._createBootOverlay();
-        
-        // ═══════════════════════════════════════════════════════════════
-        // CRIA PRESS START OVERLAY (INICIALMENTE OCULTO)
-        // ═══════════════════════════════════════════════════════════════
-        this._createPressStartOverlay();
+        this._createGameOverlay();
         
         console.log('[StartScene] Sistema em standby. Aguardando power on...');
     }
@@ -70,7 +69,7 @@ export class StartScene extends Phaser.Scene {
         this.styleElement = document.createElement('style');
         this.styleElement.id = 'start-scene-styles';
         this.styleElement.textContent = `
-            /* ═══ ANIMAÇÕES ═══ */
+            /* ═══ ANIMAÇÕES RETRO ═══ */
             @keyframes blink-cursor {
                 0%, 50% { opacity: 1; }
                 51%, 100% { opacity: 0; }
@@ -78,7 +77,12 @@ export class StartScene extends Phaser.Scene {
             
             @keyframes blink-text {
                 0%, 100% { opacity: 1; }
-                50% { opacity: 0.15; }
+                50% { opacity: 0.2; }
+            }
+            
+            @keyframes cursor-bounce {
+                0%, 100% { transform: translateX(0); }
+                50% { transform: translateX(4px); }
             }
             
             @keyframes pulse-button {
@@ -98,13 +102,18 @@ export class StartScene extends Phaser.Scene {
             }
             
             @keyframes fade-in {
-                from { opacity: 0; }
-                to { opacity: 1; }
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
             }
             
             @keyframes fade-out {
                 from { opacity: 1; }
                 to { opacity: 0; }
+            }
+            
+            @keyframes menu-slide-in {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
             }
             
             /* ═══ BOOT OVERLAY ═══ */
@@ -167,10 +176,6 @@ export class StartScene extends Phaser.Scene {
                 transform: scale(1.05);
             }
             
-            #boot-overlay .power-btn:active {
-                transform: scale(0.98);
-            }
-            
             #boot-overlay.fade-out {
                 animation: fade-out 0.5s ease-out forwards;
                 pointer-events: none;
@@ -184,16 +189,19 @@ export class StartScene extends Phaser.Scene {
                 width: 100vw;
                 height: 100vh;
                 z-index: 10;
-                object-fit: cover;
+                object-fit: contain;
                 background: #000;
+                transform: translateZ(0);
+                -webkit-backface-visibility: hidden;
+                will-change: opacity;
             }
             
             #intro-video.fade-out {
                 animation: fade-out 0.8s ease-out forwards;
             }
             
-            /* ═══ PRESS START OVERLAY ═══ */
-            #press-start-overlay {
+            /* ═══ GAME OVERLAY (PRESS START + MENU) ═══ */
+            #game-overlay {
                 position: fixed;
                 top: 0;
                 left: 0;
@@ -201,31 +209,85 @@ export class StartScene extends Phaser.Scene {
                 height: 100vh;
                 z-index: 15;
                 display: flex;
-                align-items: flex-end;
-                justify-content: center;
-                padding-bottom: 80px;
-                cursor: pointer;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-end;
+                padding-bottom: 60px;
+                font-family: 'Press Start 2P', monospace;
                 opacity: 0;
                 pointer-events: none;
-                transition: opacity 0.5s;
+                transition: opacity 0.3s;
             }
             
-            #press-start-overlay.visible {
+            #game-overlay.visible {
                 opacity: 1;
                 pointer-events: auto;
             }
             
-            #press-start-overlay .press-start-text {
-                font-family: 'Press Start 2P', monospace;
+            /* ═══ PRESS START TEXT ═══ */
+            #press-start-text {
                 font-size: 18px;
                 color: #fff;
                 text-shadow: 
                     0 0 10px rgba(255, 255, 255, 0.8),
-                    0 0 20px rgba(0, 255, 255, 0.6),
-                    0 0 30px rgba(0, 255, 255, 0.4),
-                    2px 2px 0 #000;
+                    0 0 20px rgba(0, 255, 255, 0.5),
+                    3px 3px 0 #000;
                 letter-spacing: 4px;
-                animation: blink-text 1.2s ease-in-out infinite;
+                animation: blink-text 1s ease-in-out infinite;
+                cursor: pointer;
+            }
+            
+            #press-start-text.hidden {
+                display: none;
+            }
+            
+            /* ═══ RETRO MENU ═══ */
+            #retro-menu {
+                display: none;
+                flex-direction: column;
+                align-items: center;
+                gap: 12px;
+                animation: menu-slide-in 0.3s ease-out;
+            }
+            
+            #retro-menu.visible {
+                display: flex;
+            }
+            
+            .menu-item {
+                font-size: 14px;
+                color: #fff;
+                text-shadow: 2px 2px 0 #000;
+                letter-spacing: 2px;
+                cursor: pointer;
+                transition: color 0.1s;
+                padding: 6px 16px;
+            }
+            
+            .menu-item.disabled {
+                color: #555;
+                cursor: not-allowed;
+            }
+            
+            .menu-item.selected {
+                color: #ffdd00;
+                text-shadow: 
+                    0 0 10px rgba(255, 221, 0, 0.5),
+                    2px 2px 0 #000;
+            }
+            
+            .menu-item:not(.disabled):hover {
+                color: #ffdd00;
+            }
+            
+            /* ═══ COPYRIGHT / VERSION ═══ */
+            #game-footer {
+                position: absolute;
+                bottom: 20px;
+                font-size: 8px;
+                color: #666;
+                letter-spacing: 1px;
+                text-shadow: 1px 1px 0 #000;
             }
         `;
         document.head.appendChild(this.styleElement);
@@ -239,10 +301,8 @@ export class StartScene extends Phaser.Scene {
         this.videoElement.id = 'intro-video';
         this.videoElement.loop = true;
         this.videoElement.playsInline = true;
-        this.videoElement.muted = false; // Queremos áudio, mas pelo elemento separado
+        this.videoElement.muted = true;
         this.videoElement.src = 'title-screen.mp4';
-        this.videoElement.muted = true; // Vídeo mudo, áudio separado
-        
         document.body.appendChild(this.videoElement);
     }
     
@@ -255,7 +315,6 @@ export class StartScene extends Phaser.Scene {
         this.audioElement.loop = true;
         this.audioElement.volume = 0.7;
         this.audioElement.src = 'title-screen.mp3';
-        
         document.body.appendChild(this.audioElement);
     }
     
@@ -272,164 +331,361 @@ export class StartScene extends Phaser.Scene {
             <button class="power-btn">[ INITIALIZE SYSTEM ]</button>
         `;
         
-        // Listener de clique
         this.bootOverlay.addEventListener('click', this._handlePowerOn);
-        
         document.body.appendChild(this.bootOverlay);
     }
     
     /**
-     * Cria o overlay "Press Start" (inicialmente oculto)
+     * Cria o overlay de jogo (PRESS START + Menu)
      */
-    _createPressStartOverlay() {
-        this.pressStartOverlay = document.createElement('div');
-        this.pressStartOverlay.id = 'press-start-overlay';
-        this.pressStartOverlay.innerHTML = `
-            <div class="press-start-text">PRESS START</div>
+    _createGameOverlay() {
+        this.gameOverlay = document.createElement('div');
+        this.gameOverlay.id = 'game-overlay';
+        
+        // Gera HTML do menu
+        const menuItemsHTML = this.menuOptions.map((opt, i) => {
+            const disabledClass = opt.enabled ? '' : 'disabled';
+            const selectedClass = i === this.selectedIndex ? 'selected' : '';
+            return `
+                <div class="menu-item ${disabledClass} ${selectedClass}" data-index="${i}" data-id="${opt.id}">
+                    ${opt.label}
+                </div>
+            `;
+        }).join('');
+        
+        this.gameOverlay.innerHTML = `
+            <div id="press-start-text">PRESS START</div>
+            <div id="retro-menu">
+                ${menuItemsHTML}
+            </div>
+            <div id="game-footer">© 2024 TALES SANTIAGO | v0.1.0</div>
         `;
         
-        // Listener de clique
-        this.pressStartOverlay.addEventListener('click', this._handleStartGame);
+        document.body.appendChild(this.gameOverlay);
         
-        document.body.appendChild(this.pressStartOverlay);
+        // Adiciona listeners aos itens do menu
+        this.gameOverlay.querySelectorAll('.menu-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const index = parseInt(item.dataset.index);
+                if (this.menuOptions[index].enabled) {
+                    this.selectedIndex = index;
+                    this._updateMenuSelection();
+                    this._executeMenuAction();
+                } else {
+                    this._playBlockedSound();
+                }
+            });
+            
+            item.addEventListener('mouseenter', () => {
+                if (this.state === 'menu') {
+                    const index = parseInt(item.dataset.index);
+                    this.selectedIndex = index;
+                    this._updateMenuSelection();
+                }
+            });
+        });
     }
     
     /**
-     * Handler: "Power On" - Inicia vídeo e áudio sincronizados
+     * Handler: "Power On" - Inicia vídeo e áudio
      */
     _handlePowerOn() {
-        if (this.isTitleScreenActive) return;
+        if (this.state !== 'boot') return;
         
         console.log('[StartScene] POWER ON! Iniciando título...');
         
-        // ═══════════════════════════════════════════════════════════════
-        // DESBLOQUEIA AUDIO CONTEXT DO PHASER
-        // ═══════════════════════════════════════════════════════════════
+        // Desbloqueia AudioContext
         if (this.sound.context && this.sound.context.state === 'suspended') {
             this.sound.context.resume();
         }
         
-        // ═══════════════════════════════════════════════════════════════
-        // INICIA VÍDEO E ÁUDIO SINCRONIZADOS
-        // ═══════════════════════════════════════════════════════════════
-        // Ambos .play() na mesma execução = sincronia perfeita
+        // Inicia vídeo e áudio
         this.videoElement.play();
         this.audioElement.play();
         
-        // ═══════════════════════════════════════════════════════════════
-        // FADE OUT DO BOOT OVERLAY
-        // ═══════════════════════════════════════════════════════════════
+        // Fade out do boot overlay
         this.bootOverlay.classList.add('fade-out');
+        setTimeout(() => this.bootOverlay?.remove(), 500);
         
+        // Mostra "PRESS START" (Attract Mode)
         setTimeout(() => {
-            if (this.bootOverlay && this.bootOverlay.parentNode) {
-                this.bootOverlay.remove();
-            }
-        }, 500);
-        
-        // ═══════════════════════════════════════════════════════════════
-        // MOSTRA "PRESS START"
-        // ═══════════════════════════════════════════════════════════════
-        setTimeout(() => {
-            this.pressStartOverlay.classList.add('visible');
-            this.isTitleScreenActive = true;
+            this.gameOverlay.classList.add('visible');
+            this.state = 'attract';
             
-            // Adiciona listener de teclado
+            // Adiciona listeners
             document.addEventListener('keydown', this._handleKeydown);
+            this.gameOverlay.addEventListener('click', this._handleClick);
             
-            console.log('[StartScene] Title Screen ativo. Aguardando START...');
+            console.log('[StartScene] Attract Mode ativo. Aguardando START...');
         }, 600);
     }
     
     /**
-     * Handler: Teclas (Enter/Space para iniciar)
+     * Handler: Clique no overlay
      */
-    _handleKeydown(e) {
-        if (e.code === 'Enter' || e.code === 'Space') {
-            this._handleStartGame();
+    _handleClick(e) {
+        if (this.state === 'attract') {
+            // Clique em qualquer lugar = entra no menu
+            this._enterMenuMode();
         }
     }
     
     /**
-     * Handler: "Start Game" - Transição para o jogo
+     * Handler: Teclas
      */
-    _handleStartGame() {
-        if (!this.isTitleScreenActive || this.isTransitioning) return;
+    _handleKeydown(e) {
+        if (this.isTransitioning) return;
+        
+        if (this.state === 'attract') {
+            // Qualquer tecla = entra no menu
+            if (['Enter', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) {
+                this._enterMenuMode();
+            }
+        } else if (this.state === 'menu') {
+            switch (e.code) {
+                case 'ArrowUp':
+                    this._navigateMenu(-1);
+                    break;
+                case 'ArrowDown':
+                    this._navigateMenu(1);
+                    break;
+                case 'Enter':
+                case 'Space':
+                    this._executeMenuAction();
+                    break;
+                case 'Escape':
+                    this._exitMenuMode();
+                    break;
+            }
+        }
+    }
+    
+    /**
+     * Entra no modo Menu
+     */
+    _enterMenuMode() {
+        if (this.state !== 'attract') return;
+        
+        console.log('[StartScene] Entrando no Menu Mode...');
+        this._playSelectSound();
+        
+        // Esconde "PRESS START", mostra menu
+        const pressStart = this.gameOverlay.querySelector('#press-start-text');
+        const menu = this.gameOverlay.querySelector('#retro-menu');
+        
+        pressStart.classList.add('hidden');
+        menu.classList.add('visible');
+        
+        this.state = 'menu';
+        this._updateMenuSelection();
+    }
+    
+    /**
+     * Volta para Attract Mode
+     */
+    _exitMenuMode() {
+        if (this.state !== 'menu') return;
+        
+        this._playBackSound();
+        
+        const pressStart = this.gameOverlay.querySelector('#press-start-text');
+        const menu = this.gameOverlay.querySelector('#retro-menu');
+        
+        menu.classList.remove('visible');
+        pressStart.classList.remove('hidden');
+        
+        this.state = 'attract';
+    }
+    
+    /**
+     * Navega o menu (cima/baixo)
+     */
+    _navigateMenu(direction) {
+        const oldIndex = this.selectedIndex;
+        let newIndex = this.selectedIndex + direction;
+        
+        // Wrap around
+        if (newIndex < 0) newIndex = this.menuOptions.length - 1;
+        if (newIndex >= this.menuOptions.length) newIndex = 0;
+        
+        this.selectedIndex = newIndex;
+        
+        if (oldIndex !== newIndex) {
+            this._playNavigateSound();
+            this._updateMenuSelection();
+        }
+    }
+    
+    /**
+     * Atualiza visual da seleção
+     */
+    _updateMenuSelection() {
+        const items = this.gameOverlay.querySelectorAll('.menu-item');
+        
+        items.forEach((item, i) => {
+            if (i === this.selectedIndex) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+    
+    /**
+     * Executa a ação do menu selecionado
+     */
+    _executeMenuAction() {
+        const option = this.menuOptions[this.selectedIndex];
+        
+        if (!option.enabled) {
+            this._playBlockedSound();
+            return;
+        }
+        
         this.isTransitioning = true;
+        this._playConfirmSound();
         
-        console.log('[StartScene] START GAME!');
+        console.log(`[StartScene] Ação: ${option.id}`);
         
-        // ═══════════════════════════════════════════════════════════════
-        // FADE OUT ÁUDIO
-        // ═══════════════════════════════════════════════════════════════
+        switch (option.id) {
+            case 'continue':
+                this._startGame(true);
+                break;
+            case 'new':
+                // Limpa save anterior
+                localStorage.removeItem('hylomorph_data');
+                this._startGame(false);
+                break;
+            case 'settings':
+                // Placeholder - abre settings
+                this._openSettings();
+                break;
+        }
+    }
+    
+    /**
+     * Inicia o jogo
+     */
+    _startGame(loadSave) {
+        console.log(`[StartScene] Iniciando jogo. LoadSave: ${loadSave}`);
+        
+        // Fade out do áudio
         const fadeAudio = () => {
             if (this.audioElement && this.audioElement.volume > 0.05) {
                 this.audioElement.volume -= 0.05;
-                setTimeout(fadeAudio, 50);
+                setTimeout(fadeAudio, 40);
             } else if (this.audioElement) {
                 this.audioElement.pause();
             }
         };
         fadeAudio();
         
-        // ═══════════════════════════════════════════════════════════════
-        // FADE OUT VISUAL
-        // ═══════════════════════════════════════════════════════════════
+        // Fade out visual
         this.videoElement.classList.add('fade-out');
-        this.pressStartOverlay.style.opacity = '0';
+        this.gameOverlay.style.opacity = '0';
         
-        // ═══════════════════════════════════════════════════════════════
-        // TRANSIÇÃO PARA O MENU
-        // ═══════════════════════════════════════════════════════════════
+        // Transição para SanctuaryScene
         setTimeout(() => {
             this._cleanup();
-            this.scene.start('MainMenuScene');
+            this.scene.start('SanctuaryScene', { 
+                loadGame: loadSave,
+                newGame: !loadSave
+            });
         }, 800);
     }
     
     /**
-     * Remove todos os elementos DOM criados
+     * Abre configurações (placeholder)
      */
+    _openSettings() {
+        // Por enquanto, apenas feedback de "não implementado"
+        this._playBlockedSound();
+        this.isTransitioning = false;
+        
+        // Pisca o item pra feedback
+        const item = this.gameOverlay.querySelector(`[data-id="settings"]`);
+        item.style.color = '#ff4444';
+        setTimeout(() => {
+            item.style.color = '';
+        }, 200);
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // SONS (usando AudioContext para sons retro simples)
+    // ═══════════════════════════════════════════════════════════════
+    
+    _playSelectSound() {
+        this._playTone(800, 0.1, 'square');
+    }
+    
+    _playNavigateSound() {
+        this._playTone(400, 0.05, 'square');
+    }
+    
+    _playConfirmSound() {
+        this._playTone(600, 0.08, 'square');
+        setTimeout(() => this._playTone(900, 0.12, 'square'), 80);
+    }
+    
+    _playBlockedSound() {
+        this._playTone(150, 0.15, 'square');
+    }
+    
+    _playBackSound() {
+        this._playTone(300, 0.08, 'square');
+    }
+    
+    _playTone(frequency, duration, type = 'sine') {
+        try {
+            const ctx = this.sound.context;
+            if (!ctx || ctx.state === 'suspended') return;
+            
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = type;
+            osc.frequency.value = frequency;
+            gain.gain.value = 0.15;
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start();
+            osc.stop(ctx.currentTime + duration);
+        } catch (e) { }
+    }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // CLEANUP
+    // ═══════════════════════════════════════════════════════════════
+    
     _cleanup() {
-        // Remove event listeners
         document.removeEventListener('keydown', this._handleKeydown);
         
-        // Remove elementos
-        if (this.videoElement && this.videoElement.parentNode) {
+        if (this.videoElement?.parentNode) {
             this.videoElement.pause();
             this.videoElement.remove();
         }
         
-        if (this.audioElement && this.audioElement.parentNode) {
+        if (this.audioElement?.parentNode) {
             this.audioElement.pause();
             this.audioElement.remove();
         }
         
-        if (this.bootOverlay && this.bootOverlay.parentNode) {
-            this.bootOverlay.remove();
-        }
+        this.bootOverlay?.remove();
+        this.gameOverlay?.remove();
+        this.styleElement?.remove();
         
-        if (this.pressStartOverlay && this.pressStartOverlay.parentNode) {
-            this.pressStartOverlay.remove();
-        }
-        
-        if (this.styleElement && this.styleElement.parentNode) {
-            this.styleElement.remove();
-        }
-        
-        // Limpa referências
         this.videoElement = null;
         this.audioElement = null;
         this.bootOverlay = null;
-        this.pressStartOverlay = null;
+        this.gameOverlay = null;
         this.styleElement = null;
         
         console.log('[StartScene] Cleanup completo.');
     }
     
-    /**
-     * Cleanup forçado se a cena for desligada
-     */
     shutdown() {
         this._cleanup();
     }
