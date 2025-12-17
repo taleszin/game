@@ -246,7 +246,7 @@ export default class SanctuaryScene extends Phaser.Scene {
               });
           } else if (stability >= 0.9) {
               // Alquimia perfeita: texto dourado
-              const alchemyText = this.add.text(x, y - 50, '✨ ALQUIMIA', {
+              const alchemyText = this.add.text(x, y - 50, ' ALQUIMIA', {
                   fontFamily: '"Press Start 2P"',
                   fontSize: '8px',
                   fill: '#ffd700',
@@ -273,6 +273,13 @@ export default class SanctuaryScene extends Phaser.Scene {
           }
 
           this.spawnGolem(x, y + 30, childData);
+          
+          // Emite evento de breeding bem-sucedido (para Tutorial)
+          this.game.events.emit('breed-success', { 
+            childData, 
+            parent1Id: parent1.id, 
+            parent2Id: parent2.id 
+          });
           
           if(parent1.body) parent1.body.setVelocity(-150, -150);
           if(parent2.body) parent2.body.setVelocity(150, 150);

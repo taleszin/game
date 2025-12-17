@@ -5,6 +5,7 @@ import { ELEMENTS } from './data/gameData.js';
 import { calculateGeometry } from './utils/GeometryMath.js';
 import { initEvolvedFormsUI, setupModalBackdropClose, unlockForm } from './ui/evolved-forms-ui.js';
 import { UISoundSystem } from './systems/UISoundSystem.js';
+import { TutorialSystem } from './systems/TutorialSystem.js';
 import './style.css';
 
 const config = {
@@ -570,15 +571,59 @@ document.addEventListener('DOMContentLoaded', () => {
     const treeModal = document.getElementById('tree-modal');
     const btnCloseTree = document.getElementById('btn-close-tree');
     const treeContent = document.getElementById('tree-content');
+    
+    // Armazena os dados da árvore para acesso posterior
+    let currentFamilyData = [];
+
+    // Garantias de acessibilidade e suporte a scroll por roda/teclado
+    if (treeContent) {
+        // Torna focável para permitir keyboard scrolling (PageUp/PageDown, arrows)
+        treeContent.tabIndex = 0;
+
+        // O scroll CSS nativo deve funcionar; este listener é backup para edge cases
+        treeContent.addEventListener('wheel', (ev) => {
+            // Só manipula quando o modal estiver visível
+            if (treeModal && treeModal.classList.contains('hidden')) return;
+            
+            // Verifica se o scroll nativo está funcionando
+            const hasScrollableContent = treeContent.scrollHeight > treeContent.clientHeight;
+            if (!hasScrollableContent) return; // Nada a rolar
+            
+            // Aplica scroll manualmente se o nativo não estiver sendo processado
+            const atTop = treeContent.scrollTop <= 0;
+            const atBottom = treeContent.scrollTop + treeContent.clientHeight >= treeContent.scrollHeight;
+            
+            // Só previne default se não estiver nos limites do scroll
+            if ((ev.deltaY < 0 && !atTop) || (ev.deltaY > 0 && !atBottom)) {
+                // Deixa o scroll nativo funcionar, não interfere
+            }
+        }, { passive: true }); // passive: true para não bloquear scroll
+    }
 
     if (btnTree) {
         btnTree.addEventListener('click', () => {
-            treeModal.classList.toggle('hidden');
+            UISoundSystem.playOpen();
+            treeModal.classList.remove('hidden');
+            // Força re-render da árvore ao abrir usando os dados armazenados
+            renderFamilyTree(currentFamilyData);
         });
     }
     if (btnCloseTree) {
-        btnCloseTree.addEventListener('click', () => {
+        btnCloseTree.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            UISoundSystem.playClose();
             treeModal.classList.add('hidden');
+        });
+    }
+    
+    // Fechar modal ao clicar fora do conteúdo (no backdrop)
+    if (treeModal) {
+        treeModal.addEventListener('click', (e) => {
+            if (e.target === treeModal) {
+                UISoundSystem.playClose();
+                treeModal.classList.add('hidden');
+            }
         });
     }
 
@@ -691,7 +736,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     game.events.on('update-tree', (familyData) => {
-        renderFamilyTree(familyData);
+        // Atualiza a referência global dos dados
+        currentFamilyData = familyData || [];
+        // Re-renderiza se o modal estiver visível
+        if (!treeModal.classList.contains('hidden')) {
+            renderFamilyTree(currentFamilyData);
+        }
     });
 
     function renderFamilyTree(data) {
@@ -743,14 +793,54 @@ document.addEventListener('DOMContentLoaded', () => {
             generations[g].push(d);
         });
 
-        // 3. Header com estatísticas
+        // 3. Header com estatísticas e Barra de Progresso de Descoberta
         const statsHeader = document.createElement('div');
         statsHeader.className = 'tree-stats-header';
         const totalGolems = data.length;
         const maxGen = Math.max(...Object.keys(generations).map(Number));
+        
+        // Calcula formas raras descobertas
+        const rareShapes = ['tesseract', 'fractal', 'espiral', 'monolito', 'cristal'];
+        const discoveredRares = new Set();
+        data.forEach(g => {
+            if (rareShapes.includes(g.forma?.id)) {
+                discoveredRares.add(g.forma.id);
+            }
+        });
+        const raresFound = discoveredRares.size;
+        
+        // Progresso baseado em formas evoluídas (16 total no ELEMENTS.formaEvoluida)
+        const totalEvolved = 16;
+        const uniqueShapes = new Set(data.map(g => g.forma?.id).filter(Boolean));
+        const evolvedDiscovered = [...uniqueShapes].filter(s => 
+            ELEMENTS.formaEvoluida.some(f => f.id === s)
+        ).length;
+        const progressPercent = Math.min(100, Math.round((evolvedDiscovered / totalEvolved) * 100));
+        
         statsHeader.innerHTML = `
-            <div class="stat-item"><span class="stat-value">${totalGolems}</span><span class="stat-label">REGISTROS</span></div>
-            <div class="stat-item"><span class="stat-value">${maxGen + 1}</span><span class="stat-label">GERAÇÕES</span></div>
+            <div class="discovery-progress">
+                <div class="discovery-label">
+                    <span>BANCO DE DADOS GENÔMICO</span>
+                    <span class="discovery-percent">${progressPercent}% COMPLETO</span>
+                </div>
+                <div class="discovery-bar">
+                    <div class="discovery-fill" style="width: ${progressPercent}%"></div>
+                </div>
+            </div>
+            <div class="tree-counters">
+                <div class="counter-item">
+                    <span class="counter-value cyan">${totalGolems}</span>
+                    <span class="counter-label">REGISTROS</span>
+                </div>
+                <div class="counter-item">
+                    <span class="counter-value purple">${maxGen + 1}</span>
+                    <span class="counter-label">GERAÇÕES</span>
+                </div>
+                <div class="counter-item">
+                    <span class="counter-value gold">${raresFound}</span>
+                    <span class="counter-label">MUTAÇÕES</span>
+                </div>
+            </div>
         `;
         treeContent.appendChild(statsHeader);
 
@@ -793,6 +883,55 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const physColor = PHYSICS_COLORS[physId] || '#0ff';
         card.style.setProperty('--card-color', physColor);
+        
+        // ═══ SISTEMA DE STATUS: Vivo vs Arquivado ═══
+        const isAlive = rec.isAlive !== undefined ? rec.isAlive : true;
+        if (!isAlive) {
+            card.classList.add('archived');
+            card.style.setProperty('--status-color', '#666');
+        } else {
+            card.style.setProperty('--status-color', '#00ff00');
+        }
+        
+        // ═══ SISTEMA DE RARIDADE ═══
+        const rareShapes = ['tesseract', 'fractal', 'espiral', 'monolito'];
+        const isRare = rareShapes.includes(shapeId);
+        const isAnomaly = rec.tags?.includes('anomalia') || rec.isAnomaly;
+        
+        if (isRare || isAnomaly) {
+            card.classList.add('rare');
+        }
+        
+        // ═══ TAG "NOVO" (nasceu há menos de 1 minuto) ═══
+        const birthTime = rec.birthTime || rec.createdAt || 0;
+        const now = Date.now();
+        const isNew = (now - birthTime) < 60000; // 60 segundos
+        
+        // ═══ SCAN LINE EFFECT ═══
+        const scanLine = document.createElement('div');
+        scanLine.className = 'scan-line';
+        card.appendChild(scanLine);
+        
+        // ═══ BADGE DE RARIDADE ═══
+        if (isAnomaly) {
+            const badge = document.createElement('div');
+            badge.className = 'rarity-badge anomaly';
+            badge.textContent = '⚠ ANOMALIA';
+            card.appendChild(badge);
+        } else if (isRare) {
+            const badge = document.createElement('div');
+            badge.className = 'rarity-badge legendary';
+            badge.textContent = '★ RARO';
+            card.appendChild(badge);
+        }
+        
+        // ═══ TAG NOVO ═══
+        if (isNew) {
+            const newTag = document.createElement('div');
+            newTag.className = 'new-data-tag';
+            newTag.textContent = 'NEW DATA';
+            card.appendChild(newTag);
+        }
         
         // === PARTE COLAPSADA (Sempre Visível) ===
         const collapsed = document.createElement('div');
@@ -910,13 +1049,72 @@ document.addEventListener('DOMContentLoaded', () => {
             expandableInner.appendChild(lineageSection);
         }
         
+        // 5. Botão de Inspeção Completa
+        const inspectBtn = document.createElement('button');
+        inspectBtn.className = 'card-inspect-btn';
+        inspectBtn.innerHTML = '🔍 INSPECIONAR REGISTRO';
+        inspectBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            
+            // Som de scan/data access
+            UISoundSystem.playDataScan();
+            
+            // Constrói payload de inspeção a partir do registro histórico
+            const inspectData = {
+                visual: { 
+                    forma: rec.forma, 
+                    quimica: rec.quimica, 
+                    fisica: rec.fisica 
+                },
+                stats: { 
+                    name: rec.name, 
+                    stats: stats, 
+                    description: isAlive ? "Entidade ativa no ecossistema." : "⚠ REGISTRO ARQUIVADO - Entidade descontinuada.",
+                    dialogo: rec.aiData?.description || "Dados de personalidade não disponíveis."
+                },
+                lifeLog: rec.lifeLog || [],
+                liveData: { 
+                    lifePhase: isAlive ? 'active' : 'archived', 
+                    currentScaleX: scaleX, 
+                    currentScaleY: scaleY,
+                    golemRef: null // Sem referência viva se arquivado
+                }
+            };
+            
+            // Emite evento de inspeção (usa o mesmo handler da cena principal)
+            game.events.emit('inspect-golem', inspectData);
+        });
+        expandableInner.appendChild(inspectBtn);
+        
+        // 6. Botão de Colapsar (dentro da área expandida)
+        const collapseBtn = document.createElement('button');
+        collapseBtn.className = 'card-collapse-btn';
+        collapseBtn.innerHTML = '▲ RECOLHER';
+        collapseBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            UISoundSystem.playClick('close');
+            card.classList.remove('expanded');
+        });
+        expandableInner.appendChild(collapseBtn);
+        
         expandable.appendChild(expandableInner);
         card.appendChild(expandable);
 
-        // === CLICK HANDLER: Toggle Accordion (Autossuficiente, sem modal) ===
+        // === CLICK HANDLER: Toggle Accordion ===
+        // Clique na área colapsada para expandir
         collapsed.addEventListener('click', (e) => {
             e.stopPropagation();
+            UISoundSystem.playClick('card');
             card.classList.toggle('expanded');
+        });
+        
+        // Clique no card inteiro quando NÃO expandido também expande
+        card.addEventListener('click', (e) => {
+            // Só expande se não estiver expandido e o clique não foi em um botão
+            if (!card.classList.contains('expanded') && !e.target.closest('button')) {
+                UISoundSystem.playClick('card');
+                card.classList.add('expanded');
+            }
         });
 
         return card;
@@ -1791,7 +1989,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isReady = currentSelection.forma && currentSelection.quimica && currentSelection.fisica;
         if (isReady) {
             btnSynthesize.disabled = false;
-            btnSynthesize.innerHTML = '<span class="btn-icon">✨</span> SINTETIZAR';
+            btnSynthesize.innerHTML = '<span class="btn-icon"></span> SINTETIZAR';
             btnSynthesize.classList.add('synthesis-ready');
         } else {
             btnSynthesize.disabled = true;
@@ -1842,7 +2040,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btnOpen.classList.remove('hidden');
             exitCreationMode(false); // SINTETIZAR: Mantém 1x para observar spawn
             resetSelection();
-            btnSynthesize.innerHTML = '<span class="btn-icon">✨</span> SINTETIZAR';
+            btnSynthesize.innerHTML = '<span class="btn-icon"></span> SINTETIZAR';
         }, 800);
     });
 
@@ -2108,4 +2306,14 @@ document.addEventListener('DOMContentLoaded', () => {
         draggedTool = null;
         ghostElement = null;
     }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // SISTEMA DE TUTORIAL (FTUE - First Time User Experience)
+    // ═══════════════════════════════════════════════════════════════════
+    
+    // Instancia o tutorial após todo o DOM estar pronto
+    const tutorial = new TutorialSystem(game);
+    
+    // Expõe para debug (TutorialSystem.reset() para resetar)
+    window.tutorial = tutorial;
 });

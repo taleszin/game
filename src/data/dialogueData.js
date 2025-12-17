@@ -75,7 +75,7 @@ export const DIALOGUE_BY_PHYSICS = {
         ]
     },
 
-    // ✨ LUZ: Etéreo, espiritual, rápido, fala sobre óptica, verdade e pureza.
+    // LUZ: Etéreo, espiritual, rápido, fala sobre óptica, verdade e pureza.
     luz: {
         idle: [
             "Iluminando~", "Fótons dançando...", "Brilho~", "Refletindo verdades...",
