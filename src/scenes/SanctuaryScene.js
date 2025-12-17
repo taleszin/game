@@ -14,6 +14,16 @@ export default class SanctuaryScene extends Phaser.Scene {
     this.pauseOverlay = null;
   }
 
+  /**
+   * Recebe parâmetros passados pelo MainMenuScene
+   */
+  init(data) {
+    this.loadGame = data?.loadGame || false;
+    this.isNewGame = data?.newGame || false;
+    
+    console.log(`[SanctuaryScene] Init - LoadGame: ${this.loadGame}, NewGame: ${this.isNewGame}`);
+  }
+
   preload() {
     const graphics = this.make.graphics({x: 0, y: 0, add: false});
     graphics.fillStyle(0xffffff, 1);
@@ -22,16 +32,38 @@ export default class SanctuaryScene extends Phaser.Scene {
   }
 
   create() {
-        this.golemRecords = [];
-    const bgGraphics = this.add.graphics();
-    bgGraphics.fillStyle(0x111111, 1);
-    bgGraphics.fillRect(0, 0, 800, 600);
-    bgGraphics.lineStyle(1, 0x222222, 1);
-    for (let y = 0; y < 600; y += 40) {
-        for (let x = 0; x < 800; x += 40) {
-            bgGraphics.strokeRect(x, y, 40, 40);
+        // ═══ MOSTRA CANVAS E UI DO JOGO ═══
+        const gameContainer = document.getElementById('game-container');
+        const uiLayer = document.getElementById('ui-layer');
+        
+        if (gameContainer) {
+            gameContainer.style.opacity = '1';
+            gameContainer.style.pointerEvents = 'auto';
         }
-    }
+        
+        if (uiLayer) {
+            uiLayer.style.opacity = '1';
+        }
+        
+        // ═══ INICIA TUTORIAL SE FOR NOVO JOGO ═══
+        if (this.isNewGame) {
+            console.log('[SanctuaryScene] Novo jogo detectado - iniciando tutorial...');
+            // Pequeno delay para garantir que a UI está pronta
+            this.time.delayedCall(300, () => {
+                this.game.events.emit('start-tutorial');
+            });
+        }
+        
+        this.golemRecords = [];
+        const bgGraphics = this.add.graphics();
+        bgGraphics.fillStyle(0x111111, 1);
+        bgGraphics.fillRect(0, 0, 800, 600);
+        bgGraphics.lineStyle(1, 0x222222, 1);
+        for (let y = 0; y < 600; y += 40) {
+            for (let x = 0; x < 800; x += 40) {
+                bgGraphics.strokeRect(x, y, 40, 40);
+            }
+        }
 
     this.golemsGroup = this.add.group();
 
@@ -46,6 +78,63 @@ export default class SanctuaryScene extends Phaser.Scene {
 
     this.game.events.on('tool-used', (data) => {
         this.handleToolAction(data.x, data.y, data.action);
+    });
+    
+    // ═══ SISTEMA DE REAÇÃO DE MEDO ═══
+    // Golems reagem quando ferramentas perigosas são arrastadas
+    this.currentThreat = null;
+    this.threatPosition = { x: 0, y: 0 };
+    
+    this.game.events.on('tool-drag-start', (data) => {
+        const dangerousTools = ['kill', 'taser', 'burn', 'singularity'];
+        if (dangerousTools.includes(data.action)) {
+            this.currentThreat = data.action;
+        }
+    });
+    
+    this.game.events.on('tool-drag-move', (data) => {
+        this.threatPosition = { x: data.x, y: data.y };
+        
+        // Verifica se há Golem sob o cursor para Target Lock
+        if (this.golemsGroup) {
+            const golems = this.golemsGroup.getChildren();
+            let foundTarget = null;
+            
+            for (const golem of golems) {
+                if (!golem.active) continue;
+                const dist = Phaser.Math.Distance.Between(golem.x, golem.y, data.x, data.y);
+                if (dist < 60) {
+                    foundTarget = golem;
+                    break;
+                }
+            }
+            
+            if (foundTarget) {
+                // Determina tipo de target lock
+                let lockType = 'neutral';
+                if (['kill', 'taser', 'burn'].includes(data.action)) lockType = 'hostile';
+                if (['feed'].includes(data.action)) lockType = 'friendly';
+                
+                // Converte posição do jogo para tela
+                const canvas = document.querySelector('canvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    const screenX = rect.left + (foundTarget.x / 800) * rect.width;
+                    const screenY = rect.top + (foundTarget.y / 600) * rect.height;
+                    
+                    this.game.events.emit('show-target-lock', {
+                        screenX, screenY, type: lockType
+                    });
+                }
+            } else {
+                this.game.events.emit('hide-target-lock');
+            }
+        }
+    });
+    
+    this.game.events.on('tool-drag-end', () => {
+        this.currentThreat = null;
+        this.game.events.emit('hide-target-lock');
     });
 
     // ═══ CONTROLE DE TEMPO ═══
@@ -111,6 +200,12 @@ export default class SanctuaryScene extends Phaser.Scene {
       const golems = this.golemsGroup.getChildren();
       let hit = false;
 
+      // ═══ SINGULARITY - Afeta área, não precisa de alvo direto ═══
+      if (action === 'singularity') {
+          this.createSingularity(x, y);
+          return;
+      }
+
       for (let i = golems.length - 1; i >= 0; i--) {
           const golem = golems[i];
           const distance = Phaser.Math.Distance.Between(golem.x, golem.y, x, y);
@@ -123,6 +218,8 @@ export default class SanctuaryScene extends Phaser.Scene {
               if (action === 'kill') golem.kill();
               if (action === 'freeze') golem.freeze();
               if (action === 'mutate') golem.mutate();
+              if (action === 'taser') this.applyTaser(golem);
+              if (action === 'mutagen') this.applyMutagen(golem);
               
               hit = true;
               break; 
@@ -161,10 +258,255 @@ export default class SanctuaryScene extends Phaser.Scene {
       if (action === 'kill') text = '💀';
       if (action === 'freeze') text = '❄️';
       if (action === 'mutate') text = '🧬';
+      if (action === 'singularity') text = '🌀';
+      if (action === 'taser') text = '⚡';
+      if (action === 'mutagen') text = '💉';
 
       const missText = this.add.text(x, y, text, { fontSize: '20px' }).setOrigin(0.5);
       this.tweens.add({
           targets: missText, y: y - 40, alpha: 0, duration: 600, onComplete: () => missText.destroy()
+      });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // NOVAS FERRAMENTAS
+  // ═══════════════════════════════════════════════════════════════════════════════
+
+  /**
+   * 🌀 SINGULARITY - Cria poço gravitacional que puxa Golems
+   */
+  createSingularity(x, y) {
+      console.log('[Singularity] Criando poço gravitacional em', x, y);
+      
+      // Efeito visual do buraco negro
+      const blackHole = this.add.circle(x, y, 10, 0x000000);
+      blackHole.setStrokeStyle(3, 0x9900ff);
+      blackHole.setDepth(50);
+      
+      // Anéis de acreção
+      const ring1 = this.add.circle(x, y, 40);
+      ring1.setStrokeStyle(2, 0x9900ff, 0.5);
+      const ring2 = this.add.circle(x, y, 60);
+      ring2.setStrokeStyle(1, 0x6600cc, 0.3);
+      
+      // Animação dos anéis
+      this.tweens.add({
+          targets: [ring1, ring2],
+          scale: { from: 0.5, to: 1.5 },
+          alpha: { from: 0.8, to: 0 },
+          duration: 500,
+          repeat: 5,
+          yoyo: false
+      });
+      
+      // Expande o buraco
+      this.tweens.add({
+          targets: blackHole,
+          scale: 3,
+          duration: 300,
+          ease: 'Quad.easeOut'
+      });
+      
+      // Aplica força gravitacional por 3 segundos
+      const duration = 3000;
+      const startTime = Date.now();
+      const pullStrength = 150;
+      const pullRadius = 200;
+      
+      const gravityEvent = this.time.addEvent({
+          delay: 16,
+          repeat: Math.floor(duration / 16),
+          callback: () => {
+              const elapsed = Date.now() - startTime;
+              const progress = elapsed / duration;
+              const currentStrength = pullStrength * (1 - progress * 0.5); // Enfraquece ao longo do tempo
+              
+              const golems = this.golemsGroup.getChildren();
+              for (const golem of golems) {
+                  if (!golem.active || !golem.body) continue;
+                  
+                  const dist = Phaser.Math.Distance.Between(golem.x, golem.y, x, y);
+                  if (dist < pullRadius && dist > 20) {
+                      const angle = Phaser.Math.Angle.Between(golem.x, golem.y, x, y);
+                      const force = currentStrength * (1 - dist / pullRadius);
+                      
+                      golem.body.velocity.x += Math.cos(angle) * force * 0.5;
+                      golem.body.velocity.y += Math.sin(angle) * force * 0.5;
+                  }
+              }
+          }
+      });
+      
+      // Cleanup após 3 segundos
+      this.time.delayedCall(duration, () => {
+          this.tweens.add({
+              targets: [blackHole, ring1, ring2],
+              scale: 0,
+              alpha: 0,
+              duration: 300,
+              onComplete: () => {
+                  blackHole.destroy();
+                  ring1.destroy();
+                  ring2.destroy();
+              }
+          });
+      });
+  }
+
+  /**
+   * ⚡ TASER - Induz pânico e repulsão
+   */
+  applyTaser(golem) {
+      if (!golem.active) return;
+      
+      console.log('[Taser] Aplicando choque em', golem.golemId);
+      
+      // Efeito visual de eletricidade
+      const lightning = this.add.text(golem.x, golem.y - 30, '⚡⚡⚡', { 
+          fontSize: '16px' 
+      }).setOrigin(0.5);
+      
+      // Flash amarelo
+      this.cameras.main.flash(100, 255, 255, 0, false);
+      
+      // Shake no golem
+      this.tweens.add({
+          targets: golem,
+          x: golem.x + Phaser.Math.Between(-5, 5),
+          duration: 50,
+          repeat: 10,
+          yoyo: true
+      });
+      
+      // Remove texto
+      this.tweens.add({
+          targets: lightning,
+          y: golem.y - 60,
+          alpha: 0,
+          duration: 500,
+          onComplete: () => lightning.destroy()
+      });
+      
+      // Aplica força de repulsão forte
+      if (golem.body) {
+          const repulseAngle = Math.random() * Math.PI * 2;
+          golem.body.velocity.x = Math.cos(repulseAngle) * 300;
+          golem.body.velocity.y = Math.sin(repulseAngle) * 300;
+      }
+      
+      // Estado de pânico por 5 segundos
+      golem.isPanicked = true;
+      golem.panicEndTime = Date.now() + 5000;
+      
+      // Expressão de medo
+      if (golem.setFearExpression) golem.setFearExpression();
+      
+      // Faz o golem gritar
+      if (golem.speakContextual) golem.speakContextual('pain');
+      
+      // Remove estado de pânico após 5s
+      this.time.delayedCall(5000, () => {
+          if (golem.active) {
+              golem.isPanicked = false;
+              if (golem.resetExpression) golem.resetExpression();
+          }
+      });
+  }
+
+  /**
+   * 💉 MUTAGEN - Rerola atributo com chance de morte
+   */
+  applyMutagen(golem) {
+      if (!golem.active) return;
+      
+      console.log('[Mutagen] Injetando mutageno em', golem.golemId);
+      
+      // Efeito visual de injeção
+      const syringe = this.add.text(golem.x + 20, golem.y, '💉', { 
+          fontSize: '20px' 
+      }).setOrigin(0.5);
+      
+      this.tweens.add({
+          targets: syringe,
+          x: golem.x,
+          duration: 200,
+          onComplete: () => {
+              syringe.destroy();
+              
+              // 10% chance de morte
+              if (Math.random() < 0.1) {
+                  console.log('[Mutagen] CRÍTICO! Golem morreu pela mutação.');
+                  
+                  // Efeito de morte tóxica
+                  const deathText = this.add.text(golem.x, golem.y - 20, '☠️ CRITICAL', {
+                      fontFamily: '"Press Start 2P"',
+                      fontSize: '10px',
+                      color: '#ff0000'
+                  }).setOrigin(0.5);
+                  
+                  this.tweens.add({
+                      targets: deathText,
+                      y: golem.y - 60,
+                      alpha: 0,
+                      duration: 1000,
+                      onComplete: () => deathText.destroy()
+                  });
+                  
+                  golem.kill();
+                  return;
+              }
+              
+              // Rerola um atributo aleatório
+              this.rerollGolemAttribute(golem);
+          }
+      });
+  }
+
+  /**
+   * Rerola um atributo visual do Golem
+   */
+  rerollGolemAttribute(golem) {
+      if (!golem.visualDNA) return;
+      
+      const attributes = ['bodyColor', 'auraColor', 'eyeColor'];
+      const chosenAttr = attributes[Math.floor(Math.random() * attributes.length)];
+      
+      // Gera nova cor aleatória
+      const newColor = Phaser.Display.Color.RandomRGB().color;
+      
+      console.log(`[Mutagen] Rerolando ${chosenAttr} para`, newColor.toString(16));
+      
+      // Aplica mutação
+      golem.visualDNA[chosenAttr] = newColor;
+      
+      // Força redesenho se o método existir
+      if (golem.redraw) {
+          golem.redraw();
+      }
+      
+      // Efeito visual de transformação
+      const mutateText = this.add.text(golem.x, golem.y - 30, '🧪 MUTATED', {
+          fontFamily: '"Press Start 2P"',
+          fontSize: '8px',
+          color: '#00ff88'
+      }).setOrigin(0.5);
+      
+      this.tweens.add({
+          targets: mutateText,
+          y: golem.y - 60,
+          alpha: 0,
+          duration: 1000,
+          onComplete: () => mutateText.destroy()
+      });
+      
+      // Flash verde
+      const flash = this.add.circle(golem.x, golem.y, 30, 0x00ff88, 0.5);
+      this.tweens.add({
+          targets: flash,
+          scale: 2,
+          alpha: 0,
+          duration: 300,
+          onComplete: () => flash.destroy()
       });
   }
 
@@ -413,5 +755,81 @@ export default class SanctuaryScene extends Phaser.Scene {
     }
     this.pauseOverlay.destroy();
     this.pauseOverlay = null;
+  }
+
+  /**
+   * Update loop - Processa reação de medo ao cursor com ferramenta
+   */
+  update(time, delta) {
+      if (this.isPaused) return;
+      
+      // ═══ REAÇÃO DE MEDO ═══
+      // Golems fogem lentamente quando ferramentas perigosas estão sendo arrastadas
+      if (this.currentThreat && this.golemsGroup) {
+          const dangerousTools = ['kill', 'taser', 'burn'];
+          const fearRadius = 120;
+          const fleeSpeed = 30;
+          
+          if (dangerousTools.includes(this.currentThreat)) {
+              const golems = this.golemsGroup.getChildren();
+              
+              for (const golem of golems) {
+                  if (!golem.active || !golem.body) continue;
+                  
+                  const dist = Phaser.Math.Distance.Between(
+                      golem.x, golem.y, 
+                      this.threatPosition.x, this.threatPosition.y
+                  );
+                  
+                  if (dist < fearRadius) {
+                      // Calcula direção de fuga (oposta ao cursor)
+                      const angle = Phaser.Math.Angle.Between(
+                          this.threatPosition.x, this.threatPosition.y,
+                          golem.x, golem.y
+                      );
+                      
+                      // Força de fuga diminui com a distância
+                      const fearIntensity = 1 - (dist / fearRadius);
+                      const fleeForce = fleeSpeed * fearIntensity * (delta / 16);
+                      
+                      golem.body.velocity.x += Math.cos(angle) * fleeForce;
+                      golem.body.velocity.y += Math.sin(angle) * fleeForce;
+                      
+                      // Mostra expressão de medo (se não estiver já)
+                      if (!golem.isFearful && golem.setFearExpression) {
+                          golem.isFearful = true;
+                          golem.setFearExpression();
+                      }
+                  } else if (golem.isFearful) {
+                      // Reset expressão quando longe da ameaça
+                      golem.isFearful = false;
+                      if (golem.resetExpression) golem.resetExpression();
+                  }
+              }
+          }
+      }
+      
+      // ═══ COMPORTAMENTO DE PÂNICO (TASER) ═══
+      if (this.golemsGroup) {
+          const golems = this.golemsGroup.getChildren();
+          const now = Date.now();
+          
+          for (const golem of golems) {
+              if (!golem.active || !golem.body || !golem.isPanicked) continue;
+              
+              // Movimento errático durante pânico
+              if (Math.random() < 0.1) {
+                  const panicAngle = Math.random() * Math.PI * 2;
+                  golem.body.velocity.x = Math.cos(panicAngle) * 150;
+                  golem.body.velocity.y = Math.sin(panicAngle) * 150;
+              }
+              
+              // Verifica se o pânico acabou
+              if (now > golem.panicEndTime) {
+                  golem.isPanicked = false;
+                  if (golem.resetExpression) golem.resetExpression();
+              }
+          }
+      }
   }
 }

@@ -36,9 +36,9 @@ const STEPS = {
 const STEP_CONFIG = {
     [STEPS.WELCOME]: {
         type: 'modal',
-        icon: '⚡',
-        title: 'SISTEMA HYLOMORPH',
-        message: 'Protocolo de calibragem iniciado.\nVocê irá criar sua primeira forma de vida.',
+        icon: '',
+        title: 'HYLOMORPH',
+        message: 'Protocolo de calibragem iniciado.\nVocê irá criar sua primeira forma !',
         buttonText: 'INICIAR'
     },
     [STEPS.OPEN_LAB]: {
@@ -51,7 +51,8 @@ const STEP_CONFIG = {
         type: 'highlight',
         selector: '.option-item[data-id="circulo"]',
         message: 'Selecione: CÍRCULO',
-        pointerPos: 'right'
+        pointerPos: 'right',
+        delay: 600  // Aguarda painel abrir e opções renderizarem
     },
     [STEPS.SELECT_CARBON]: {
         type: 'highlight',
@@ -127,9 +128,9 @@ const STEP_CONFIG = {
     },
     [STEPS.FINISH]: {
         type: 'modal',
-        icon: '🎉',
+        icon: '',
         title: 'CALIBRAGEM COMPLETA',
-        message: 'Acesso total liberado.\nBoa sorte, Cientista.',
+        message: 'Acesso total concedido!\nVocê está pronto para explorar o Hylomorph, use sua criatividade para criar e evoluir formas incríveis.',
         buttonText: 'COMEÇAR',
         celebratory: true
     }
@@ -158,16 +159,28 @@ export class TutorialSystem {
         this._onSpawnGolem = this._onSpawnGolem.bind(this);
         this._onBreedSuccess = this._onBreedSuccess.bind(this);
         
-        this._checkAndStart();
+        // NÃO inicia automaticamente - espera chamada explícita
+        console.log('[Tutorial] Sistema pronto. Aguardando ativação...');
     }
     
     // ═══════════════════════════════════════════════════════════════════
     // INICIALIZAÇÃO
     // ═══════════════════════════════════════════════════════════════════
     
-    _checkAndStart() {
-        if (localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'true') {
-            console.log('[Tutorial] Já completado.');
+    /**
+     * Inicia o tutorial manualmente (chamado pela SanctuaryScene)
+     * @param {boolean} force - Se true, ignora a flag de tutorial completo
+     */
+    start(force = false) {
+        // Já está ativo?
+        if (this.isActive) {
+            console.log('[Tutorial] Já está ativo.');
+            return;
+        }
+        
+        // Já foi completado (e não está forçando)?
+        if (!force && localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'true') {
+            console.log('[Tutorial] Já completado anteriormente.');
             this.currentStep = STEPS.DONE;
             return;
         }
@@ -178,6 +191,13 @@ export class TutorialSystem {
         this.isActive = true;
         
         setTimeout(() => this._goToStep(STEPS.WELCOME), 600);
+    }
+    
+    /**
+     * Verifica se o tutorial já foi completado
+     */
+    isCompleted() {
+        return localStorage.getItem(TUTORIAL_STORAGE_KEY) === 'true';
     }
     
     _createUI() {
@@ -310,18 +330,31 @@ export class TutorialSystem {
         this.modal.classList.add('visible');
     }
     
-    _showHighlight(config) {
+    _showHighlight(config, retryCount = 0) {
         const element = document.querySelector(config.selector);
+        
+        // Debug: verificar se o painel está aberto
+        const panel = document.getElementById('creation-panel');
+        const panelVisible = panel && !panel.classList.contains('hidden');
+        console.log(`[Tutorial] Buscando: ${config.selector} | Painel aberto: ${panelVisible} | Tentativa: ${retryCount + 1}`);
+        
         if (!element) {
-            console.warn(`[Tutorial] Elemento não encontrado: ${config.selector}`);
-            // Tenta novamente (elemento pode não estar renderizado ainda)
-            setTimeout(() => {
-                if (this.currentStep === this._getStepFromSelector(config.selector)) {
-                    this._showHighlight(config);
-                }
-            }, 500);
+            console.warn(`[Tutorial] Elemento não encontrado: ${config.selector} (tentativa ${retryCount + 1})`);
+            
+            // Tenta novamente até 10 vezes (elemento pode não estar renderizado ainda)
+            if (retryCount < 10) {
+                setTimeout(() => {
+                    if (this.currentStep === this._getStepFromSelector(config.selector)) {
+                        this._showHighlight(config, retryCount + 1);
+                    }
+                }, 400);
+            } else {
+                console.error(`[Tutorial] Desistindo de encontrar: ${config.selector}`);
+            }
             return;
         }
+        
+        console.log(`[Tutorial] ✓ Elemento encontrado: ${config.selector}`);
         
         // Ativa escudo invisível COM FURO para o elemento alvo
         this.blocker.style.display = 'block';
@@ -568,7 +601,10 @@ export class TutorialSystem {
         
         const next = transitions[this.currentStep];
         if (next) {
-            setTimeout(() => this._goToStep(next), 150);
+            // Delay extra para transições que abrem o painel (precisa renderizar opções)
+            const needsExtraDelay = [STEPS.OPEN_LAB, STEPS.OPEN_LAB_SECOND].includes(this.currentStep);
+            const delay = needsExtraDelay ? 400 : 150;
+            setTimeout(() => this._goToStep(next), delay);
         }
     }
     

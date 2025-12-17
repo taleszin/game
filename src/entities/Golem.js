@@ -48,21 +48,41 @@ export default class Golem extends Phaser.GameObjects.Container {
             'gravidade':    0x9d00ff,
             'luz':          0xffffff,
             'frio':         0x0088ff,
-            'magnetismo':   0xff00aa
+            'magnetismo':   0xff00aa,
+            'entropia':     0xff3366,
+            'sonico':       0x00ffaa
+        };
+        
+        // Cores dos olhos/rosto baseadas na QUÍMICA (mais personalidade!)
+        const CHEMISTRY_FACE_COLORS = {
+            'carbono':   0x00ff88,   // Verde orgânico
+            'ferro':     0xff6b35,   // Laranja ferrugem
+            'silicio':   0x00d4ff,   // Azul digital
+            'ouro':      0xffd700,   // Dourado
+            'cristal':   0xff00ff,   // Magenta cristalino
+            'mercurio':  0xc0c0c0,   // Prata líquido
+            'bismuto':   0xff69b4,   // Rosa iridescente
+            'uranio':    0x39ff14    // Verde radioativo
         };
         
         const fallbackColor = (data && data.fisica) 
             ? (PHYSICS_COLORS[data.fisica.id] || 0x00ffff) 
             : 0x00ffff;
         
+        // Cor do rosto/olhos vem da química
+        const faceColor = (data && data.quimica)
+            ? (CHEMISTRY_FACE_COLORS[data.quimica.id] || 0x00ffff)
+            : 0x00ffff;
+        
         this.visualDNA = {
             bodyColor: data?.visualDNA?.bodyColor || fallbackColor,
-            detailColor: data?.visualDNA?.detailColor || fallbackColor,
+            detailColor: data?.visualDNA?.detailColor || faceColor,  // Rosto usa cor da química!
             auraColor: data?.visualDNA?.auraColor || fallbackColor,
+            eyeColor: data?.visualDNA?.eyeColor || faceColor,        // Cor específica dos olhos
             eyeJitter: data?.visualDNA?.eyeJitter || 1,
             blinkRate: data?.visualDNA?.blinkRate || 1,
             lineWidth: data?.visualDNA?.lineWidth || 2,
-            faceGenes: data?.visualDNA?.faceGenes || { eyeType: 'circle', mouthType: 'simple' },
+            faceGenes: data?.visualDNA?.faceGenes || this.generateFaceGenes(data?.quimica?.id),
             asymmetry: (Math.random() - 0.5) * 0.15 // Personalidade assimétrica
         };
         
@@ -211,8 +231,14 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.setInteractive();
             scene.input.setDraggable(this);
 
-            this.baseSpeed = 50 / this.targetScale;
-            if (data.fisica && data.fisica.id === 'eletricidade') this.baseSpeed *= 1.5;
+            // Velocidade base mais lenta para melhor UX (mais fácil de acertar)
+            this.baseSpeed = 35 / this.targetScale;
+            // Eletricidade ainda é mais rápido, mas não excessivamente
+            if (data.fisica && data.fisica.id === 'eletricidade') this.baseSpeed *= 1.3;
+            // Gravidade é mais lento
+            if (data.fisica && data.fisica.id === 'gravidade') this.baseSpeed *= 0.7;
+            // Frio também mais lento
+            if (data.fisica && data.fisica.id === 'frio') this.baseSpeed *= 0.8;
 
             this.startRoaming();
             this.startLifeCycle();
@@ -433,8 +459,10 @@ export default class Golem extends Phaser.GameObjects.Container {
         const dy = this.y - threatPos.y;
         const distance = Math.sqrt(dx * dx + dy * dy) || 1;
         
-        const fleeSpeed = this.baseSpeed * (2 + this.instincts.intensity * 2);
-        const erratic = (Math.random() - 0.5) * 0.4 * this.instincts.intensity;
+        // Velocidade de fuga mais moderada para melhor UX (não muito rápido!)
+        const fleeSpeed = this.baseSpeed * (1.2 + this.instincts.intensity * 0.8);
+        // Menos erraticidade para ser mais previsível
+        const erratic = (Math.random() - 0.5) * 0.2 * this.instincts.intensity;
         
         const angle = Math.atan2(dy, dx) + erratic;
         
@@ -468,6 +496,25 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
         
         return { x: separationX, y: separationY };
+    }
+
+    /**
+     * Gera genes faciais baseados na química do Golem
+     * Cada química tem personalidade visual única (estilo 16-bit)
+     */
+    generateFaceGenes(chemId) {
+        const CHEM_FACE_GENES = {
+            'carbono':   { eyeType: 'circle', mouthType: 'simple', hasFreckles: false, hasScar: false },
+            'ferro':     { eyeType: 'pixel', mouthType: 'stitch', hasFreckles: false, hasScar: true },
+            'silicio':   { eyeType: 'visor', mouthType: 'digital', hasFreckles: false, hasScar: false },
+            'ouro':      { eyeType: 'circle', mouthType: 'simple', hasFreckles: false, hasScar: false, hasSparkle: true },
+            'cristal':   { eyeType: 'hollow', mouthType: 'void', hasFreckles: false, hasScar: false },
+            'mercurio':  { eyeType: 'slit', mouthType: 'simple', hasFreckles: true, hasScar: false },
+            'bismuto':   { eyeType: 'dot', mouthType: 'beak', hasFreckles: true, hasScar: false },
+            'uranio':    { eyeType: 'circle', mouthType: 'void', hasFreckles: false, hasScar: false, hasGlow: true }
+        };
+        
+        return CHEM_FACE_GENES[chemId] || { eyeType: 'circle', mouthType: 'simple', hasFreckles: false, hasScar: false };
     }
 
     clearInstincts() {
@@ -1110,6 +1157,65 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.drawEyes(g, s);
         this.drawMouth(g, s);
         this.drawBrows(g, s);
+        this.drawFaceExtras(g, s);
+    }
+    
+    /**
+     * Desenha extras faciais baseados nos genes (sardas, cicatrizes, etc)
+     * Estilo 16-bit com detalhes pixel
+     */
+    drawFaceExtras(g, s) {
+        const genes = this.visualDNA.faceGenes;
+        const color = this.visualDNA.detailColor;
+        const p = this.faceParams;
+        
+        // Sardas (mercúrio, bismuto)
+        if (genes.hasFreckles) {
+            g.fillStyle(color, 0.4);
+            // Padrão fixo de sardas (baseado em "DNA")
+            const frecklePositions = [
+                [-12, 2], [-10, 4], [-14, 5],
+                [10, 2], [12, 4], [14, 3]
+            ];
+            frecklePositions.forEach(([fx, fy]) => {
+                g.fillCircle(fx * s, fy * s + p.breathY, 1 * s);
+            });
+        }
+        
+        // Cicatriz (ferro - guerreiro)
+        if (genes.hasScar) {
+            g.lineStyle(1.5 * s, color, 0.6);
+            g.beginPath();
+            g.moveTo(-14 * s, -8 * s);
+            g.lineTo(-10 * s, 0);
+            g.lineTo(-12 * s, 4 * s);
+            g.strokePath();
+        }
+        
+        // Blush/rubor quando feliz ou envergonhado
+        if (this.expressionState.mood === 'happy' || this.pettingActive) {
+            g.fillStyle(0xff6b6b, 0.2);
+            g.fillEllipse(-14 * s, 2 * s + p.breathY, 4 * s, 2.5 * s);
+            g.fillEllipse(14 * s, 2 * s + p.breathY, 4 * s, 2.5 * s);
+        }
+        
+        // Gotículas de suor quando assustado/fugindo
+        if (this.instincts.state === 'fleeing' && this.instincts.intensity > 0.5) {
+            const sweatY = -12 * s + Math.sin(Date.now() * 0.01) * 2 * s;
+            g.fillStyle(0x88ccff, 0.7);
+            g.fillEllipse(14 * s, sweatY, 2 * s, 3 * s);
+            // Brilho
+            g.fillStyle(0xffffff, 0.8);
+            g.fillCircle(14 * s - 0.5 * s, sweatY - 1 * s, 0.8 * s);
+        }
+        
+        // Lágrimas quando morrendo
+        if (this.expressionState.mood === 'dying') {
+            const tearY = 2 * s + (Date.now() % 1000) / 1000 * 8 * s;
+            g.fillStyle(0x66ccff, 0.6);
+            g.fillEllipse(-10 * s, tearY, 1.5 * s, 2.5 * s);
+            g.fillEllipse(10 * s, tearY + 2 * s, 1.5 * s, 2.5 * s);
+        }
     }
 
     drawEyes(g, s) {
@@ -1117,107 +1223,203 @@ export default class Golem extends Phaser.GameObjects.Container {
         const p = this.faceParams;
         
         // --- 1. Parallax & Breathing ---
-        // Olhos movem MENOS que o foco para simular profundidade (fundo move menos)
-        // Respiração adiciona um bob vertical constante
         const ox = this.eyeOffset.x + (p.focusOffset.x * 0.7) + (Math.random()-0.5) * p.tremor * 10;
         const oy = this.eyeOffset.y + (p.focusOffset.y * 0.7) + p.breathY + (Math.random()-0.5) * p.tremor * 10;
         
         const color = this.visualDNA.detailColor;
+        const eyeColor = this.visualDNA.eyeColor || color;
         const lineWidth = Math.max(this.minLineWidth, 2 * s);
         
-        // --- 2. Sclera (Fundo do Olho) para Contraste ---
-        // Cria um brilho sutil atrás do olho para destacá-lo em corpos escuros
-        // Só desenha se não estiver piscando
+        // --- 2. Sclera (Fundo branco do olho) - Estilo 16-bit ---
         if (!this.isBlinking) {
-            const scleraAlpha = 0.15;
-            g.fillStyle(0xffffff, scleraAlpha);
             const w = 5 * s;
             const h = 5 * s * p.eyeOpenness;
             
-            // Fundo difuso atrás dos olhos
-            if (genes.eyeType !== 'visor') {
-                g.fillCircle(-8*s + ox, -5*s + oy, w * 1.5);
-                g.fillCircle(8*s + ox, -5*s + oy, w * 1.5);
+            // Sombra escura atrás (depth)
+            if (genes.eyeType !== 'visor' && genes.eyeType !== 'dot') {
+                g.fillStyle(0x000000, 0.4);
+                g.fillEllipse(-8*s + ox + 1, -5*s + oy + 1, w * 1.3, h * 1.2);
+                g.fillEllipse(8*s + ox + 1, -5*s + oy + 1, w * 1.3, h * 1.2);
+                
+                // Sclera branca (olhos com branco interno)
+                g.fillStyle(0xffffff, 0.9);
+                g.fillEllipse(-8*s + ox, -5*s + oy, w * 1.2, h);
+                g.fillEllipse(8*s + ox, -5*s + oy, w * 1.2, h);
             }
         }
 
-        g.lineStyle(lineWidth, color, 1);
+        g.lineStyle(lineWidth, eyeColor, 1);
         
         if (this.isBlinking) {
-            // Squash visual ao piscar (linha curva em vez de reta)
+            // Olhos fechados - linha curva estilo anime/16-bit
+            g.lineStyle(lineWidth + 0.5, eyeColor, 1);
             g.beginPath();
-            this.drawQuadCurve(g, -12*s + ox, -5*s + oy, -8*s + ox, -4*s + oy, -4*s + ox, -5*s + oy);
-            this.drawQuadCurve(g, 4*s + ox, -5*s + oy, 8*s + ox, -4*s + oy, 12*s + ox, -5*s + oy);
+            this.drawQuadCurve(g, -12*s + ox, -5*s + oy, -8*s + ox, -3*s + oy, -4*s + ox, -5*s + oy);
+            this.drawQuadCurve(g, 4*s + ox, -5*s + oy, 8*s + ox, -3*s + oy, 12*s + ox, -5*s + oy);
+            g.strokePath();
+            
+            // Linha de expressão abaixo (sobrancelha relaxada)
+            g.lineStyle(lineWidth * 0.5, eyeColor, 0.4);
+            g.beginPath();
+            g.moveTo(-11*s + ox, -7*s + oy);
+            g.lineTo(-5*s + ox, -7*s + oy);
+            g.moveTo(5*s + ox, -7*s + oy);
+            g.lineTo(11*s + ox, -7*s + oy);
             g.strokePath();
             return;
         }
 
         const h = 5 * s * p.eyeOpenness; 
         const w = 5 * s;
-        // Pupilas reagem à emoção (midríase/miose)
-        const pupSize = 2 * s * p.pupilSize;
+        const pupSize = 2.5 * s * p.pupilSize;
 
         switch(genes.eyeType) {
             case 'circle':
+                // Contorno do olho
+                g.lineStyle(lineWidth, eyeColor, 1);
                 g.strokeEllipse(-8*s + ox, -5*s + oy, w, h);
                 g.strokeEllipse(8*s + ox, -5*s + oy, w, h);
-                g.fillStyle(color, 1);
-                // Pupilas seguem o foco com mais intensidade (paralaxe da pupila)
-                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.4, -5*s + oy + p.focusOffset.y * 0.4, pupSize);
-                g.fillCircle(8*s + ox + p.focusOffset.x * 0.4, -5*s + oy + p.focusOffset.y * 0.4, pupSize);
                 
-                // Brilho especular na pupila (vida!)
-                g.fillStyle(0xffffff, 0.7);
-                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.4 - 1*s, -5*s + oy + p.focusOffset.y * 0.4 - 1*s, pupSize * 0.4);
-                g.fillCircle(8*s + ox + p.focusOffset.x * 0.4 - 1*s, -5*s + oy + p.focusOffset.y * 0.4 - 1*s, pupSize * 0.4);
+                // Íris colorida (maior, mais expressiva)
+                const irisSize = pupSize * 1.8;
+                g.fillStyle(eyeColor, 0.8);
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, irisSize);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, irisSize);
+                
+                // Pupila preta central
+                g.fillStyle(0x000000, 1);
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, pupSize * 0.7);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, pupSize * 0.7);
+                
+                // Brilho especular (16-bit highlight)
+                g.fillStyle(0xffffff, 0.95);
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.3 - 1.5*s, -5*s + oy + p.focusOffset.y * 0.3 - 1.5*s, pupSize * 0.5);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.3 - 1.5*s, -5*s + oy + p.focusOffset.y * 0.3 - 1.5*s, pupSize * 0.5);
+                // Brilho secundário menor
+                g.fillStyle(0xffffff, 0.6);
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.3 + 1*s, -5*s + oy + p.focusOffset.y * 0.3 + 1*s, pupSize * 0.25);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.3 + 1*s, -5*s + oy + p.focusOffset.y * 0.3 + 1*s, pupSize * 0.25);
                 break;
+                
             case 'slit':
-                g.strokeEllipse(-8*s + ox, -5*s + oy, w * 0.6, h);
-                g.strokeEllipse(8*s + ox, -5*s + oy, w * 0.6, h);
-                g.lineStyle(lineWidth, color, 1);
-                g.beginPath();
-                g.moveTo(-8*s + ox + p.focusOffset.x, -5*s + oy - h + 2*s + p.focusOffset.y); 
-                g.lineTo(-8*s + ox + p.focusOffset.x, -5*s + oy + h - 2*s + p.focusOffset.y);
-                g.moveTo(8*s + ox + p.focusOffset.x, -5*s + oy - h + 2*s + p.focusOffset.y); 
-                g.lineTo(8*s + ox + p.focusOffset.x, -5*s + oy + h - 2*s + p.focusOffset.y);
-                g.strokePath();
+                // Olho de réptil/gato
+                g.fillStyle(eyeColor, 0.7);
+                g.fillEllipse(-8*s + ox, -5*s + oy, w * 0.8, h);
+                g.fillEllipse(8*s + ox, -5*s + oy, w * 0.8, h);
+                g.strokeEllipse(-8*s + ox, -5*s + oy, w * 0.8, h);
+                g.strokeEllipse(8*s + ox, -5*s + oy, w * 0.8, h);
+                
+                // Fenda vertical
+                g.fillStyle(0x000000, 1);
+                const slitW = 1.5 * s;
+                const slitH = h * 0.9;
+                g.fillEllipse(-8*s + ox + p.focusOffset.x * 0.3, -5*s + oy + p.focusOffset.y * 0.3, slitW, slitH);
+                g.fillEllipse(8*s + ox + p.focusOffset.x * 0.3, -5*s + oy + p.focusOffset.y * 0.3, slitW, slitH);
+                
+                // Brilho
+                g.fillStyle(0xffffff, 0.8);
+                g.fillCircle(-8*s + ox - 2*s, -5*s + oy - 2*s, pupSize * 0.3);
+                g.fillCircle(8*s + ox - 2*s, -5*s + oy - 2*s, pupSize * 0.3);
                 break;
+                
             case 'pixel':
+                // Olhos quadrados estilo 8-bit/16-bit
+                g.fillStyle(0x000000, 0.5);
+                g.fillRect(-12*s + ox + 1, -5*s + oy - h + 1, w*1.6, h*2);
+                g.fillRect(4*s + ox + 1, -5*s + oy - h + 1, w*1.6, h*2);
+                
+                g.fillStyle(0xffffff, 0.9);
+                g.fillRect(-12*s + ox, -5*s + oy - h, w*1.5, h*2);
+                g.fillRect(4*s + ox, -5*s + oy - h, w*1.5, h*2);
+                
+                g.lineStyle(lineWidth, eyeColor, 1);
                 g.strokeRect(-12*s + ox, -5*s + oy - h, w*1.5, h*2);
                 g.strokeRect(4*s + ox, -5*s + oy - h, w*1.5, h*2);
-                g.fillStyle(color, 1);
-                g.fillRect(-10*s + ox + p.focusOffset.x, -5*s + oy - pupSize + p.focusOffset.y, pupSize*2, pupSize*2);
-                g.fillRect(6*s + ox + p.focusOffset.x, -5*s + oy - pupSize + p.focusOffset.y, pupSize*2, pupSize*2);
+                
+                // Pixel pupila
+                g.fillStyle(eyeColor, 1);
+                const pixelSize = pupSize * 1.2;
+                g.fillRect(-10*s + ox + p.focusOffset.x * 0.5 - pixelSize/2, -5*s + oy + p.focusOffset.y * 0.5 - pixelSize/2, pixelSize, pixelSize);
+                g.fillRect(6*s + ox + p.focusOffset.x * 0.5 - pixelSize/2, -5*s + oy + p.focusOffset.y * 0.5 - pixelSize/2, pixelSize, pixelSize);
+                
+                // Highlight pixel
+                g.fillStyle(0xffffff, 0.9);
+                g.fillRect(-11*s + ox, -5*s + oy - h + 1*s, 2*s, 2*s);
+                g.fillRect(5*s + ox, -5*s + oy - h + 1*s, 2*s, 2*s);
                 break;
+                
             case 'dot':
-                g.fillStyle(color, 1);
+                // Olhos simples ponto (slime/blob)
+                g.fillStyle(0x000000, 0.3);
+                g.fillCircle(-8*s + ox + 1, -5*s + oy + 1, w * p.eyeOpenness * 1.1);
+                g.fillCircle(8*s + ox + 1, -5*s + oy + 1, w * p.eyeOpenness * 1.1);
+                
+                g.fillStyle(eyeColor, 1);
                 const dotSize = Math.max(w * p.eyeOpenness, 2*s);
-                g.fillCircle(-8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, dotSize);
-                g.fillCircle(8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, dotSize);
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, dotSize);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, dotSize);
+                
+                // Brilho
+                g.fillStyle(0xffffff, 0.9);
+                g.fillCircle(-8*s + ox - 1.5*s, -5*s + oy - 1.5*s, dotSize * 0.35);
+                g.fillCircle(8*s + ox - 1.5*s, -5*s + oy - 1.5*s, dotSize * 0.35);
                 break;
+                
             case 'visor':
-                g.lineStyle(lineWidth + 2*s, color, 1);
-                g.beginPath();
-                // Visor curva com o rosto
-                this.drawQuadCurve(g, -15*s + ox, -5*s + oy, 0 + ox, -6*s + oy, 15*s + ox, -5*s + oy);
-                g.strokePath();
+                // Visor estilo robô/sci-fi
+                g.fillStyle(0x000000, 0.7);
+                g.fillRoundedRect(-16*s + ox, -8*s + oy, 32*s, 6*s, 3*s);
+                
+                g.lineStyle(lineWidth + 1*s, eyeColor, 1);
+                g.strokeRoundedRect(-15*s + ox, -7*s + oy, 30*s, 4*s, 2*s);
+                
+                // Scanner interno
+                g.fillStyle(eyeColor, 0.6);
+                g.fillRoundedRect(-14*s + ox, -6*s + oy, 28*s, 2*s, 1*s);
+                
                 // Scanner light que se move
-                g.lineStyle(lineWidth + 1*s, 0xffffff, 0.7);
-                g.beginPath();
-                const visorX = p.focusOffset.x * 3;
-                g.moveTo(visorX - 2*s + ox, -5*s + oy); g.lineTo(visorX + 2*s + ox, -5*s + oy);
-                g.strokePath();
+                const scanX = p.focusOffset.x * 4;
+                g.fillStyle(0xffffff, 0.95);
+                g.fillRoundedRect(scanX - 3*s + ox, -6*s + oy, 6*s, 2*s, 1*s);
                 break;
+                
             case 'hollow':
+                // Olhos vazios/fantasma
+                g.lineStyle(lineWidth + 1, eyeColor, 1);
                 g.strokeCircle(-8*s + ox, -5*s + oy, w * p.eyeOpenness);
                 g.strokeCircle(8*s + ox, -5*s + oy, w * p.eyeOpenness);
-                g.fillStyle(color, 0.3);
-                g.fillCircle(-8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, 1.5*s);
-                g.fillCircle(8*s + ox + p.focusOffset.x, -5*s + oy + p.focusOffset.y, 1.5*s);
+                
+                // Brilho interno sutil
+                g.fillStyle(eyeColor, 0.2);
+                g.fillCircle(-8*s + ox, -5*s + oy, w * p.eyeOpenness * 0.7);
+                g.fillCircle(8*s + ox, -5*s + oy, w * p.eyeOpenness * 0.7);
+                
+                // Ponto de luz
+                g.fillStyle(eyeColor, 0.6);
+                g.fillCircle(-8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, 2*s);
+                g.fillCircle(8*s + ox + p.focusOffset.x * 0.5, -5*s + oy + p.focusOffset.y * 0.5, 2*s);
                 break;
+                
             default: 
                 g.strokeCircle(-8*s + ox, -5*s + oy, w * p.eyeOpenness);
                 g.strokeCircle(8*s + ox, -5*s + oy, w * p.eyeOpenness);
+        }
+        
+        // --- Detalhes extras baseados nos genes ---
+        if (genes.hasSparkle && !this.isBlinking) {
+            // Sparkles para ouro
+            const time = Date.now() * 0.003;
+            g.fillStyle(0xffffff, 0.5 + Math.sin(time) * 0.3);
+            g.fillCircle(-12*s + ox + Math.sin(time * 2) * 2, -8*s + oy, 1.5*s);
+            g.fillCircle(12*s + ox + Math.cos(time * 2) * 2, -8*s + oy, 1.5*s);
+        }
+        
+        if (genes.hasGlow) {
+            // Glow radioativo
+            const glowAlpha = 0.3 + Math.sin(Date.now() * 0.005) * 0.2;
+            g.fillStyle(eyeColor, glowAlpha);
+            g.fillCircle(-8*s + ox, -5*s + oy, w * 2);
+            g.fillCircle(8*s + ox, -5*s + oy, w * 2);
         }
     }
 
@@ -1495,8 +1697,19 @@ export default class Golem extends Phaser.GameObjects.Container {
     feed() {
         // Visual feedback for feeding: ensure chewing animation starts
         this.startEatingAnimation();
+        
+        // Restaura vitalidade completamente
         this.vitality = this.maxVitality;
-        this.currentLife = this.vitality; 
+        this.currentLife = this.vitality;
+        
+        // IMPORTANTE: Atualiza a barra de vida IMEDIATAMENTE
+        // Isso garante que o visual reflita o valor real
+        if (this.lifeBar) {
+            const vitalityPct = this.vitality / this.maxVitality;
+            this.lifeBar.width = 22 * vitalityPct; // Barra cheia
+            this.lifeBar.setFillStyle(this.visualDNA.bodyColor); // Restaura cor (pode estar vermelha)
+        }
+        
         this.scene.tweens.add({ targets: this, scale: this.targetScale * 1.3, yoyo: true, duration: 200 });
         this.setActionExpression('feed', 2000);
         // small burst of particles from the mouth to reinforce feedback
@@ -1526,12 +1739,66 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.currentLife = 0; this.die();
     }
 
+    /**
+     * 🎨 Redesenha o Golem com seus atributos visuais atuais
+     * Usado após mutações para aplicar novas cores
+     */
+    redraw() {
+        // Atualiza cor do corpo se visualDNA.bodyColor mudou
+        if (this.visualDNA && this.visualDNA.bodyColor !== undefined) {
+            this.currentColor = this.visualDNA.bodyColor;
+        }
+        
+        // Redesenha a forma
+        this.drawNeonShape(this.currentShapeType, this.currentColor, this.currentChem);
+        
+        // Atualiza o emitter de partículas
+        if (this.emitter) {
+            this.emitter.stop();
+            this.emitter.destroy();
+            this.emitter = this.scene.add.particles(0, 0, 'pixel', {
+                speed: 20 * this.targetScale,
+                scale: { start: 0.4 * this.targetScale, end: 0 },
+                blendMode: 'ADD', lifespan: 600, 
+                tint: this.visualDNA.auraColor || this.currentColor, 
+                quantity: 1
+            });
+            this.emitter.startFollow(this);
+        }
+        
+        // Atualiza a barra de vida
+        if (this.lifeBar) {
+            this.lifeBar.setFillStyle(this.currentColor);
+        }
+        
+        // Redesenha a face (que usa eyeColor)
+        this.drawFace();
+        
+        this.addLifeEvent('redraw', 'Aparência atualizada');
+    }
+
     freeze() {
-        this.isFrozen = true; this.body.setVelocity(0); this.graphics.setTint(0x0088ff);
+        this.isFrozen = true;
+        this.body.setVelocity(0);
+        
+        // Salva cor original e aplica cor de gelo
+        this._originalColor = this.currentColor;
+        this.currentColor = 0x0088ff;
+        this.drawNeonShape(this.currentShapeType, this.currentColor, this.currentChem);
+        
         this.setActionExpression('freeze', 5000);
         this.addLifeEvent('freeze', 'Congelado temporariamente');
         this.speakContextual('freeze');
-        this.scene.time.delayedCall(5000, () => { if (this.active) { this.isFrozen = false; this.graphics.clearTint(); this.startRoaming(); } });
+        
+        this.scene.time.delayedCall(5000, () => {
+            if (this.active) {
+                this.isFrozen = false;
+                // Restaura cor original
+                this.currentColor = this._originalColor || this.visualDNA.bodyColor;
+                this.drawNeonShape(this.currentShapeType, this.currentColor, this.currentChem);
+                this.startRoaming();
+            }
+        });
     }
 
     mutate() {
@@ -1545,7 +1812,17 @@ export default class Golem extends Phaser.GameObjects.Container {
                 this.proceduralParams = newParams;
                 this.currentColor = Math.random() * 0xffffff;
                 this.drawNeonShape('procedural', this.currentColor, this.currentChem);
-                if (this.emitter) this.emitter.setTint(this.currentColor);
+                // Recriar emitter com nova cor (ParticleEmitter não tem setTint)
+                if (this.emitter) {
+                    this.emitter.stop();
+                    this.emitter.destroy();
+                    this.emitter = this.scene.add.particles(0, 0, 'pixel', {
+                        speed: 20 * this.targetScale,
+                        scale: { start: 0.4 * this.targetScale, end: 0 },
+                        blendMode: 'ADD', lifespan: 600, tint: this.currentColor, quantity: 1
+                    });
+                    this.emitter.startFollow(this);
+                }
                 this.lifeBar.setFillStyle(this.currentColor);
                 this.addLifeEvent('mutate', `Mutado: sides=${newSides}`);
             }

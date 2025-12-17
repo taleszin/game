@@ -76,13 +76,21 @@ body::after {
   box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.5);
 }
 
+/* ═══ CANVAS DO JOGO - OCULTO POR PADRÃO ═══
+   Só é mostrado quando SanctuaryScene inicia.
+   Isso evita flash durante transições de cena. */
 #game-container {
   position: absolute;
   top: 0;
   left: 0;
   z-index: 1;
+  opacity: 0;
+  pointer-events: none;
 }
 
+/* ═══ UI DO JOGO - OCULTA POR PADRÃO ═══
+   Só é mostrada quando SanctuaryScene inicia.
+   Isso evita flash durante transições de cena. */
 #ui-layer {
   position: absolute;
   top: 0;
@@ -95,6 +103,7 @@ body::after {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  opacity: 0;
 }
 
 .hud-top h1 {
@@ -996,102 +1005,355 @@ canvas {
   font-style: italic;
 }
 
-#god-menu {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: center;
-  gap: 15px;
-  pointer-events: auto !important;
-  z-index: 100;
+/* ═══════════════════════════════════════════════════════════════════════════════
+   TOOL RACK - Painel de Ferramentas Sci-Fi
+   Estilo: Armory/Lab Equipment - Lateral Direita
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+#tool-rack {
+    position: fixed;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 500;
+    pointer-events: auto;
+    
+    /* Container metálico */
+    background: 
+        /* Scanlines */
+        repeating-linear-gradient(
+            0deg,
+            transparent 0px,
+            transparent 2px,
+            rgba(0, 0, 0, 0.15) 2px,
+            rgba(0, 0, 0, 0.15) 4px
+        ),
+        /* Grip texture */
+        repeating-linear-gradient(
+            90deg,
+            rgba(255, 255, 255, 0.02) 0px,
+            rgba(255, 255, 255, 0.02) 1px,
+            transparent 1px,
+            transparent 4px
+        ),
+        /* Base gradient */
+        linear-gradient(90deg, #0d0d0d 0%, #1a1a1a 50%, #0f0f0f 100%);
+    
+    border: 2px solid #333;
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+    
+    /* Chanfro Sci-Fi */
+    clip-path: polygon(
+        0% 10px, 10px 0%, 100% 0%,
+        100% 100%, 10px 100%, 0% calc(100% - 10px)
+    );
+    
+    padding: 12px 8px 12px 12px;
+    
+    box-shadow: 
+        -4px 0 20px rgba(0, 0, 0, 0.8),
+        inset 1px 0 0 rgba(255, 255, 255, 0.05),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.god-trigger {
-  width: 60px;
-  height: 60px;
-  background: #222;
-  border: 2px solid #9d00ff;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 24px;
-  cursor: pointer;
-  box-shadow: 0 0 15px rgba(157, 0, 255, 0.3);
-  transition: all 0.2s;
-  color: #fff;
+/* Header do Rack */
+.rack-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333;
 }
 
-.god-trigger:hover {
-  transform: scale(1.1);
-  background: #9d00ff;
-  box-shadow: 0 0 25px rgba(157, 0, 255, 0.8);
+.rack-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 6px;
+    color: #666;
+    letter-spacing: 2px;
 }
 
-.god-options {
-  display: flex;
-  flex-direction: column-reverse;
-  gap: 12px;
-  opacity: 0;
-  transform: translateY(20px);
-  pointer-events: none;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+.rack-indicator {
+    width: 6px;
+    height: 6px;
+    background: #0f0;
+    border-radius: 50%;
+    box-shadow: 0 0 6px #0f0;
+    animation: indicator-pulse 2s ease-in-out infinite;
 }
 
-#god-menu:hover .god-options {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
+@keyframes indicator-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 6px #0f0; }
+    50% { opacity: 0.5; box-shadow: 0 0 3px #0f0; }
 }
 
+/* Container dos Slots */
+.rack-slots {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+/* Divisor entre ferramentas básicas e avançadas */
+.rack-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #444, transparent);
+    margin: 6px 0;
+}
+
+/* ═══ TOOL SLOT - Formato Hexagonal Sci-Fi ═══ */
 .tool-slot {
-  cursor: grab;
-  transition: transform 0.1s;
-  position: relative;
+    position: relative;
+    cursor: grab;
+    transition: all 0.15s ease;
 }
 
-.tool-slot:hover {
-  transform: scale(1.2);
+.tool-slot:active {
+    cursor: grabbing;
 }
 
-.tool-icon {
-  width: 45px;
-  height: 45px;
-  background: #111;
-  border: 2px solid #555;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 20px;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.8);
-  user-select: none;
+.tool-slot .tool-icon {
+    width: 48px;
+    height: 48px;
+    
+    /* Hexágono via clip-path */
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    
+    background: 
+        linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%);
+    
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 20px;
+    
+    /* Borda simulada com sombra */
+    box-shadow: 
+        inset 0 0 0 2px #333,
+        0 4px 8px rgba(0, 0, 0, 0.6);
+    
+    transition: all 0.15s ease;
+    
+    /* Efeito holograma */
+    filter: drop-shadow(0 0 2px currentColor);
 }
 
-.tool-slot[data-action="feed"] .tool-icon { border-color: #00ff00; color: #00ff00; box-shadow: 0 0 10px rgba(0, 255, 0, 0.2); }
-.tool-slot[data-action="burn"] .tool-icon { border-color: #ffaa00; color: #ffaa00; box-shadow: 0 0 10px rgba(255, 170, 0, 0.2); }
-.tool-slot[data-action="kill"] .tool-icon { border-color: #ff0000; color: #ff0000; box-shadow: 0 0 10px rgba(255, 0, 0, 0.2); }
-.tool-slot[data-action="freeze"] .tool-icon { border-color: #00ffff; color: #00ffff; box-shadow: 0 0 10px rgba(0, 255, 255, 0.2); }
-.tool-slot[data-action="mutate"] .tool-icon { border-color: #ff00ff; color: #ff00ff; box-shadow: 0 0 10px rgba(255, 0, 255, 0.2); }
+/* Hover - Ícone "flutua" para fora */
+.tool-slot:hover .tool-icon {
+    transform: translateX(-4px) scale(1.1);
+    filter: drop-shadow(0 0 8px currentColor) brightness(1.2);
+}
 
+/* Estado Empty quando arrastando */
+.tool-slot.dragging .tool-icon {
+    background: #050505;
+    box-shadow: 
+        inset 0 4px 10px rgba(0, 0, 0, 0.9),
+        inset 0 0 0 2px #222;
+    filter: none;
+}
+
+.tool-slot.dragging .tool-icon::after {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    background: radial-gradient(ellipse, transparent 30%, rgba(0,0,0,0.5) 100%);
+}
+
+/* ═══ CORES POR AÇÃO ═══ */
+.tool-slot[data-action="feed"] .tool-icon { 
+    color: #00ff00; 
+    box-shadow: inset 0 0 0 2px #00ff00, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+.tool-slot[data-action="burn"] .tool-icon { 
+    color: #ff8800; 
+    box-shadow: inset 0 0 0 2px #ff8800, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+.tool-slot[data-action="freeze"] .tool-icon { 
+    color: #00ffff; 
+    box-shadow: inset 0 0 0 2px #00ffff, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+.tool-slot[data-action="mutate"] .tool-icon { 
+    color: #ff00ff; 
+    box-shadow: inset 0 0 0 2px #ff00ff, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+.tool-slot[data-action="kill"] .tool-icon { 
+    color: #ff0000; 
+    box-shadow: inset 0 0 0 2px #ff0000, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+.tool-slot[data-action="singularity"] .tool-icon { 
+    color: #9900ff; 
+    box-shadow: inset 0 0 0 2px #9900ff, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+.tool-slot[data-action="taser"] .tool-icon { 
+    color: #ffff00; 
+    box-shadow: inset 0 0 0 2px #ffff00, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+.tool-slot[data-action="mutagen"] .tool-icon { 
+    color: #00ff88; 
+    box-shadow: inset 0 0 0 2px #00ff88, 0 4px 8px rgba(0, 0, 0, 0.6);
+}
+
+/* ═══ TOOLTIP LATERAL ═══ */
+.slot-tooltip {
+    position: absolute;
+    right: calc(100% + 12px);
+    top: 50%;
+    transform: translateY(-50%);
+    
+    background: rgba(0, 0, 0, 0.95);
+    border: 1px solid #444;
+    padding: 6px 10px;
+    border-radius: 4px;
+    
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s, transform 0.15s;
+    transform: translateY(-50%) translateX(10px);
+    
+    white-space: nowrap;
+}
+
+.tool-slot:hover .slot-tooltip {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+}
+
+.slot-tooltip::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 6px solid transparent;
+    border-left-color: #444;
+}
+
+.tt-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 7px;
+    color: #fff;
+    letter-spacing: 1px;
+}
+
+.tt-key {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 6px;
+    color: #0ff;
+}
+
+/* ═══ DRAGGING GHOST - Cursor Personalizado ═══ */
 .dragging-ghost {
-  position: fixed;
-  pointer-events: none;
-  width: 50px;
-  height: 50px;
-  font-size: 28px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: rgba(0, 0, 0, 0.8);
-  border: 3px solid #fff;
-  border-radius: 50%;
-  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-  z-index: 9999;
-  transform: translate(-50%, -50%);
+    position: fixed;
+    pointer-events: none;
+    z-index: 10000;
+    transform: translate(-50%, -50%);
+    
+    width: 56px;
+    height: 56px;
+    
+    /* Hexágono */
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    
+    background: rgba(0, 0, 0, 0.9);
+    
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 26px;
+    
+    /* Efeito "Charged" - Glowing */
+    animation: ghost-pulse 0.5s ease-in-out infinite alternate;
 }
+
+@keyframes ghost-pulse {
+    0% {
+        filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 20px currentColor);
+        transform: translate(-50%, -50%) scale(1);
+    }
+    100% {
+        filter: drop-shadow(0 0 15px currentColor) drop-shadow(0 0 30px currentColor) brightness(1.3);
+        transform: translate(-50%, -50%) scale(1.05);
+    }
+}
+
+/* Cores do Ghost por ação */
+.dragging-ghost[data-action="feed"] { color: #00ff00; }
+.dragging-ghost[data-action="burn"] { color: #ff8800; }
+.dragging-ghost[data-action="freeze"] { color: #00ffff; }
+.dragging-ghost[data-action="mutate"] { color: #ff00ff; }
+.dragging-ghost[data-action="kill"] { color: #ff0000; }
+.dragging-ghost[data-action="singularity"] { color: #9900ff; }
+.dragging-ghost[data-action="taser"] { color: #ffff00; }
+.dragging-ghost[data-action="mutagen"] { color: #00ff88; }
+
+/* Esconde cursor quando arrastando */
+body.grabbing {
+    cursor: none !important;
+}
+
+body.grabbing * {
+    cursor: none !important;
+}
+
+/* ═══ TARGET LOCK - Retículo sobre Golem válido ═══ */
+.target-lock {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9998;
+    width: 80px;
+    height: 80px;
+    transform: translate(-50%, -50%);
+}
+
+.target-lock::before,
+.target-lock::after {
+    content: '';
+    position: absolute;
+    border: 2px solid;
+    border-radius: 50%;
+    animation: target-spin 2s linear infinite;
+}
+
+.target-lock::before {
+    inset: 0;
+    border-color: transparent;
+    border-top-color: currentColor;
+    border-bottom-color: currentColor;
+}
+
+.target-lock::after {
+    inset: 8px;
+    border-color: transparent;
+    border-left-color: currentColor;
+    border-right-color: currentColor;
+    animation-direction: reverse;
+    animation-duration: 1.5s;
+}
+
+.target-lock .crosshair {
+    position: absolute;
+    inset: 50%;
+    width: 4px;
+    height: 4px;
+    background: currentColor;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px currentColor;
+}
+
+@keyframes target-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Target lock cores */
+.target-lock.friendly { color: #00ff00; }
+.target-lock.hostile { color: #ff0000; }
+.target-lock.neutral { color: #ffff00; }
 /* ═══ BOTÃO ARQUIVO GENÉTICO - Chip de Memória Flutuante ═══ */
 #btn-tree {
     position: absolute;

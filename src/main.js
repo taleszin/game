@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { generateGolemData } from './services/MockAiService.js';
+import { StartScene } from './scenes/StartScene.js';
+import { MainMenuScene } from './scenes/MainMenuScene.js';
 import SanctuaryScene from './scenes/SanctuaryScene';
 import { ELEMENTS } from './data/gameData.js';
 import { calculateGeometry } from './utils/GeometryMath.js';
@@ -21,7 +23,7 @@ const config = {
     arcade: { gravity: { y: 0 }, debug: false }
   },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [SanctuaryScene]
+  scene: [StartScene, MainMenuScene, SanctuaryScene]
 };
 
 const game = new Phaser.Game(config);
@@ -73,6 +75,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializa o sistema de som na primeira interação do usuário
     document.addEventListener('click', () => UISoundSystem.init(), { once: true });
     document.addEventListener('keydown', () => UISoundSystem.init(), { once: true });
+
+    // Exponha um wrapper conveniente em window.uiSounds para compatibilidade
+    window.uiSounds = {
+        playHover: (category) => UISoundSystem.playHover(category),
+        playClick: (type) => UISoundSystem.playClick(type),
+        playSelect: () => UISoundSystem.playSelect(),
+        playError: () => UISoundSystem.playError(),
+        playOpen: () => UISoundSystem.playOpen(),
+        playClose: () => UISoundSystem.playClose(),
+        playDeselect: () => UISoundSystem.playDeselect(),
+        playDataScan: () => UISoundSystem.playDataScan(),
+        setVolume: (v) => UISoundSystem.setVolume(v)
+    };
     
     // Cria o elemento de Tooltip global
     const techTooltip = createTechTooltip();
@@ -175,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentHoveredElement = null;
     
     document.addEventListener('mouseover', (e) => {
-        const target = e.target.closest('.option-item, .pixel-btn, .tool-slot');
+        const target = e.target.closest('.option-item, .pixel-btn, .tool-slot, .menu-btn');
         
         if (target && target !== currentHoveredElement) {
             currentHoveredElement = target;
@@ -289,7 +304,21 @@ document.addEventListener('DOMContentLoaded', () => {
         'ouro': '#ffd700',
         'cristal': '#88ddff',
         'mercurio': '#c0c0c0',
-        'bismuto': '#ff69b4'
+        'bismuto': '#ff69b4',
+        'uranio': '#2a4a2a'
+    };
+
+    // Cores das FACES por química (olhos, boca, detalhes)
+    // Estas cores definem a "personalidade visual" do Golem
+    const CHEMISTRY_FACE_COLORS = {
+        'carbono':   '#00ff88',   // Verde orgânico - vida natural
+        'ferro':     '#ff6b35',   // Laranja ferrugem - industrial
+        'silicio':   '#00d4ff',   // Azul digital - tecnológico
+        'ouro':      '#ffd700',   // Dourado - precioso
+        'cristal':   '#ff00ff',   // Magenta cristalino - mágico
+        'mercurio':  '#c0c0c0',   // Prata líquido - fluido
+        'bismuto':   '#ff69b4',   // Rosa iridescente - exótico
+        'uranio':    '#39ff14'    // Verde radioativo - perigoso
     };
 
     const FORMA_COLORS = {
@@ -1362,9 +1391,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const chemId = quimica ? quimica.id : null;
         drawGolemShape(ctx, cx, cy, forma.id, color, glowColor, lineWidth, !!fisica, chemId);
         
-        // Desenha rosto simplificado se tiver física (energia = vida)
-        if (fisica) {
-            drawPreviewFace(ctx, cx, cy, color);
+        // Desenha rosto quando tiver química (a química define a face!)
+        // Se tiver física também, usa glow mais forte
+        if (quimica) {
+            const faceColor = CHEMISTRY_FACE_COLORS[quimica.id] || '#00ff88';
+            const hasGlow = !!fisica; // Glow só com energia
+            drawPreviewFaceByChemistry(ctx, cx, cy, quimica.id, faceColor, hasGlow);
         }
     }
     
@@ -1877,7 +1909,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function drawPreviewFace(ctx, cx, cy, color) {
-        // Olhos simples
+        // Olhos simples (versão legada)
         ctx.fillStyle = color;
         ctx.shadowColor = color;
         ctx.shadowBlur = 5;
@@ -1895,6 +1927,354 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.stroke();
         
         ctx.shadowBlur = 0;
+    }
+    
+    /**
+     * 🎭 Desenha face única baseada na química do Golem
+     * Cada elemento químico tem estilo de olhos e boca distintos
+     */
+    function drawPreviewFaceByChemistry(ctx, cx, cy, chemId, faceColor, hasGlow = false) {
+        ctx.save();
+        
+        // Setup glow se tiver energia
+        if (hasGlow) {
+            ctx.shadowColor = faceColor;
+            ctx.shadowBlur = 8;
+        }
+        
+        // Desenha olhos baseados na química
+        drawChemistryEyes(ctx, cx, cy, chemId, faceColor);
+        
+        // Desenha boca baseada na química
+        drawChemistryMouth(ctx, cx, cy, chemId, faceColor);
+        
+        // Detalhes extras por química
+        drawChemistryExtras(ctx, cx, cy, chemId, faceColor);
+        
+        ctx.restore();
+    }
+    
+    /**
+     * 👁️ Olhos específicos por elemento químico
+     */
+    function drawChemistryEyes(ctx, cx, cy, chemId, color) {
+        const eyeL = { x: cx - 12, y: cy - 6 };
+        const eyeR = { x: cx + 12, y: cy - 6 };
+        const eyeSize = 5;
+        
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        
+        switch(chemId) {
+            case 'carbono':
+                // Olhos circulares orgânicos com pupila
+                [eyeL, eyeR].forEach(eye => {
+                    // Sclera
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, eyeSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Íris
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, eyeSize * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Pupila
+                    ctx.fillStyle = '#000000';
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, eyeSize * 0.3, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Brilho
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(eye.x - 1.5, eye.y - 1.5, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                break;
+                
+            case 'ferro':
+                // Olhos pixelados industriais (retangulares)
+                ctx.fillStyle = color;
+                [eyeL, eyeR].forEach(eye => {
+                    ctx.fillRect(eye.x - 4, eye.y - 2, 8, 4);
+                    // Linha de scan
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(eye.x - 3, eye.y - 1, 2, 2);
+                    ctx.fillStyle = color;
+                });
+                break;
+                
+            case 'silicio':
+                // Olhos de visor digital (barra horizontal)
+                ctx.fillStyle = '#111122';
+                ctx.fillRect(cx - 22, cy - 9, 44, 7);
+                ctx.fillStyle = color;
+                ctx.fillRect(cx - 20, cy - 8, 40, 5);
+                // Scanline animada
+                const scanX = cx - 18 + (Date.now() % 1000) / 1000 * 36;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(scanX, cy - 7, 4, 3);
+                break;
+                
+            case 'ouro':
+                // Olhos brilhantes com destaque especular
+                [eyeL, eyeR].forEach(eye => {
+                    // Círculo dourado
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, eyeSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Brilho intenso
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(eye.x - 2, eye.y - 2, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(eye.x + 1, eye.y + 1, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                break;
+                
+            case 'cristal':
+                // Olhos vazios místicos (círculos ocos)
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                [eyeL, eyeR].forEach(eye => {
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, eyeSize, 0, Math.PI * 2);
+                    ctx.stroke();
+                    // Ponto central flutuante
+                    ctx.fillStyle = color;
+                    const wobble = Math.sin(Date.now() * 0.005) * 1.5;
+                    ctx.beginPath();
+                    ctx.arc(eye.x + wobble, eye.y, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                break;
+                
+            case 'mercurio':
+                // Olhos de fenda (pupilas verticais)
+                ctx.fillStyle = '#cccccc';
+                [eyeL, eyeR].forEach(eye => {
+                    // Elipse horizontal
+                    ctx.beginPath();
+                    ctx.ellipse(eye.x, eye.y, eyeSize * 1.2, eyeSize * 0.6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Fenda vertical
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.ellipse(eye.x, eye.y, 1.5, eyeSize * 0.5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#cccccc';
+                });
+                break;
+                
+            case 'bismuto':
+                // Olhos de ponto pequeno (fofinhos)
+                ctx.fillStyle = color;
+                [eyeL, eyeR].forEach(eye => {
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                // Bochechas rosadas
+                ctx.fillStyle = 'rgba(255, 105, 180, 0.4)';
+                ctx.beginPath();
+                ctx.arc(cx - 20, cy + 2, 4, 0, Math.PI * 2);
+                ctx.arc(cx + 20, cy + 2, 4, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+                
+            case 'uranio':
+                // Olhos radioativos (círculos com brilho pulsante)
+                const pulse = 0.7 + Math.sin(Date.now() * 0.01) * 0.3;
+                [eyeL, eyeR].forEach(eye => {
+                    // Glow externo
+                    ctx.fillStyle = `rgba(57, 255, 20, ${0.3 * pulse})`;
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, eyeSize + 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Olho principal
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, eyeSize, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Centro escuro
+                    ctx.fillStyle = '#001100';
+                    ctx.beginPath();
+                    ctx.arc(eye.x, eye.y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                break;
+                
+            default:
+                // Olhos padrão
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(eyeL.x, eyeL.y, eyeSize, 0, Math.PI * 2);
+                ctx.arc(eyeR.x, eyeR.y, eyeSize, 0, Math.PI * 2);
+                ctx.fill();
+        }
+    }
+    
+    /**
+     * 👄 Bocas específicas por elemento químico
+     */
+    function drawChemistryMouth(ctx, cx, cy, chemId, color) {
+        const mouthY = cy + 10;
+        
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 2;
+        
+        switch(chemId) {
+            case 'carbono':
+                // Sorriso simples natural
+                ctx.beginPath();
+                ctx.arc(cx, mouthY - 5, 8, 0.3, Math.PI - 0.3);
+                ctx.stroke();
+                break;
+                
+            case 'ferro':
+                // Boca costurada (stitches)
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(cx - 10, mouthY);
+                ctx.lineTo(cx + 10, mouthY);
+                ctx.stroke();
+                // Pontos de costura
+                for (let i = -8; i <= 8; i += 4) {
+                    ctx.beginPath();
+                    ctx.moveTo(cx + i, mouthY - 2);
+                    ctx.lineTo(cx + i, mouthY + 2);
+                    ctx.stroke();
+                }
+                break;
+                
+            case 'silicio':
+                // Boca digital (segmentos)
+                ctx.fillStyle = color;
+                const segments = [1, 0, 1, 1, 0, 1, 1]; // padrão binário
+                segments.forEach((on, i) => {
+                    if (on) {
+                        ctx.fillRect(cx - 10 + i * 3, mouthY - 1, 2, 3);
+                    }
+                });
+                break;
+                
+            case 'ouro':
+                // Sorriso elegante com brilho
+                ctx.beginPath();
+                ctx.arc(cx, mouthY - 3, 10, 0.2, Math.PI - 0.2);
+                ctx.stroke();
+                // Brilho no canto
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(cx + 8, mouthY, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+                
+            case 'cristal':
+                // Boca vazia (void) - apenas contorno
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.ellipse(cx, mouthY, 6, 4, 0, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+                
+            case 'mercurio':
+                // Onda líquida
+                ctx.beginPath();
+                ctx.moveTo(cx - 10, mouthY);
+                ctx.quadraticCurveTo(cx - 5, mouthY - 3, cx, mouthY);
+                ctx.quadraticCurveTo(cx + 5, mouthY + 3, cx + 10, mouthY);
+                ctx.stroke();
+                break;
+                
+            case 'bismuto':
+                // Biquinho fofo
+                ctx.beginPath();
+                ctx.moveTo(cx - 4, mouthY - 2);
+                ctx.lineTo(cx, mouthY + 2);
+                ctx.lineTo(cx + 4, mouthY - 2);
+                ctx.stroke();
+                break;
+                
+            case 'uranio':
+                // Sorriso radioativo largo
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(cx, mouthY - 2, 12, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+                // Brilho tóxico
+                ctx.fillStyle = `rgba(57, 255, 20, 0.5)`;
+                ctx.beginPath();
+                ctx.arc(cx, mouthY + 2, 3, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+                
+            default:
+                // Sorriso padrão
+                ctx.beginPath();
+                ctx.arc(cx, mouthY - 5, 8, 0.2, Math.PI - 0.2);
+                ctx.stroke();
+        }
+    }
+    
+    /**
+     * ✨ Extras visuais por química (sardas, brilhos, etc.)
+     */
+    function drawChemistryExtras(ctx, cx, cy, chemId, color) {
+        switch(chemId) {
+            case 'ouro':
+                // Partículas de brilho
+                ctx.fillStyle = '#ffffff';
+                const sparkles = [
+                    { x: cx - 25, y: cy - 15 },
+                    { x: cx + 20, y: cy - 20 },
+                    { x: cx + 28, y: cy + 5 }
+                ];
+                sparkles.forEach(s => {
+                    const size = 1 + Math.sin(Date.now() * 0.01 + s.x) * 0.5;
+                    ctx.beginPath();
+                    // Estrela de 4 pontas
+                    ctx.moveTo(s.x, s.y - size * 2);
+                    ctx.lineTo(s.x, s.y + size * 2);
+                    ctx.moveTo(s.x - size * 2, s.y);
+                    ctx.lineTo(s.x + size * 2, s.y);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                });
+                break;
+                
+            case 'uranio':
+                // Símbolo de radiação sutil
+                ctx.strokeStyle = `rgba(57, 255, 20, 0.3)`;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 35, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+                
+            case 'mercurio':
+                // Gotículas flutuantes
+                ctx.fillStyle = `rgba(192, 192, 192, 0.5)`;
+                const drops = [
+                    { x: cx - 30, y: cy + 10 },
+                    { x: cx + 25, y: cy + 15 }
+                ];
+                drops.forEach((d, i) => {
+                    const wobble = Math.sin(Date.now() * 0.003 + i) * 2;
+                    ctx.beginPath();
+                    ctx.arc(d.x, d.y + wobble, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                break;
+        }
     }
     
     function updatePreviewStatus(forma, quimica, fisica) {
@@ -2212,32 +2592,66 @@ document.addEventListener('DOMContentLoaded', () => {
     const tools = document.querySelectorAll('.tool-slot');
     let draggedTool = null;
     let ghostElement = null;
+    let targetLockElement = null;
+    let currentDragSlot = null;
+
+    // Cria elemento de Target Lock
+    function createTargetLock() {
+        const lock = document.createElement('div');
+        lock.className = 'target-lock';
+        lock.innerHTML = '<div class="crosshair"></div>';
+        lock.style.display = 'none';
+        document.body.appendChild(lock);
+        return lock;
+    }
+    
+    targetLockElement = createTargetLock();
+
+    // ═══ ATALHOS DE TECLADO PARA FERRAMENTAS ═══
+    document.addEventListener('keydown', (e) => {
+        const key = e.key;
+        if (key >= '1' && key <= '8') {
+            const slot = document.querySelector(`.tool-slot[data-key="${key}"]`);
+            if (slot && !draggedTool) {
+                const action = slot.dataset.action;
+                const icon = slot.querySelector('.tool-icon').innerText;
+                
+                // Simula clique rápido no centro do canvas
+                const canvas = document.querySelector('canvas');
+                if (canvas) {
+                    const rect = canvas.getBoundingClientRect();
+                    startDrag(action, icon, rect.left + rect.width / 2, rect.top + rect.height / 2, slot);
+                }
+            }
+        }
+    });
 
     tools.forEach(tool => {
         tool.addEventListener('mousedown', (e) => {
             e.preventDefault();
             const action = tool.dataset.action;
             const icon = tool.querySelector('.tool-icon').innerText;
-            startDrag(action, icon, e.clientX, e.clientY);
+            startDrag(action, icon, e.clientX, e.clientY, tool);
         });
     });
 
-    function startDrag(action, iconChar, startX, startY) {
+    function startDrag(action, iconChar, startX, startY, slotElement) {
         draggedTool = action;
+        currentDragSlot = slotElement;
         document.body.classList.add('grabbing');
+        
+        // Marca slot como "vazio" visualmente
+        if (slotElement) {
+            slotElement.classList.add('dragging');
+        }
         
         // Emite evento global para Golems detectarem ameaça
         game.events.emit('tool-drag-start', { action });
 
         ghostElement = document.createElement('div');
         ghostElement.classList.add('dragging-ghost');
+        ghostElement.dataset.action = action;
         ghostElement.innerText = iconChar;
-        
-        if (action === 'feed') ghostElement.style.borderColor = '#00ff00';
-        if (action === 'burn') ghostElement.style.borderColor = '#ffaa00';
-        if (action === 'kill') ghostElement.style.borderColor = '#ff0000';
-        if (action === 'freeze') ghostElement.style.borderColor = '#00ffff';
-        if (action === 'mutate') ghostElement.style.borderColor = '#ff00ff';
 
         document.body.appendChild(ghostElement);
         updateGhostPosition(startX, startY);
@@ -2261,10 +2675,28 @@ document.addEventListener('DOMContentLoaded', () => {
             game.events.emit('tool-drag-move', {
                 action: draggedTool,
                 x: gameX,
-                y: gameY
+                y: gameY,
+                screenX: e.clientX,
+                screenY: e.clientY
             });
         }
     }
+
+    // Escuta evento de target lock do jogo
+    game.events.on('show-target-lock', (data) => {
+        if (targetLockElement && data) {
+            targetLockElement.style.display = 'block';
+            targetLockElement.style.left = `${data.screenX}px`;
+            targetLockElement.style.top = `${data.screenY}px`;
+            targetLockElement.className = `target-lock ${data.type || 'neutral'}`;
+        }
+    });
+    
+    game.events.on('hide-target-lock', () => {
+        if (targetLockElement) {
+            targetLockElement.style.display = 'none';
+        }
+    });
 
     function updateGhostPosition(x, y) {
         if (ghostElement) {
@@ -2277,6 +2709,15 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('mousemove', onDragMove);
         document.removeEventListener('mouseup', onDragEnd);
         document.body.classList.remove('grabbing');
+        
+        // Remove classe de dragging do slot
+        if (currentDragSlot) {
+            currentDragSlot.classList.remove('dragging');
+            currentDragSlot = null;
+        }
+        
+        // Esconde target lock
+        game.events.emit('hide-target-lock');
         
         // Emite fim do arraste para Golems relaxarem
         game.events.emit('tool-drag-end', { action: draggedTool });
@@ -2311,9 +2752,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // SISTEMA DE TUTORIAL (FTUE - First Time User Experience)
     // ═══════════════════════════════════════════════════════════════════
     
-    // Instancia o tutorial após todo o DOM estar pronto
+    // Instancia o tutorial (NÃO inicia automaticamente)
+    // O tutorial será ativado pela SanctuaryScene quando for um novo jogo
     const tutorial = new TutorialSystem(game);
     
-    // Expõe para debug (TutorialSystem.reset() para resetar)
+    // Expõe globalmente para a SanctuaryScene poder ativar
     window.tutorial = tutorial;
+    
+    // Escuta evento para iniciar tutorial (disparado pela SanctuaryScene)
+    game.events.on('start-tutorial', () => {
+        console.log('[Main] Recebido evento start-tutorial');
+        if (tutorial && !tutorial.isActive) {
+            tutorial.start();
+        }
+    });
 });
