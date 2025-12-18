@@ -19,11 +19,18 @@ export class UIFlingSystem {
         this.activeProjectiles = [];
         this.isEnabled = true;
         
+        // Detecção mobile
+        this.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                        || ('ontouchstart' in window);
+        
         // Configurações
         this.config = {
             // Thresholds
             flingVelocityThreshold: 400,  // Velocidade mínima para fling (px/s)
             holdTimeForPosition: 200,      // Tempo de hold para modo posição (ms)
+            
+            // Mobile: distância mínima para considerar drag (evita tap acidental)
+            tapThreshold: this.isMobile ? 15 : 5, // pixels de movimento antes de iniciar drag
             
             // Física do fling
             flingFriction: 0.96,          // Fricção durante voo
@@ -43,6 +50,7 @@ export class UIFlingSystem {
         // Estado do drag
         this.drag = {
             active: false,
+            pendingDrag: false,  // NOVO: aguardando threshold de movimento
             element: null,
             clone: null,
             startX: 0,
@@ -363,17 +371,16 @@ export class UIFlingSystem {
         // Não intercepta se for um botão interno clicável
         if (e.target.closest('button:not(.ui-draggable)')) return;
         
-        e.preventDefault();
-        e.stopPropagation();
-        
         const point = this._getPointerPos(e);
         const rect = target.getBoundingClientRect();
         
         // Encontra dados do elemento
         const elementData = this.flingableElements.find(f => f.element === target);
         
+        // MOBILE: Inicia em modo "pendente" - só ativa drag após threshold de movimento
         this.drag = {
-            active: true,
+            active: false,           // Não ativa ainda no mobile
+            pendingDrag: true,       // Aguardando threshold
             element: target,
             clone: null,
             startX: point.x,
@@ -391,6 +398,18 @@ export class UIFlingSystem {
             elementData: elementData
         };
         
+        // Só previne default se não for mobile (permite scroll/tap no mobile até confirmar drag)
+        if (!this.isMobile) {
+            e.preventDefault();
+            e.stopPropagation();
+            this._startDrag(target, rect);
+        }
+    }
+    
+    _startDrag(target, rect) {
+        this.drag.active = true;
+        this.drag.pendingDrag = false;
+        
         // Cria clone que segue o dedo
         this._createDragClone(target, rect);
         
@@ -402,12 +421,31 @@ export class UIFlingSystem {
     }
     
     _onPointerMove(e) {
-        if (!this.drag.active) return;
-        
-        e.preventDefault();
+        if (!this.drag.pendingDrag && !this.drag.active) return;
         
         const point = this._getPointerPos(e);
         const now = Date.now();
+        
+        // MOBILE: Verifica se ultrapassou threshold antes de iniciar drag
+        if (this.drag.pendingDrag && !this.drag.active) {
+            const dx = point.x - this.drag.startX;
+            const dy = point.y - this.drag.startY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance >= this.config.tapThreshold) {
+                // Ultrapassou threshold - inicia drag real
+                e.preventDefault();
+                e.stopPropagation();
+                this._startDrag(this.drag.element, this.drag.originalPos);
+            } else {
+                // Ainda não ultrapassou - permite comportamento normal (scroll, etc)
+                return;
+            }
+        }
+        
+        if (!this.drag.active) return;
+        
+        e.preventDefault();
         
         // Atualiza histórico de posições
         this.drag.positions.push({ x: point.x, y: point.y, t: now });
@@ -448,6 +486,19 @@ export class UIFlingSystem {
     }
     
     _onPointerUp(e) {
+        // Se estava pendente mas não iniciou drag = foi um TAP
+        if (this.drag.pendingDrag && !this.drag.active) {
+            const element = this.drag.element;
+            this.drag.pendingDrag = false;
+            this.drag.element = null;
+            
+            // Dispara click no elemento (tap no mobile)
+            if (element) {
+                element.click();
+            }
+            return;
+        }
+        
         if (!this.drag.active) return;
         
         const { element, clone, velocityX, velocityY, isPositioning, originalPos, elementData } = this.drag;

@@ -114,6 +114,228 @@ document.addEventListener('DOMContentLoaded', () => {
                      || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
 
     // ═══════════════════════════════════════════════════════════════════
+    // FIX HOVER STICKY NO MOBILE
+    // Remove estado hover após touchend para evitar "stuck hover"
+    // ═══════════════════════════════════════════════════════════════════
+    if (isMobile) {
+        // Adiciona classe ao body para CSS targeting
+        document.body.classList.add('touch-device');
+        
+        document.addEventListener('touchend', (e) => {
+            // Força blur no elemento ativo para remover hover/focus state
+            const activeEl = document.activeElement;
+            if (activeEl && activeEl !== document.body && activeEl.blur) {
+                activeEl.blur();
+            }
+        }, { passive: true });
+        
+        // Alternativa: remove hover via classe temporária
+        document.addEventListener('touchstart', () => {
+            document.body.classList.add('touching');
+        }, { passive: true });
+        
+        document.addEventListener('touchend', () => {
+            // Delay pequeno para permitir que o click seja processado primeiro
+            setTimeout(() => {
+                document.body.classList.remove('touching');
+            }, 100);
+        }, { passive: true });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // SISTEMA DE ZOOM - Pinça (mobile), scroll (mouse), touchpad
+    // Controla o zoom da câmera do jogo com UX fluida
+    // ═══════════════════════════════════════════════════════════════════
+    const zoomConfig = {
+        min: 0.5,
+        max: 2.5,
+        default: 1,
+        current: 1,
+        step: 0.1,        // Incremento por scroll tick
+        pinchStep: 0.02,  // Incremento por movimento de pinça
+        smoothing: 0.15   // Suavização da animação
+    };
+    
+    // Indicador visual de zoom
+    let zoomIndicator = null;
+    let zoomIndicatorTimeout = null;
+    
+    function createZoomIndicator() {
+        if (zoomIndicator) return;
+        
+        zoomIndicator = document.createElement('div');
+        zoomIndicator.id = 'zoom-indicator';
+        zoomIndicator.innerHTML = `
+            <span class="zoom-icon">🔍</span>
+            <span class="zoom-value">100%</span>
+        `;
+        document.body.appendChild(zoomIndicator);
+        
+        // Estilos inline para não depender do CSS carregado
+        Object.assign(zoomIndicator.style, {
+            position: 'fixed',
+            bottom: isMobile ? '80px' : '20px',
+            right: '20px',
+            background: 'rgba(0, 20, 30, 0.9)',
+            border: '1px solid rgba(0, 255, 255, 0.5)',
+            borderRadius: '8px',
+            padding: '8px 14px',
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: '10px',
+            color: '#0ff',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            opacity: '0',
+            transform: 'translateY(10px)',
+            transition: 'opacity 0.2s, transform 0.2s',
+            zIndex: '1000',
+            pointerEvents: 'none',
+            backdropFilter: 'blur(8px)'
+        });
+    }
+    
+    function showZoomIndicator(value) {
+        if (!zoomIndicator) createZoomIndicator();
+        
+        const percent = Math.round(value * 100);
+        zoomIndicator.querySelector('.zoom-value').textContent = `${percent}%`;
+        zoomIndicator.style.opacity = '1';
+        zoomIndicator.style.transform = 'translateY(0)';
+        
+        // Cor baseada no zoom
+        if (value < 1) {
+            zoomIndicator.style.borderColor = 'rgba(100, 200, 255, 0.6)';
+        } else if (value > 1) {
+            zoomIndicator.style.borderColor = 'rgba(255, 200, 100, 0.6)';
+        } else {
+            zoomIndicator.style.borderColor = 'rgba(0, 255, 255, 0.5)';
+        }
+        
+        // Esconde após 1.5s
+        clearTimeout(zoomIndicatorTimeout);
+        zoomIndicatorTimeout = setTimeout(() => {
+            if (zoomIndicator) {
+                zoomIndicator.style.opacity = '0';
+                zoomIndicator.style.transform = 'translateY(10px)';
+            }
+        }, 1500);
+    }
+    
+    function applyZoom(newZoom, focusX = null, focusY = null) {
+        // Clamp no range permitido
+        newZoom = Math.max(zoomConfig.min, Math.min(zoomConfig.max, newZoom));
+        
+        if (Math.abs(newZoom - zoomConfig.current) < 0.01) return;
+        
+        zoomConfig.current = newZoom;
+        
+        // Aplica zoom na câmera do Phaser
+        const activeScene = game.scene.getScene('SanctuaryScene');
+        if (activeScene && activeScene.cameras && activeScene.cameras.main) {
+            const camera = activeScene.cameras.main;
+            
+            // Zoom suave com tween
+            activeScene.tweens.add({
+                targets: camera,
+                zoom: newZoom,
+                duration: 100,
+                ease: 'Sine.easeOut'
+            });
+        }
+        
+        showZoomIndicator(newZoom);
+    }
+    
+    // ═══ ZOOM VIA SCROLL DO MOUSE / TOUCHPAD ═══
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+        gameContainer.addEventListener('wheel', (e) => {
+            // Só aplica zoom se estiver no game container e não em um painel
+            if (e.target.closest('#creation-panel, #tree-modal, .evolved-modal')) return;
+            
+            e.preventDefault();
+            
+            // deltaY negativo = scroll up = zoom in
+            const delta = e.deltaY > 0 ? -zoomConfig.step : zoomConfig.step;
+            applyZoom(zoomConfig.current + delta, e.clientX, e.clientY);
+            
+        }, { passive: false });
+    }
+    
+    // ═══ ZOOM VIA PINÇA (MOBILE) ═══
+    let pinchState = {
+        active: false,
+        initialDistance: 0,
+        initialZoom: 1
+    };
+    
+    function getPinchDistance(e) {
+        if (e.touches.length < 2) return 0;
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    document.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            // Só ativa pinch se não estiver em um painel
+            if (e.target.closest('#creation-panel, #tree-modal, .evolved-modal, #mobile-nav')) return;
+            
+            pinchState.active = true;
+            pinchState.initialDistance = getPinchDistance(e);
+            pinchState.initialZoom = zoomConfig.current;
+        }
+    }, { passive: true });
+    
+    document.addEventListener('touchmove', (e) => {
+        if (!pinchState.active || e.touches.length !== 2) return;
+        
+        const currentDistance = getPinchDistance(e);
+        const scale = currentDistance / pinchState.initialDistance;
+        const newZoom = pinchState.initialZoom * scale;
+        
+        applyZoom(newZoom);
+    }, { passive: true });
+    
+    document.addEventListener('touchend', () => {
+        pinchState.active = false;
+    }, { passive: true });
+    
+    // ═══ RESET ZOOM (Double-tap no mobile, Double-click no desktop) ═══
+    let lastTapTime = 0;
+    
+    if (gameContainer) {
+        gameContainer.addEventListener('dblclick', (e) => {
+            if (e.target.closest('#creation-panel, #tree-modal, .evolved-modal')) return;
+            applyZoom(zoomConfig.default);
+        });
+    }
+    
+    // Double-tap detection para mobile
+    document.addEventListener('touchend', (e) => {
+        if (e.target.closest('#creation-panel, #tree-modal, .evolved-modal, #mobile-nav')) return;
+        
+        const now = Date.now();
+        if (now - lastTapTime < 300 && e.changedTouches.length === 1) {
+            // Double tap detectado - reset zoom
+            applyZoom(zoomConfig.default);
+        }
+        lastTapTime = now;
+    }, { passive: true });
+    
+    // Expõe função de zoom globalmente para debug/atalhos
+    window._gameZoom = zoomConfig.current;
+    window.setGameZoom = (newZoom) => {
+        applyZoom(newZoom);
+        window._gameZoom = zoomConfig.current;
+    };
+    window.resetGameZoom = () => {
+        applyZoom(zoomConfig.default);
+        window._gameZoom = zoomConfig.current;
+    };
+
+    // ═══════════════════════════════════════════════════════════════════
     // INICIALIZAÇÃO DA UI DE FORMAS EVOLUÍDAS
     // Painel flutuante com catálogo de formas desbloqueáveis
     // ═══════════════════════════════════════════════════════════════════
@@ -2927,6 +3149,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══ ATALHOS DE TECLADO PARA FERRAMENTAS ═══
     document.addEventListener('keydown', (e) => {
         const key = e.key;
+        
+        // Zoom shortcuts: + / - / 0 (reset)
+        if (key === '+' || key === '=') {
+            e.preventDefault();
+            if (window.setGameZoom) window.setGameZoom(window._gameZoom + 0.1);
+        } else if (key === '-' || key === '_') {
+            e.preventDefault();
+            if (window.setGameZoom) window.setGameZoom(window._gameZoom - 0.1);
+        } else if (key === '0' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            if (window.resetGameZoom) window.resetGameZoom();
+        }
+        
         if (key >= '1' && key <= '8') {
             const slot = document.querySelector(`.tool-slot[data-key="${key}"]`);
             if (slot && !draggedTool) {

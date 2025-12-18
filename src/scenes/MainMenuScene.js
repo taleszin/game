@@ -715,7 +715,7 @@ export class MainMenuScene extends Phaser.Scene {
             this._updateLoadingProgress(20, 'Carregando cenário...');
             
             // Caminho absoluto da raiz do servidor
-            this.load.image('sanctuary-bg', '/background.png');
+            this.load.image('sanctuary-bg', 'background.png');
             
             // Handler de erro
             this.load.on('loaderror', (file) => {

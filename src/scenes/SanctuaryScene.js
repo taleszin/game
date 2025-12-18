@@ -34,7 +34,7 @@ export default class SanctuaryScene extends Phaser.Scene {
     // Fallback: carrega background se não foi carregado no MainMenu
     if (!this.textures.exists('sanctuary-bg')) {
       console.log('[SanctuaryScene] Carregando background (fallback)...');
-      this.load.image('sanctuary-bg', '/background.png');
+      this.load.image('sanctuary-bg', 'background.png');
     }
   }
 
@@ -174,6 +174,9 @@ export default class SanctuaryScene extends Phaser.Scene {
                 const spawnX = Phaser.Math.Clamp(pointer.worldX, 50, gameWidth - 50);
                 const spawnY = Phaser.Math.Clamp(pointer.worldY, 50, gameHeight - 50);
                 
+                // Cria ripple visual no ponto de spawn
+                this._createPlacementRipple(pointer.x, pointer.y);
+                
                 this.spawnGolem(spawnX, spawnY, this.pendingData);
             } catch (error) { console.error(error); } 
             finally { this.exitPlacementMode(); }
@@ -217,6 +220,9 @@ export default class SanctuaryScene extends Phaser.Scene {
       this.isPlacingMode = true;
       this.cursorText.setVisible(true);
       this.input.setDefaultCursor('crosshair');
+      
+      // ═══ MOBILE: Mostra overlay com instruções de placement ═══
+      this._showPlacementOverlay();
   }
 
   exitPlacementMode() {
@@ -224,6 +230,71 @@ export default class SanctuaryScene extends Phaser.Scene {
       this.pendingData = null;
       this.cursorText.setVisible(false);
       this.input.setDefaultCursor('default');
+      
+      // ═══ MOBILE: Remove overlay ═══
+      this._hidePlacementOverlay();
+  }
+  
+  /**
+   * Mostra overlay visual para indicar que usuário deve clicar para posicionar
+   */
+  _showPlacementOverlay() {
+      // Remove overlay anterior se existir
+      this._hidePlacementOverlay();
+      
+      // Cria overlay
+      this.placementOverlay = document.createElement('div');
+      this.placementOverlay.className = 'placement-overlay active';
+      this.placementOverlay.innerHTML = `
+          <div class="placement-hint">
+              <div class="placement-hint-icon">👆</div>
+              <div class="placement-hint-text">TOQUE NA TELA</div>
+              <div class="placement-hint-subtext">para posicionar seu Golem</div>
+          </div>
+      `;
+      document.body.appendChild(this.placementOverlay);
+      
+      // Permite que cliques passem para o canvas (pointer-events: none no CSS)
+      // mas adiciona listener para criar ripple visual e esconder hint
+      const hint = this.placementOverlay.querySelector('.placement-hint');
+      if (hint) {
+          hint.style.pointerEvents = 'auto';
+          hint.addEventListener('click', () => {
+              // Esconde o hint ao clicar nele, usuário entendeu
+              hint.style.display = 'none';
+          });
+      }
+  }
+  
+  /**
+   * Cria efeito ripple no ponto de toque
+   */
+  _createPlacementRipple(x, y) {
+      const ripple = document.createElement('div');
+      ripple.className = 'placement-ripple';
+      ripple.style.left = `${x}px`;
+      ripple.style.top = `${y}px`;
+      document.body.appendChild(ripple);
+      
+      // Remove após animação
+      setTimeout(() => ripple.remove(), 600);
+  }
+  
+  /**
+   * Remove overlay de placement
+   */
+  _hidePlacementOverlay() {
+      if (this.placementOverlay) {
+          this.placementOverlay.classList.remove('active');
+          if (this._placementTouchHandler) {
+              this.placementOverlay.removeEventListener('touchstart', this._placementTouchHandler);
+              this.placementOverlay.removeEventListener('mousedown', this._placementTouchHandler);
+          }
+          setTimeout(() => {
+              this.placementOverlay?.remove();
+              this.placementOverlay = null;
+          }, 300);
+      }
   }
 
   handleToolAction(x, y, action) {
