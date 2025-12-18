@@ -368,6 +368,56 @@ export default class Golem extends Phaser.GameObjects.Container {
                 this.clearInstincts();
             };
             scene.game.events.on('tool-drag-end', this.toolDragEndHandler);
+            
+            // ═══════════════════════════════════════════════════════════════════
+            // SISTEMA DE RESPOSTA SOCIAL - Golems "ouvem" e respondem uns aos outros
+            // ═══════════════════════════════════════════════════════════════════
+            this.socialResponseCooldown = 0; // Cooldown para evitar spam de respostas
+            this.SOCIAL_RESPONSE_RADIUS = 150; // Distância máxima para "ouvir"
+            this.SOCIAL_RESPONSE_CHANCE = 0.30; // 30% de chance de responder
+            
+            this.golemSpokeHandler = (eventData) => {
+                // Não responde a si mesmo
+                if (eventData.golemId === this.id) return;
+                
+                // Verifica cooldown
+                if (this.socialResponseCooldown > 0) return;
+                
+                // Não responde se estiver morto ou congelado
+                if (!this.active || this.isFrozen || this.isDragging) return;
+                
+                // Não responde se já estiver falando
+                if (this.isSpeaking || this.speechQueue.length > 0) return;
+                
+                // Calcula distância do falante
+                const distance = Phaser.Math.Distance.Between(
+                    this.x, this.y, 
+                    eventData.x, eventData.y
+                );
+                
+                // Só responde se estiver perto o suficiente
+                if (distance > this.SOCIAL_RESPONSE_RADIUS) return;
+                
+                // Chance de responder (30%)
+                if (Math.random() > this.SOCIAL_RESPONSE_CHANCE) return;
+                
+                // Responde com delay proporcional à distância (mais perto = resposta mais rápida)
+                const responseDelay = 800 + (distance / this.SOCIAL_RESPONSE_RADIUS) * 700;
+                
+                scene.time.delayedCall(responseDelay, () => {
+                    if (!this.active || this.isSpeaking) return;
+                    
+                    // Gera resposta social baseada na relação física
+                    this.speakSocialResponse(eventData.physicsId);
+                });
+                
+                // Ativa cooldown de 5 segundos para evitar spam
+                this.socialResponseCooldown = 5000;
+                scene.time.delayedCall(5000, () => {
+                    this.socialResponseCooldown = 0;
+                });
+            };
+            scene.events.on('golem-spoke', this.golemSpokeHandler);
         }
     }
 
@@ -2303,6 +2353,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         // Detach event handlers
         try { if (this.scene && this.toolDragMoveHandler) this.scene.game.events.off('tool-drag-move', this.toolDragMoveHandler); } catch(e) {}
         try { if (this.scene && this.toolDragEndHandler) this.scene.game.events.off('tool-drag-end', this.toolDragEndHandler); } catch(e) {}
+        // Remove social listener
+        try { if (this.scene && this.golemSpokeHandler) this.scene.events.off('golem-spoke', this.golemSpokeHandler); } catch(e) {}
         this.isSpeaking = false;
         this.speechQueue = [];
         this.expressionState.mood = 'dead';
@@ -2477,6 +2529,20 @@ export default class Golem extends Phaser.GameObjects.Container {
             return;
         }
         this.isSpeaking = true;
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // EMITE EVENTO SOCIAL - Outros Golems podem "ouvir" e responder
+        // ═══════════════════════════════════════════════════════════════════
+        if (this.scene && this.scene.events) {
+            this.scene.events.emit('golem-spoke', {
+                golemId: this.id,
+                x: this.x,
+                y: this.y,
+                physicsId: this.currentPhysics || 'luz',
+                text: text
+            });
+        }
+        
         this.clearSpeechBubble();
         const fontSize = 7;
         const padding = 6;
@@ -2712,6 +2778,18 @@ export default class Golem extends Phaser.GameObjects.Container {
             const phrase = generateDialogue(this.dataAttributes, context);
             this.speak(phrase);
         }).catch(e => console.warn('Erro ao gerar diálogo:', e));
+    }
+    
+    /**
+     * Gera uma resposta social baseada na física do Golem que falou
+     * @param {string} speakerPhysicsId - ID da física do Golem que falou
+     */
+    speakSocialResponse(speakerPhysicsId) {
+        import('../services/MockAiService.js').then(({ generateSocialResponse }) => {
+            const selfPhysicsId = this.currentPhysics || 'luz';
+            const phrase = generateSocialResponse(selfPhysicsId, speakerPhysicsId);
+            this.speak(phrase);
+        }).catch(e => console.warn('Erro ao gerar resposta social:', e));
     }
     
     // Helper: Desenha curvas quadráticas no Phaser Graphics usando linhas

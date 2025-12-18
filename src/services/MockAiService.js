@@ -9,7 +9,10 @@ import {
     DIALOGUE_SPECIAL_ACTIONS,
     PHYSICS_COLORS,
     PHYSICS_PERSONALITY,
-    CHEMISTRY_MODIFIERS
+    CHEMISTRY_MODIFIERS,
+    PHYSICS_VOCABULARY,
+    PHYSICS_OPPOSITES,
+    SOCIAL_RESPONSE_TEMPLATES
 } from '../data/dialogueData.js';
 
 // ═══════════════════════════════════════════════════════════════════
@@ -215,8 +218,52 @@ export async function fetchDialogue(request) {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SISTEMA DE PROCESSAMENTO DE TEMPLATES
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Processa uma string com placeholders {substantivo}, {verbo}, {adjetivo}
+ * Substitui por palavras aleatórias do vocabulário da física do Golem
+ * @param {string} template - String com placeholders
+ * @param {string} physicsId - ID da física do Golem
+ * @returns {string} String processada
+ */
+function processTemplate(template, physicsId) {
+    const vocabulary = PHYSICS_VOCABULARY[physicsId] || PHYSICS_VOCABULARY.luz;
+    
+    // Detecta se há placeholders na string
+    if (!template.includes('{')) {
+        return template;
+    }
+    
+    // Substitui cada tipo de placeholder
+    let result = template;
+    
+    // Substitui {substantivo}
+    while (result.includes('{substantivo}')) {
+        const word = vocabulary.substantivos[Math.floor(Math.random() * vocabulary.substantivos.length)];
+        result = result.replace('{substantivo}', word);
+    }
+    
+    // Substitui {verbo}
+    while (result.includes('{verbo}')) {
+        const word = vocabulary.verbos[Math.floor(Math.random() * vocabulary.verbos.length)];
+        result = result.replace('{verbo}', word);
+    }
+    
+    // Substitui {adjetivo}
+    while (result.includes('{adjetivo}')) {
+        const word = vocabulary.adjetivos[Math.floor(Math.random() * vocabulary.adjetivos.length)];
+        result = result.replace('{adjetivo}', word);
+    }
+    
+    return result;
+}
+
 /**
  * Função de conveniência para gerar diálogo (compatibilidade)
+ * Agora com suporte a templates generativos
  */
 export function generateDialogue(golemData, context = 'idle') {
     const physicsId = golemData.fisica?.id || 'luz';
@@ -231,6 +278,10 @@ export function generateDialogue(golemData, context = 'idle') {
     const contextPhrases = physicsDialogue[context] || physicsDialogue.idle;
     let phrase = contextPhrases[Math.floor(Math.random() * contextPhrases.length)];
     
+    // Processa templates se houver placeholders
+    phrase = processTemplate(phrase, physicsId);
+    
+    // Aplica modificador químico (mantém o sistema de sabor existente)
     if (Math.random() < 0.3) {
         const chemModifier = DIALOGUE_MODIFIERS_CHEMISTRY[chemId];
         if (chemModifier) {
@@ -243,6 +294,30 @@ export function generateDialogue(golemData, context = 'idle') {
     }
     
     return phrase;
+}
+
+/**
+ * Gera resposta social baseada na relação entre tipos físicos
+ * @param {string} selfPhysicsId - Física do Golem que responde
+ * @param {string} speakerPhysicsId - Física do Golem que falou
+ * @returns {string} Frase de resposta processada
+ */
+export function generateSocialResponse(selfPhysicsId, speakerPhysicsId) {
+    let responseType = 'neutral';
+    
+    // Determina tipo de resposta baseado na relação física
+    if (selfPhysicsId === speakerPhysicsId) {
+        responseType = 'friendly';
+    } else if (PHYSICS_OPPOSITES[selfPhysicsId] === speakerPhysicsId) {
+        responseType = 'hostile';
+    }
+    
+    // Escolhe template de resposta
+    const templates = SOCIAL_RESPONSE_TEMPLATES[responseType];
+    const template = templates[Math.floor(Math.random() * templates.length)];
+    
+    // Processa template com vocabulário do próprio Golem
+    return processTemplate(template, selfPhysicsId);
 }
 
 // ═══════════════════════════════════════════════════════════════════

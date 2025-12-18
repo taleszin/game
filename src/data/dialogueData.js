@@ -1,10 +1,129 @@
 // ═══════════════════════════════════════════════════════════════════
-// DIALOGUE DATABASE - V2.0 (EXPANDED)
-// "A alma reside no texto."
+// DIALOGUE DATABASE - V3.0 (GENERATIVE TEMPLATES)
+// "A alma reside no texto dinâmico."
 // ═══════════════════════════════════════════════════════════════════
 
 /**
+ * ═══════════════════════════════════════════════════════════════════
+ * VOCABULÁRIO POR FÍSICA - Para sistema de templates generativos
+ * Estrutura: { [physicsId]: { substantivos, verbos, adjetivos } }
+ * ═══════════════════════════════════════════════════════════════════
+ */
+export const PHYSICS_VOCABULARY = {
+    eletricidade: {
+        substantivos: ['bateria', 'circuito', 'fiação', 'carga', 'voltagem', 'elétron', 'faísca', 'fusível', 'resistor', 'capacitor', 'amperagem', 'corrente', 'energia'],
+        verbos: ['vibrar', 'pulsar', 'carregar', 'descarregar', 'curto-circuitar', 'energizar', 'conduzir', 'oscilar', 'zumbir', 'eletrocutar'],
+        adjetivos: ['elétrica', 'carregada', 'instável', 'pulsante', 'energizada', 'sobrecarregada', 'estática', 'alternada', 'alta-tensão', 'ionizada']
+    },
+    gravidade: {
+        substantivos: ['massa', 'órbita', 'núcleo', 'horizonte', 'vácuo', 'matéria', 'singularidade', 'peso', 'densidade', 'buraco negro', 'graviton'],
+        verbos: ['atrair', 'colapsar', 'orbitar', 'afundar', 'comprimir', 'distorcer', 'puxar', 'cair', 'esmagar', 'dobrar'],
+        adjetivos: ['densa', 'pesada', 'massiva', 'profunda', 'colapsada', 'infinita', 'esmagadora', 'inexorável', 'atraente', 'curvada']
+    },
+    luz: {
+        substantivos: ['fóton', 'raio', 'espectro', 'brilho', 'aurora', 'prisma', 'lúmen', 'reflexo', 'claridade', 'onda', 'partícula'],
+        verbos: ['brilhar', 'refletir', 'refratar', 'iluminar', 'cintilar', 'irradiar', 'difundir', 'resplandecer', 'flamear', 'clarear'],
+        adjetivos: ['luminosa', 'brilhante', 'radiante', 'pura', 'cristalina', 'translúcida', 'cintilante', 'etérea', 'iridescente', 'incandescente']
+    },
+    calor: {
+        substantivos: ['chama', 'brasa', 'lava', 'fornalha', 'combustão', 'cinza', 'fumaça', 'plasma', 'caloria', 'fagulha', 'inferno'],
+        verbos: ['queimar', 'ferver', 'carbonizar', 'inflamar', 'aquecer', 'derreter', 'vaporizar', 'explodir', 'arder', 'abrasar'],
+        adjetivos: ['quente', 'ardente', 'incandescente', 'flamejante', 'abrasadora', 'escaldante', 'vulcânica', 'infernal', 'térmica', 'explosiva']
+    },
+    frio: {
+        substantivos: ['gelo', 'cristal', 'floco', 'nevasca', 'glaciar', 'neve', 'geada', 'inverno', 'avalanche', 'iceberg', 'permafrost'],
+        verbos: ['congelar', 'cristalizar', 'esfriar', 'solidificar', 'preservar', 'nevar', 'gelar', 'craquear', 'estilhaçar', 'hibernar'],
+        adjetivos: ['gelada', 'gélida', 'cristalina', 'congelante', 'sub-zero', 'glacial', 'ártica', 'frígida', 'preservada', 'imóvel']
+    },
+    radiacao: {
+        substantivos: ['núcleo', 'isótopo', 'partícula', 'reação', 'decaimento', 'meia-vida', 'urânio', 'plutônio', 'geiger', 'radiação', 'fissão'],
+        verbos: ['decair', 'irradiar', 'contaminar', 'mutar', 'ionizar', 'emitir', 'fissionar', 'fundir', 'envenenar', 'brilhar'],
+        adjetivos: ['radioativa', 'instável', 'tóxica', 'mutante', 'crítica', 'nuclear', 'letal', 'ionizada', 'cancerígena', 'glitchada']
+    },
+    magnetismo: {
+        substantivos: ['polo', 'campo', 'fluxo', 'imã', 'bússola', 'atração', 'repulsão', 'spin', 'tesla', 'gauss', 'ferro'],
+        verbos: ['atrair', 'repelir', 'polarizar', 'alinhar', 'induzir', 'magnetizar', 'oscilar', 'orientar', 'grudar', 'levitar'],
+        adjetivos: ['magnética', 'polarizada', 'atraente', 'repulsiva', 'bipolar', 'alinhada', 'ferromagnética', 'oscilante', 'induzida', 'orientada']
+    },
+    entropia: {
+        substantivos: ['caos', 'desordem', 'vazio', 'fragmento', 'ruína', 'poeira', 'cinza', 'nada', 'silêncio', 'dissolução', 'fim'],
+        verbos: ['dissolver', 'fragmentar', 'decair', 'desintegrar', 'espalhar', 'colapsar', 'esfriar', 'acabar', 'corroer', 'morrer'],
+        adjetivos: ['caótica', 'dissolvida', 'fragmentada', 'irreversível', 'inevitável', 'fria', 'vazia', 'final', 'entrópica', 'corroída']
+    },
+    sonico: {
+        substantivos: ['frequência', 'onda', 'vibração', 'nota', 'harmônico', 'ressonância', 'eco', 'tom', 'acorde', 'amplitude', 'decibel'],
+        verbos: ['vibrar', 'ressoar', 'ecoar', 'pulsar', 'oscilar', 'harmonizar', 'amplificar', 'silenciar', 'modular', 'sintetizar'],
+        adjetivos: ['sônica', 'vibrante', 'ressonante', 'harmônica', 'pulsante', 'musical', 'rítmica', 'modulada', 'amplificada', 'dissonante']
+    }
+};
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * TIPOS FÍSICOS OPOSTOS - Para sistema de resposta social
+ * ═══════════════════════════════════════════════════════════════════
+ */
+export const PHYSICS_OPPOSITES = {
+    calor: 'frio',
+    frio: 'calor',
+    luz: 'entropia',
+    entropia: 'luz',
+    eletricidade: 'magnetismo',
+    magnetismo: 'eletricidade',
+    gravidade: 'luz',
+    radiacao: 'frio',
+    sonico: 'gravidade'
+};
+
+/**
+ * ═══════════════════════════════════════════════════════════════════
+ * TEMPLATES DE RESPOSTA SOCIAL - Para interações entre Golems
+ * ═══════════════════════════════════════════════════════════════════
+ */
+export const SOCIAL_RESPONSE_TEMPLATES = {
+    // Resposta quando o vizinho é do MESMO tipo físico
+    friendly: [
+        "Eu te entendo, {substantivo}!",
+        "Somos {adjetivo}s juntos!",
+        "Minha {substantivo} também {verbo}!",
+        "Sim! A {substantivo} é {adjetivo}!",
+        "Concordo, irmão {adjetivo}!",
+        "{adjetivo}... como eu!",
+        "Somos feitos da mesma {substantivo}~",
+        "Ei! Eu também {verbo}!",
+        "Finalmente alguém {adjetivo}!",
+        "Nossa {substantivo} compartilhada..."
+    ],
+    // Resposta quando o vizinho é do tipo OPOSTO
+    hostile: [
+        "Afaste-se, {substantivo}!",
+        "Você é muito {adjetivo}...",
+        "Não chegue perto com essa {substantivo}!",
+        "Minha {substantivo} não gosta de você!",
+        "Vá {verbo} longe daqui!",
+        "Incompatível! {adjetivo} demais!",
+        "Cuidado! Minha {substantivo} reage!",
+        "Tsc... Você é {adjetivo}...",
+        "Mantenha distância, {substantivo}!",
+        "Não me faça {verbo}!"
+    ],
+    // Resposta quando o vizinho é de tipo NEUTRO
+    neutral: [
+        "Hmm... {substantivo}...",
+        "Interessante, {adjetivo}...",
+        "Eu ouvi você {verbo}...",
+        "Uma {substantivo} diferente...",
+        "Curioso... {adjetivo}...",
+        "Sua {substantivo}... peculiar.",
+        "Vejo que você {verbo}...",
+        "{adjetivo}... diferente de mim.",
+        "Olá, {substantivo}...",
+        "Cada um com sua {substantivo}~"
+    ]
+};
+
+/**
  * Banco de frases por FÍSICA (Personalidade base)
+ * Agora com TEMPLATES usando placeholders: {substantivo}, {verbo}, {adjetivo}
  * Estrutura: { [physicsId]: { [context]: string[] } }
  */
 export const DIALOGUE_BY_PHYSICS = {
@@ -14,31 +133,44 @@ export const DIALOGUE_BY_PHYSICS = {
             "ZZZT! ZZZT!", "ENERGIA!!", "CARGA EM 99%...", "PRECISO DE UM FIO TERRA!",
             "*estática*", "VOLTAGEM OK!", "BZZZZ... HZ... BZZ...", "ELÉTRONS ORBITANDO!",
             "CIRCUITO VIVO!", "CORRENTE ALTERNADA!", "AMPERAGEM SUBINDO!", "1.21 GIGAWATTS!",
-            "TÃO... RÁPIDO...", "VIBRANDO EM 60HZ", "ESTATICA.EXE", "LOOP DE FEEDBACK!"
+            "TÃO... RÁPIDO...", "VIBRANDO EM 60HZ", "ESTATICA.EXE", "LOOP DE FEEDBACK!",
+            // Templates generativos
+            "Minha {substantivo} está {adjetivo}!",
+            "Sinto a {substantivo} {verbo}!",
+            "{substantivo} {adjetivo}!!",
+            "Preciso {verbo} minha {substantivo}!"
         ],
         born: [
             "ZZAP! SISTEMA ONLINE!", "BOOT COMPLETO!", "SPARK DE VIDA!", "IGNIÇÃO ELÉTRICA!",
-            "CONECTADO À REDE!", "OLÁ MUNDO (VOLTAGEM ALTA)!", "SURTO DE POTÊNCIA!"
+            "CONECTADO À REDE!", "OLÁ MUNDO (VOLTAGEM ALTA)!", "SURTO DE POTÊNCIA!",
+            "Minha {substantivo} nasceu {adjetivo}!"
         ],
         poke: [
             "AI! CURTO-CIRCUITO!", "ZZZT! NÃO TOCA!", "DESCARGA ELETROSTÁTICA!", "QUEM FOI?!",
-            "PERIGO: ALTA TENSÃO!", "VOU DAR CHOQUE!", "ISOLAMENTO ROMPIDO!", "INTERFERÊNCIA!"
+            "PERIGO: ALTA TENSÃO!", "VOU DAR CHOQUE!", "ISOLAMENTO ROMPIDO!", "INTERFERÊNCIA!",
+            "Não toque na minha {substantivo}!",
+            "Vou {verbo} você!!"
         ],
         feed: [
             "RECARGA COMPLETA!!", "AMPERES++!", "BATERIA: 100%!", "DELÍCIA DE ÍONS!",
-            "CONDUTIVIDADE AUMENTADA!", "ENERGIA PURA!", "MAIS JOULES!", "POWER UP!"
+            "CONDUTIVIDADE AUMENTADA!", "ENERGIA PURA!", "MAIS JOULES!", "POWER UP!",
+            "Minha {substantivo} está {adjetivo}!",
+            "{substantivo} {verbo}ndo forte!"
         ],
         burn: [
             "SOBRECARGA TÉRMICA!!", "FUSÍVEL QUEIMADO!!", "RESISTÊNCIA FALHANDO!!", "CURTO FATAL!",
-            "SISTEMA SUPERAQUECIDO!", "DERRETENDO CABOS!", "ERRO CRÍTICO: FOGO!", "DESLIGAMENTO DE EMERGÊNCIA!"
+            "SISTEMA SUPERAQUECIDO!", "DERRETENDO CABOS!", "ERRO CRÍTICO: FOGO!", "DESLIGAMENTO DE EMERGÊNCIA!",
+            "Minha {substantivo} vai {verbo}!!"
         ],
         freeze: [
             "C-c-condutividade... b-baixa...", "S-supercondutor...?", "R-r-resistência... zero...", 
-            "E-elétrons... p-parando...", "C-circuito... f-frio...", "L-lag... lag..."
+            "E-elétrons... p-parando...", "C-circuito... f-frio...", "L-lag... lag...",
+            "M-minha {substantivo}... f-fria..."
         ],
         dying: [
             "Bateria... fraca...", "Desconectando...", "Zzzt... off...", "Sem sinal...",
-            "Apagão...", "Blue screen...", "Capacitor... vazio...", "Descarregado..."
+            "Apagão...", "Blue screen...", "Capacitor... vazio...", "Descarregado...",
+            "Minha {substantivo}... acabando..."
         ]
     },
 
@@ -47,23 +179,31 @@ export const DIALOGUE_BY_PHYSICS = {
         idle: [
             "P  E  S  O...", "Caindo... para... sempre...", "Denso...", "A   t   r   a   ç   ã   o...",
             "Centro... de... massa...", "Órbita... estável...", "Matéria... escura...", "Distorcendo... o... espaço...",
-            "Horizonte... de... eventos...", "Tudo... vem... a mim...", "Colapso... lento...", "G  R  A  V  I  T  O  N  S..."
+            "Horizonte... de... eventos...", "Tudo... vem... a mim...", "Colapso... lento...", "G  R  A  V  I  T  O  N  S...",
+            // Templates generativos
+            "Minha {substantivo}... {adjetivo}...",
+            "A {substantivo}... {verbo}... tudo...",
+            "{substantivo}... {adjetivo}... sempre..."
         ],
         born: [
             "Aterrisei...", "Impacto... confirmado...", "Massa... registrada...", "Cheguei... pesado...",
-            "O... espaço... dobra...", "Singularidade... iniciada...", "Pouso..."
+            "O... espaço... dobra...", "Singularidade... iniciada...", "Pouso...",
+            "Minha {substantivo}... nasceu..."
         ],
         poke: [
             "Pesado... demais...", "Não... me... mova...", "Inércia...", "Firmeza...",
-            "Estou... ancorado...", "Gravidade... aumenta...", "Resistindo..."
+            "Estou... ancorado...", "Gravidade... aumenta...", "Resistindo...",
+            "Minha {substantivo}... inabalável..."
         ],
         feed: [
             "Absorvendo... matéria...", "Engolindo...", "Aumentando... densidade...", "Mais... massa...",
-            "Acreção...", "Compactando...", "Expandindo... horizonte..."
+            "Acreção...", "Compactando...", "Expandindo... horizonte...",
+            "{substantivo}... {adjetivo}..."
         ],
         burn: [
             "Núcleo... instável...", "Colapsando...", "Fusão... não...", "Calor... excessivo...",
-            "Massa... crítica...", "Desintegrando...", "Perdendo... coesão..."
+            "Massa... crítica...", "Desintegrando...", "Perdendo... coesão...",
+            "A {substantivo}... vai {verbo}..."
         ],
         freeze: [
             "Parado... no... tempo...", "Entropia... zero...", "Sólido... absoluto...", "Congelado... no... vácuo...",
@@ -71,7 +211,8 @@ export const DIALOGUE_BY_PHYSICS = {
         ],
         dying: [
             "Afundando... no... nada...", "Sumindo...", "Colapso... final...", "Hawking... radiation...",
-            "Evaporando...", "Singularidade... desfeita...", "Adeus... massa..."
+            "Evaporando...", "Singularidade... desfeita...", "Adeus... massa...",
+            "Minha {substantivo}... desvanece..."
         ]
     },
 
@@ -80,19 +221,26 @@ export const DIALOGUE_BY_PHYSICS = {
         idle: [
             "Iluminando~", "Fótons dançando...", "Brilho~", "Refletindo verdades...",
             "Espectro visível...", "Ondas e partículas~", "Claridade...", "Aurora~",
-            "Viajando a c...", "Sem sombra...", "Difração...", "Prisma da alma..."
+            "Viajando a c...", "Sem sombra...", "Difração...", "Prisma da alma...",
+            // Templates generativos
+            "Meu {substantivo} está {adjetivo}~",
+            "A {substantivo} {verbo} suavemente...",
+            "{adjetivo}... tão {adjetivo}~"
         ],
         born: [
             "Flash!", "Haja luz!", "Nasci brilhando~", "Primeiro raio!",
-            "Amanhecer!", "Fóton emitido!", "Iluminação!"
+            "Amanhecer!", "Fóton emitido!", "Iluminação!",
+            "Meu {substantivo} brilha!"
         ],
         poke: [
             "Reflexo!", "Cintilando~", "Opalescente!", "Não bloqueie meu brilho!",
-            "Refração!", "Dispersão!", "Cuidado com a sombra!"
+            "Refração!", "Dispersão!", "Cuidado com a sombra!",
+            "Não ofusque meu {substantivo}!"
         ],
         feed: [
             "Absorvendo lúmens~", "Mais brilho!", "Radiante!", "Fotossíntese virtual!",
-            "Aumentando intensidade!", "Incandescência!", "Lux++!"
+            "Aumentando intensidade!", "Incandescência!", "Lux++!",
+            "Minha {substantivo} fica {adjetivo}!"
         ],
         burn: [
             "Brilho excessivo!", "Supernova!", "Branco quente!", "Frequência ultravioleta!",
@@ -104,7 +252,8 @@ export const DIALOGUE_BY_PHYSICS = {
         ],
         dying: [
             "Escurecendo...", "Penumbra...", "Última luz...", "Eclipse...",
-            "Fade out...", "Apagando...", "Noite eterna..."
+            "Fade out...", "Apagando...", "Noite eterna...",
+            "Meu {substantivo}... escureceu..."
         ]
     },
 
@@ -113,31 +262,43 @@ export const DIALOGUE_BY_PHYSICS = {
         idle: [
             "Quentinho~", "Fervendo!", "Brasas...", "Lava fluindo!",
             "Combustão interna!", "Quente... muito quente...", "Plasma!", "Magma~",
-            "Entropia térmica!", "Agitação molecular!", "Calor latente!", "Vaporizando!"
+            "Entropia térmica!", "Agitação molecular!", "Calor latente!", "Vaporizando!",
+            // Templates generativos
+            "Minha {substantivo} está {adjetivo}!",
+            "A {substantivo} vai {verbo}!",
+            "{substantivo} {adjetivo}!!",
+            "Sinto a {substantivo} {verbo}!"
         ],
         born: [
             "Ignição!", "Acendi!", "Chama viva!", "Nascido do fogo!",
-            "Combustão espontânea!", "Faísca inicial!", "Inferno pessoal!"
+            "Combustão espontânea!", "Faísca inicial!", "Inferno pessoal!",
+            "Minha {substantivo} acendeu!"
         ],
         poke: [
             "Ai! Cuidado!", "Queima!", "Não toca!", "Quente demais para você!",
-            "Vou te carbonizar!", "Toque proibido!", "Pele de fogo!"
+            "Vou te carbonizar!", "Toque proibido!", "Pele de fogo!",
+            "Vou {verbo} você!",
+            "Não mexa na minha {substantivo}!"
         ],
         feed: [
             "Combustível!", "Mais lenha!", "Alimentando a fornalha!", "Temperatura crítica!",
-            "Oxidando!", "Reação exotérmica!", "Mais carvão!"
+            "Oxidando!", "Reação exotérmica!", "Mais carvão!",
+            "Minha {substantivo} fica {adjetivo}!"
         ],
         burn: [
             "É ISSO QUE EU GOSTO!!", "MAIS FOGO!", "POTÊNCIA MÁXIMA!", "EXPLOSÃO!",
-            "EU SOU O FOGO!", "ARDENDO!", "CHAOS TÉRMICO!"
+            "EU SOU O FOGO!", "ARDENDO!", "CHAOS TÉRMICO!",
+            "MINHA {substantivo} É {adjetivo}!!"
         ],
         freeze: [
             "Vapor... sumindo...", "Esfriando...", "Não... meu calor...", "Pedra fria...",
-            "Tsc tsc... (chiado)", "Apagando a chama...", "Gelo... dói..."
+            "Tsc tsc... (chiado)", "Apagando a chama...", "Gelo... dói...",
+            "Minha {substantivo}... esfriando..."
         ],
         dying: [
             "Cinzas...", "Fumaça...", "Última brasa...", "Esfriou...",
-            "Sufocado...", "Sem oxigênio...", "Frio... final..."
+            "Sufocado...", "Sem oxigênio...", "Frio... final...",
+            "Minha {substantivo}... apagou..."
         ]
     },
 
@@ -146,27 +307,36 @@ export const DIALOGUE_BY_PHYSICS = {
         idle: [
             "Geladinho...", "Cristal...", "Neve cai...", "Gelo eterno...",
             "Zero Kelvin...", "Frio preserva...", "Inverno nuclear...", "Nevasca...",
-            "Baixa entropia...", "Átomos lentos...", "Silêncio branco...", "Glaciar..."
+            "Baixa entropia...", "Átomos lentos...", "Silêncio branco...", "Glaciar...",
+            // Templates generativos
+            "Minha {substantivo} está {adjetivo}...",
+            "A {substantivo} {verbo} lentamente...",
+            "{substantivo}... {adjetivo}..."
         ],
         born: [
             "Congelei~", "Flocos...", "Nasci do gelo~", "Primeiro floco!",
-            "Sopro de inverno...", "Estrutura cristalina!", "Sub-zero!"
+            "Sopro de inverno...", "Estrutura cristalina!", "Sub-zero!",
+            "Minha {substantivo} cristalizou~"
         ],
         poke: [
             "Brr! Frio!", "Gelado!", "Craquelando...", "Cuidado, quebra!",
-            "Toque gélido...", "Calafrio...", "Não derreta minha arte..."
+            "Toque gélido...", "Calafrio...", "Não derreta minha arte...",
+            "Cuidado com minha {substantivo}..."
         ],
         feed: [
             "Esfriando mais!", "Nitrogênio líquido!", "Sub-zero!", "Preservando...",
-            "Solidificando...", "Mais gelo...", "Entalpia negativa!"
+            "Solidificando...", "Mais gelo...", "Entalpia negativa!",
+            "Minha {substantivo} fica {adjetivo}..."
         ],
         burn: [
             "Derretendo...", "Não... calor...", "Vaporizando...", "Minha forma...",
-            "Água... suja...", "Perdendo estrutura...", "Caos térmico..."
+            "Água... suja...", "Perdendo estrutura...", "Caos térmico...",
+            "Minha {substantivo}... derretendo..."
         ],
         freeze: [
             "PERFEITO!", "Absoluto!", "Máximo gelo!", "Estase eterna!",
-            "O tempo para...", "Cristalização total!", "Belo..."
+            "O tempo para...", "Cristalização total!", "Belo...",
+            "Minha {substantivo} está {adjetivo}!"
         ],
         dying: [
             "Sublimando...", "Evaporando...", "Último floco...", "Poça d'água...",
