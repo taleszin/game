@@ -95,9 +95,8 @@ export default class SanctuaryScene extends Phaser.Scene {
     });
 
     this.game.events.on('tool-used', (data) => {
-        // Converte coordenadas do canvas para coordenadas do mundo (considerando zoom)
-        const worldPoint = this.cameras.main.getWorldPoint(data.x, data.y);
-        this.handleToolAction(worldPoint.x, worldPoint.y, data.action);
+        // data.x e data.y já vêm como coordenadas do mundo (convertido no main.js)
+        this.handleToolAction(data.x, data.y, data.action);
     });
     
     // ═══ SISTEMA DE REAÇÃO DE MEDO ═══
@@ -113,9 +112,8 @@ export default class SanctuaryScene extends Phaser.Scene {
     });
     
     this.game.events.on('tool-drag-move', (data) => {
-        // Converte coordenadas do canvas para coordenadas do mundo (considerando zoom)
-        const worldPoint = this.cameras.main.getWorldPoint(data.x, data.y);
-        this.threatPosition = { x: worldPoint.x, y: worldPoint.y };
+        // data.x e data.y já vêm como coordenadas do mundo (convertido no main.js)
+        this.threatPosition = { x: data.x, y: data.y };
         
         // Verifica se há Golem sob o cursor para Target Lock
         if (this.golemsGroup) {
@@ -124,7 +122,7 @@ export default class SanctuaryScene extends Phaser.Scene {
             
             for (const golem of golems) {
                 if (!golem.active) continue;
-                const dist = Phaser.Math.Distance.Between(golem.x, golem.y, worldPoint.x, worldPoint.y);
+                const dist = Phaser.Math.Distance.Between(golem.x, golem.y, data.x, data.y);
                 // Usa mesmo critério de distância do handleToolAction
                 const hitRadius = Math.max(60, 40 * (golem.targetScale || 1));
                 if (dist < hitRadius) {
@@ -139,19 +137,12 @@ export default class SanctuaryScene extends Phaser.Scene {
                 if (['kill', 'taser', 'burn'].includes(data.action)) lockType = 'hostile';
                 if (['feed'].includes(data.action)) lockType = 'friendly';
                 
-                // Converte posição do jogo para tela (considerando zoom)
-                const canvas = document.querySelector('canvas');
-                if (canvas) {
-                    const rect = canvas.getBoundingClientRect();
-                    const cam = this.cameras.main;
-                    // Converte world coords para screen coords
-                    const screenX = rect.left + ((foundTarget.x - cam.scrollX) * cam.zoom / cam.width) * rect.width + rect.width/2;
-                    const screenY = rect.top + ((foundTarget.y - cam.scrollY) * cam.zoom / cam.height) * rect.height + rect.height/2;
-                    
-                    this.game.events.emit('show-target-lock', {
-                        screenX, screenY, type: lockType
-                    });
-                }
+                // Usa screenX e screenY que vem diretamente do evento (posição do cursor)
+                this.game.events.emit('show-target-lock', {
+                    screenX: data.screenX,
+                    screenY: data.screenY,
+                    type: lockType
+                });
             } else {
                 this.game.events.emit('hide-target-lock');
             }
@@ -317,8 +308,9 @@ export default class SanctuaryScene extends Phaser.Scene {
           const golem = golems[i];
           const distance = Phaser.Math.Distance.Between(golem.x, golem.y, x, y);
           
-          // Distância de hit escala com o tamanho do Golem
-          const hitRadius = Math.max(60, 40 * (golem.targetScale || 1));
+          // Distância de hit generosa para Forgiving UI (mais tolerante no mobile)
+          // Aumentado de 60/40 para 80/70 - compensa imprecisão do zoom/touch
+          const hitRadius = Math.max(80, 70 * (golem.targetScale || 1));
           
           if (golem.active && distance < hitRadius) {
               this.createHitEffect(golem.x, golem.y, action, golem);

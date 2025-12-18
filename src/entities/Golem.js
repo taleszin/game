@@ -240,18 +240,24 @@ export default class Golem extends Phaser.GameObjects.Container {
         scene.golemsGroup.add(this);
 
         if (this.body) {
-            // Ajusta o body de física para o tamanho correto
+            // Ajusta o body de física para o tamanho correto (colisão precisa)
             this.body.setSize(hitboxSize, hitboxSize);
             this.body.setOffset(-hitboxSize / 2, -hitboxSize / 2);
             this.body.setCollideWorldBounds(true);
             this.body.setBounce(1);
-            // Hitbox interativo com tamanho proporcional à escala
+            
+            // Aumenta MUITO a área de clique para facilitar no mobile (Forgiving UI)
+            // interactionRadius = 1.6x maior que o raio visual
+            const interactionRadius = (hitboxSize / 2) * 1.6;
             this.setInteractive({
-                hitArea: new Phaser.Geom.Circle(0, 0, hitboxSize / 2),
+                hitArea: new Phaser.Geom.Circle(0, 0, interactionRadius),
                 hitAreaCallback: Phaser.Geom.Circle.Contains,
                 useHandCursor: true
             });
             scene.input.setDraggable(this);
+            
+            // DEBUG: Visualizar hitbox de interação (descomente para debug)
+            // this.scene.input.enableDebug(this);
 
             // Velocidade base mais lenta para melhor UX (mais fácil de acertar)
             this.baseSpeed = 35 / this.targetScale;
@@ -2493,10 +2499,9 @@ export default class Golem extends Phaser.GameObjects.Container {
         measureText.destroy();
         const bubbleWidth = realTextWidth + (padding * 2);
         const bubbleHeight = realTextHeight + (padding * 2);
-        // Offset calculado baseado no raio real do golem (28 * escala) + altura do balão + pequena margem
-        // Isso posiciona o balão logo acima do "topo" do golem
-        const golemRadius = 28 * this.targetScale;
-        const offsetY = golemRadius + bubbleHeight + tailHeight + 5;
+        // Offset calculado com valor base fixo (20) - balão "flutua" logo acima da cabeça
+        // Valor menor para parecer mais integrado e menos "flutuante"
+        const offsetY = (20 * this.targetScale) + bubbleHeight + tailHeight - 5;
         this.speechContainer = this.scene.add.container(0, 0);
         this.speechContainer.setDepth(1000);
         this.speechBubble = this.scene.add.graphics();

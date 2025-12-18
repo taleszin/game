@@ -260,26 +260,75 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    function applyZoom(newZoom, focusX = null, focusY = null) {
+    // ═══ FUNÇÃO UNIVERSAL: Converte coordenadas de tela para mundo ═══
+    // Usa isso em TODOS os lugares que precisam detectar clique/touch em Golems
+    function screenToWorld(clientX, clientY) {
+        const canvas = document.querySelector('canvas');
+        if (!canvas) return { x: clientX, y: clientY };
+        
+        const rect = canvas.getBoundingClientRect();
+        const activeScene = game.scene.getScene('SanctuaryScene');
+        
+        // Coordenadas relativas ao canvas (0 a canvas.width/height)
+        const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
+        const canvasY = (clientY - rect.top) * (canvas.height / rect.height);
+        
+        // Se temos cena ativa com câmera, converte para coordenadas do mundo
+        if (activeScene && activeScene.cameras && activeScene.cameras.main) {
+            const camera = activeScene.cameras.main;
+            const worldPoint = camera.getWorldPoint(canvasX, canvasY);
+            return { x: worldPoint.x, y: worldPoint.y };
+        }
+        
+        // Fallback sem câmera
+        return { x: canvasX, y: canvasY };
+    }
+    
+    // Expõe globalmente para outros sistemas usarem
+    window.screenToWorld = screenToWorld;
+    
+    function applyZoom(newZoom, focusScreenX = null, focusScreenY = null) {
         // Clamp no range permitido
         newZoom = Math.max(zoomConfig.min, Math.min(zoomConfig.max, newZoom));
         
         if (Math.abs(newZoom - zoomConfig.current) < 0.01) return;
         
+        const oldZoom = zoomConfig.current;
         zoomConfig.current = newZoom;
         
-        // Aplica zoom na câmera do Phaser
+        // Aplica zoom na câmera do Phaser com ZOOM-TO-CURSOR
         const activeScene = game.scene.getScene('SanctuaryScene');
         if (activeScene && activeScene.cameras && activeScene.cameras.main) {
             const camera = activeScene.cameras.main;
+            const canvas = document.querySelector('canvas');
             
-            // Zoom suave com tween
-            activeScene.tweens.add({
-                targets: camera,
-                zoom: newZoom,
-                duration: 100,
-                ease: 'Sine.easeOut'
-            });
+            // ═══ ZOOM-TO-CURSOR: Mantém o ponto sob o cursor no mesmo lugar ═══
+            if (focusScreenX !== null && focusScreenY !== null && canvas) {
+                const rect = canvas.getBoundingClientRect();
+                
+                // Converte posição do cursor para coordenadas do canvas
+                const canvasX = (focusScreenX - rect.left) * (canvas.width / rect.width);
+                const canvasY = (focusScreenY - rect.top) * (canvas.height / rect.height);
+                
+                // Ponto do mundo sob o cursor ANTES do zoom
+                const worldBefore = camera.getWorldPoint(canvasX, canvasY);
+                
+                // Aplica o novo zoom
+                camera.setZoom(newZoom);
+                
+                // Ponto do mundo sob o cursor DEPOIS do zoom (seria diferente sem correção)
+                const worldAfter = camera.getWorldPoint(canvasX, canvasY);
+                
+                // Corrige scroll para manter o ponto no mesmo lugar
+                const dx = worldBefore.x - worldAfter.x;
+                const dy = worldBefore.y - worldAfter.y;
+                
+                camera.scrollX += dx;
+                camera.scrollY += dy;
+            } else {
+                // Sem ponto focal - zoom no centro
+                camera.setZoom(newZoom);
+            }
         }
         
         showZoomIndicator(newZoom);
@@ -333,7 +382,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const scale = currentDistance / pinchState.initialDistance;
         const newZoom = pinchState.initialZoom * scale;
         
-        applyZoom(newZoom);
+        // Ponto focal = centro entre os dois dedos
+        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        
+        applyZoom(newZoom, centerX, centerY);
     }, { passive: true });
     
     document.addEventListener('touchend', () => {
@@ -3362,18 +3415,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function emitDragPosition(clientX, clientY) {
         // Emite posição do mouse para Golems calcularem distância da ameaça
-        const canvas = document.querySelector('canvas');
-        if (canvas && draggedTool) {
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const gameX = (clientX - rect.left) * scaleX;
-            const gameY = (clientY - rect.top) * scaleY;
+        // Usa screenToWorld() para conversão correta com zoom
+        if (draggedTool) {
+            const worldPos = screenToWorld(clientX, clientY);
             
             game.events.emit('tool-drag-move', {
                 action: draggedTool,
-                x: gameX,
-                y: gameY,
+                x: worldPos.x,
+                y: worldPos.y,
                 screenX: clientX,
                 screenY: clientY + MOBILE_DRAG_OFFSET_Y
             });
@@ -3446,16 +3495,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (clientX >= rect.left && clientX <= rect.right &&
                 clientY >= rect.top && clientY <= rect.bottom) {
                 
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-                
-                const gameX = (clientX - rect.left) * scaleX;
-                const gameY = (clientY - rect.top) * scaleY;
+                // Usa screenToWorld() para conversão correta com zoom
+                const worldPos = screenToWorld(clientX, clientY);
 
                 game.events.emit('tool-used', {
                     action: draggedTool,
-                    x: gameX,
-                    y: gameY
+                    x: worldPos.x,
+                    y: worldPos.y
                 });
             }
         }
@@ -3466,22 +3512,20 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // ═══════════════════════════════════════════════════════════════════
     // CLICK-TO-USE: Clique no canvas com ferramenta selecionada
+    // Usa screenToWorld() para conversão correta com zoom/pan
     // ═══════════════════════════════════════════════════════════════════
     const canvas = document.querySelector('canvas');
     if (canvas) {
         canvas.addEventListener('click', (e) => {
             if (!selectedTool) return;
             
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const gameX = (e.clientX - rect.left) * scaleX;
-            const gameY = (e.clientY - rect.top) * scaleY;
+            // Usa função centralizada que considera câmera/zoom
+            const worldPos = screenToWorld(e.clientX, e.clientY);
             
             game.events.emit('tool-used', {
                 action: selectedTool,
-                x: gameX,
-                y: gameY
+                x: worldPos.x,
+                y: worldPos.y
             });
             
             // Feedback visual
@@ -3510,16 +3554,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const touch = e.changedTouches?.[0];
             if (!touch) return;
             
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            const gameX = (touch.clientX - rect.left) * scaleX;
-            const gameY = (touch.clientY - rect.top) * scaleY;
+            // Usa função centralizada que considera câmera/zoom
+            const worldPos = screenToWorld(touch.clientX, touch.clientY);
             
             game.events.emit('tool-used', {
                 action: selectedTool,
-                x: gameX,
-                y: gameY
+                x: worldPos.x,
+                y: worldPos.y
             });
         });
     }
