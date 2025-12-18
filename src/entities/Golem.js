@@ -162,6 +162,14 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.munchEmitter = null; // particle emitter for crumbs
         this.feedCooldown = 0; // Proteção temporária contra decay após alimentar
         
+        // Fire state
+        this.isOnFire = false;
+        this.isPanicking = false;
+        this.fireEmitter = null;
+        this.smokeEmitter = null;
+        this.fireDamageEvent = null;
+        this.panicEvent = null;
+        
         this.INSTINCT_RADIUS = 200;
         this.MAX_STEERING_FORCE = 150;
         this.SEPARATION_RADIUS = 80;
@@ -1766,10 +1774,169 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
 
     burn() {
-        if (this.lifeTimer) this.lifeTimer.timeScale = 5.0;
-        this.setActionExpression('burn', 3000);
-        this.addLifeEvent('burn', 'Incendiado - perda acelerada');
+        // Já está queimando? Não aplica de novo
+        if (this.isOnFire) return;
+        
+        this.isOnFire = true;
+        this.addLifeEvent('burn', 'PEGOU FOGO! 🔥');
         this.speakContextual('burn');
+        this.setActionExpression('burn', 5000);
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // ANIMAÇÃO DE FOGO - Partículas realistas
+        // ═══════════════════════════════════════════════════════════════════
+        const fireColors = [0xff4400, 0xff6600, 0xff8800, 0xffaa00, 0xffcc00];
+        
+        this.fireEmitter = this.scene.add.particles(0, 0, 'pixel', {
+            follow: this,
+            speed: { min: 30, max: 80 },
+            angle: { min: 250, max: 290 }, // Fogo sobe
+            scale: { start: 0.8 * this.targetScale, end: 0 },
+            lifespan: { min: 300, max: 600 },
+            blendMode: 'ADD',
+            tint: fireColors,
+            quantity: 3,
+            frequency: 50,
+            emitZone: {
+                type: 'random',
+                source: new Phaser.Geom.Circle(0, 0, 20 * this.targetScale)
+            }
+        });
+        
+        // Fumaça
+        this.smokeEmitter = this.scene.add.particles(0, 0, 'pixel', {
+            follow: this,
+            speed: { min: 10, max: 30 },
+            angle: { min: 260, max: 280 },
+            scale: { start: 0.4 * this.targetScale, end: 1.2 * this.targetScale },
+            alpha: { start: 0.4, end: 0 },
+            lifespan: { min: 500, max: 1000 },
+            tint: [0x333333, 0x444444, 0x555555],
+            quantity: 1,
+            frequency: 100
+        });
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // DANO POR FOGO - Reduz vida gradualmente
+        // ═══════════════════════════════════════════════════════════════════
+        const fireDamagePerTick = this.maxVitality * 0.08; // 8% da vida por tick
+        const fireDuration = 5000; // 5 segundos de fogo
+        const tickInterval = 500; // Dano a cada 0.5s
+        let ticksRemaining = Math.floor(fireDuration / tickInterval);
+        
+        this.fireDamageEvent = this.scene.time.addEvent({
+            delay: tickInterval,
+            repeat: ticksRemaining - 1,
+            callback: () => {
+                if (!this.active || !this.isOnFire) return;
+                
+                // Aplica dano
+                this.vitality = Math.max(0, this.vitality - fireDamagePerTick);
+                
+                // Flash vermelho
+                if (this.graphics) {
+                    this.scene.tweens.add({
+                        targets: this.graphics,
+                        alpha: 0.3,
+                        yoyo: true,
+                        duration: 100
+                    });
+                }
+                
+                // Morte por fogo
+                if (this.vitality <= 0) {
+                    this.stopFire();
+                    this.die();
+                }
+            }
+        });
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // PÂNICO - Corre desesperadamente APÓS pegar fogo
+        // ═══════════════════════════════════════════════════════════════════
+        // Pequeno delay para mostrar a reação de surpresa primeiro
+        this.scene.time.delayedCall(300, () => {
+            if (!this.active || !this.isOnFire) return;
+            
+            // Velocidade de pânico (3x mais rápido)
+            this.panicSpeed = this.baseSpeed * 3;
+            this.isPanicking = true;
+            
+            // Movimento caótico
+            this.panicEvent = this.scene.time.addEvent({
+                delay: 200,
+                loop: true,
+                callback: () => {
+                    if (!this.active || !this.isOnFire || !this.isPanicking) return;
+                    
+                    // Direção aleatória
+                    const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+                    const vx = Math.cos(angle) * this.panicSpeed;
+                    const vy = Math.sin(angle) * this.panicSpeed;
+                    
+                    if (this.body) {
+                        this.body.setVelocity(vx, vy);
+                    }
+                }
+            });
+        });
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // FIM DO FOGO - Para após duração
+        // ═══════════════════════════════════════════════════════════════════
+        this.scene.time.delayedCall(fireDuration, () => {
+            this.stopFire();
+        });
+    }
+    
+    stopFire() {
+        if (!this.isOnFire) return;
+        
+        this.isOnFire = false;
+        this.isPanicking = false;
+        
+        // Para emitters de fogo
+        if (this.fireEmitter) {
+            this.fireEmitter.stop();
+            this.scene.time.delayedCall(600, () => {
+                if (this.fireEmitter) {
+                    this.fireEmitter.destroy();
+                    this.fireEmitter = null;
+                }
+            });
+        }
+        
+        if (this.smokeEmitter) {
+            this.smokeEmitter.stop();
+            this.scene.time.delayedCall(1000, () => {
+                if (this.smokeEmitter) {
+                    this.smokeEmitter.destroy();
+                    this.smokeEmitter = null;
+                }
+            });
+        }
+        
+        // Para eventos
+        if (this.fireDamageEvent) {
+            this.fireDamageEvent.remove();
+            this.fireDamageEvent = null;
+        }
+        
+        if (this.panicEvent) {
+            this.panicEvent.remove();
+            this.panicEvent = null;
+        }
+        
+        // Volta à velocidade normal
+        if (this.body) {
+            this.body.setVelocity(0, 0);
+        }
+        
+        // Suspiro de alívio se sobreviveu
+        if (this.active && this.vitality > 0) {
+            this.speak('*ufa*... sobrevivi...');
+            this.addLifeEvent('survived_fire', 'Sobreviveu ao fogo! 💨');
+        }
     }
 
     kill() {
@@ -2100,6 +2267,16 @@ export default class Golem extends Phaser.GameObjects.Container {
         try { if (this.roamingTimer) this.roamingTimer.remove(); } catch(e) {}
         try { if (this.emitter) this.emitter.stop(); } catch(e) {}
         try { if (this.body) this.body.setVelocity(0); } catch(e) {}
+        
+        // Limpa estado de fogo
+        try { 
+            this.isOnFire = false;
+            this.isPanicking = false;
+            if (this.fireEmitter) { this.fireEmitter.destroy(); this.fireEmitter = null; }
+            if (this.smokeEmitter) { this.smokeEmitter.destroy(); this.smokeEmitter = null; }
+            if (this.fireDamageEvent) { this.fireDamageEvent.remove(); this.fireDamageEvent = null; }
+            if (this.panicEvent) { this.panicEvent.remove(); this.panicEvent = null; }
+        } catch(e) {}
         
         if (this.typewriterEvent) {
             try { this.typewriterEvent.remove(); } catch(e) {}

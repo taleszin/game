@@ -3194,23 +3194,124 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ═══════════════════════════════════════════════════════════════════
+    // SISTEMA DE SELEÇÃO DE FERRAMENTAS (Click-to-Select)
+    // Clique para selecionar uma ferramenta, clique no Golem para usar
+    // ═══════════════════════════════════════════════════════════════════
+    let selectedTool = null;
+    let selectedToolSlot = null;
+    
+    function selectTool(tool) {
+        // Remove seleção anterior
+        if (selectedToolSlot) {
+            selectedToolSlot.classList.remove('selected');
+        }
+        
+        // Se clicar na mesma, deseleciona
+        if (selectedToolSlot === tool) {
+            selectedTool = null;
+            selectedToolSlot = null;
+            document.body.classList.remove('tool-selected');
+            return;
+        }
+        
+        // Seleciona nova
+        selectedTool = tool.dataset.action;
+        selectedToolSlot = tool;
+        tool.classList.add('selected');
+        document.body.classList.add('tool-selected');
+        
+        // Emite evento para UI feedback
+        game.events.emit('tool-selected', { action: selectedTool });
+    }
+    
+    function clearToolSelection() {
+        if (selectedToolSlot) {
+            selectedToolSlot.classList.remove('selected');
+        }
+        selectedTool = null;
+        selectedToolSlot = null;
+        document.body.classList.remove('tool-selected');
+        game.events.emit('tool-deselected');
+    }
+    
+    // Expõe para uso externo
+    window.clearToolSelection = clearToolSelection;
+    
     tools.forEach(tool => {
+        let dragStartPos = null;
+        let isDragging = false;
+        const DRAG_THRESHOLD = 10; // pixels antes de considerar drag
+        
         // Mouse events
         tool.addEventListener('mousedown', (e) => {
             e.preventDefault();
-            const action = tool.dataset.action;
-            const icon = tool.querySelector('.tool-icon').innerText;
-            startDrag(action, icon, e.clientX, e.clientY, tool);
+            e.stopPropagation();
+            dragStartPos = { x: e.clientX, y: e.clientY };
+            isDragging = false;
+        });
+        
+        tool.addEventListener('mousemove', (e) => {
+            if (!dragStartPos) return;
+            const dx = e.clientX - dragStartPos.x;
+            const dy = e.clientY - dragStartPos.y;
+            if (Math.sqrt(dx*dx + dy*dy) > DRAG_THRESHOLD && !isDragging) {
+                isDragging = true;
+                const action = tool.dataset.action;
+                const icon = tool.querySelector('.tool-icon').innerText;
+                startDrag(action, icon, e.clientX, e.clientY, tool);
+            }
+        });
+        
+        tool.addEventListener('mouseup', (e) => {
+            if (!isDragging && dragStartPos) {
+                // Foi um clique, não drag - seleciona a ferramenta
+                selectTool(tool);
+            }
+            dragStartPos = null;
+            isDragging = false;
+        });
+        
+        tool.addEventListener('mouseleave', () => {
+            // Se sair do elemento enquanto arrasta, continua o drag
+            if (dragStartPos && !isDragging) {
+                dragStartPos = null;
+            }
         });
         
         // Touch events para mobile
+        let touchStartPos = null;
+        let touchIsDragging = false;
+        
         tool.addEventListener('touchstart', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             const touch = e.touches[0];
-            const action = tool.dataset.action;
-            const icon = tool.querySelector('.tool-icon').innerText;
-            startDrag(action, icon, touch.clientX, touch.clientY + MOBILE_DRAG_OFFSET_Y, tool, true);
+            touchStartPos = { x: touch.clientX, y: touch.clientY };
+            touchIsDragging = false;
         }, { passive: false });
+        
+        tool.addEventListener('touchmove', (e) => {
+            if (!touchStartPos) return;
+            const touch = e.touches[0];
+            const dx = touch.clientX - touchStartPos.x;
+            const dy = touch.clientY - touchStartPos.y;
+            if (Math.sqrt(dx*dx + dy*dy) > DRAG_THRESHOLD && !touchIsDragging) {
+                touchIsDragging = true;
+                const action = tool.dataset.action;
+                const icon = tool.querySelector('.tool-icon').innerText;
+                startDrag(action, icon, touch.clientX, touch.clientY + MOBILE_DRAG_OFFSET_Y, tool, true);
+            }
+        }, { passive: false });
+        
+        tool.addEventListener('touchend', (e) => {
+            if (!touchIsDragging && touchStartPos) {
+                // Foi um tap, não drag - seleciona a ferramenta
+                selectTool(tool);
+            }
+            touchStartPos = null;
+            touchIsDragging = false;
+        });
     });
 
     function startDrag(action, iconChar, startX, startY, slotElement, isTouch = false) {
@@ -3362,6 +3463,79 @@ document.addEventListener('DOMContentLoaded', () => {
         draggedTool = null;
         ghostElement = null;
     }
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // CLICK-TO-USE: Clique no canvas com ferramenta selecionada
+    // ═══════════════════════════════════════════════════════════════════
+    const canvas = document.querySelector('canvas');
+    if (canvas) {
+        canvas.addEventListener('click', (e) => {
+            if (!selectedTool) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const gameX = (e.clientX - rect.left) * scaleX;
+            const gameY = (e.clientY - rect.top) * scaleY;
+            
+            game.events.emit('tool-used', {
+                action: selectedTool,
+                x: gameX,
+                y: gameY
+            });
+            
+            // Feedback visual
+            const clickFeedback = document.createElement('div');
+            clickFeedback.style.cssText = `
+                position: fixed;
+                left: ${e.clientX}px;
+                top: ${e.clientY}px;
+                width: 30px;
+                height: 30px;
+                border: 2px solid #0ff;
+                border-radius: 50%;
+                transform: translate(-50%, -50%) scale(0.5);
+                pointer-events: none;
+                z-index: 9999;
+                animation: clickRipple 0.4s ease-out forwards;
+            `;
+            document.body.appendChild(clickFeedback);
+            setTimeout(() => clickFeedback.remove(), 400);
+        });
+        
+        // Tap no mobile
+        canvas.addEventListener('touchend', (e) => {
+            if (!selectedTool) return;
+            
+            const touch = e.changedTouches?.[0];
+            if (!touch) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const gameX = (touch.clientX - rect.left) * scaleX;
+            const gameY = (touch.clientY - rect.top) * scaleY;
+            
+            game.events.emit('tool-used', {
+                action: selectedTool,
+                x: gameX,
+                y: gameY
+            });
+        });
+    }
+    
+    // Desseleciona ferramenta ao clicar fora (em áreas não-interativas)
+    document.addEventListener('click', (e) => {
+        // Ignora se clicou no canvas (já tratado acima)
+        if (e.target.closest('canvas')) return;
+        // Ignora se clicou em uma tool-slot
+        if (e.target.closest('.tool-slot')) return;
+        // Ignora se clicou em UI interativa
+        if (e.target.closest('#tool-rack, #chrono-deck, #btn-open-lab, #btn-tree, #btn-evolved-forms, .modal, .panel')) return;
+        
+        // Clicou em área "vazia" - deseleciona
+        clearToolSelection();
+    });
     
     // ═══════════════════════════════════════════════════════════════════
     // SISTEMA DE TUTORIAL (FTUE - First Time User Experience)

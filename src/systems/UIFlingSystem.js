@@ -372,6 +372,9 @@ export class UIFlingSystem {
         // Não intercepta se for um botão interno clicável
         if (e.target.closest('button:not(.ui-draggable)')) return;
         
+        // IMPORTANTE: Não intercepta cliques em .tool-slot - esses têm seu próprio sistema de drag
+        if (e.target.closest('.tool-slot')) return;
+        
         const point = this._getPointerPos(e);
         const rect = target.getBoundingClientRect();
         
