@@ -29,7 +29,10 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.age = 0;
         this.maxLifespan = stats.lifespan || 80000; 
         
-        this.maxVitality = this.maxLifespan * 0.6;
+        // Vitalidade = barra de vida/fome (drena com tempo, restaura com alimentação)
+        // maxVitality é independente de maxLifespan - representa a "fome" máxima
+        // Valor alto para que a barra drene de forma visível mas não mate muito rápido
+        this.maxVitality = 50000; // 50 segundos de vida sem alimentação
         this.vitality = this.maxVitality;
         
         this.maxLife = this.maxVitality;
@@ -1146,7 +1149,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         if (this.expressionState.action === 'breed' || 
             this.expressionState.action === 'mutate' || 
             this.expressionState.action === 'born' || 
-            this.expressionState.action === 'feed') {
+            this.expressionState.action === 'feed' ||
+            this.expressionState.action === 'angry') {
             const s = this.faceScale || 1;
             const lineWidth = Math.max(this.minLineWidth, 2 * s);
             this.drawActionFace(g, this.expressionState.action, lineWidth, s);
@@ -1523,6 +1527,26 @@ export default class Golem extends Phaser.GameObjects.Container {
     setActionExpression(action, duration = 1500) {
         this.expressionState.action = action;
         this.expressionState.actionTimer = Date.now() + duration;
+    }
+    
+    /**
+     * Método genérico para definir expressão (usado pelo UIFlingSystem)
+     * @param {string} expression - 'angry', 'happy', 'sad', 'neutral', etc
+     * @param {number} duration - Duração em ms (padrão 2000)
+     */
+    setExpression(expression, duration = 2000) {
+        // Se for uma action expression (angry, breed, etc), usa o sistema de action
+        const actionExpressions = ['angry', 'breed', 'mutate', 'born', 'feed', 'begging', 'panic', 'burn', 'freeze'];
+        
+        if (actionExpressions.includes(expression)) {
+            this.setActionExpression(expression, duration);
+        } else {
+            // Se for mood (happy, sad, neutral, dying), define direto
+            this.expressionState.mood = expression;
+        }
+        
+        // Salva a expressão atual para referência
+        this.currentExpression = expression;
     }
     
     updateExpression() {
@@ -1938,7 +1962,8 @@ export default class Golem extends Phaser.GameObjects.Container {
             
             // Só decai vitalidade se não estiver em cooldown de alimentação
             if (this.feedCooldown <= 0) {
-                const vitalityDecay = deltaTime * 0.8; 
+                // Decay mais lento: ~0.5 por tick = 50000/0.5 = 100 segundos para morrer de fome
+                const vitalityDecay = deltaTime * 0.5; 
                 this.vitality -= vitalityDecay;
                 this.vitality = Math.max(0, this.vitality);
             }
@@ -1946,18 +1971,25 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.currentLife = this.vitality;
             const vitalityPct = this.vitality / this.maxVitality;
             this.lifeBar.width = 22 * vitalityPct;
+            
+            // Idade controla fase de vida (criança/adulto/idoso), não a barra
             const agePct = this.age / this.maxLifespan; 
             this.updateLifePhase(agePct);
+            
+            // Barra vermelha quando vitalidade baixa
             if (vitalityPct < 0.2) {
                 this.lifeBar.setFillStyle(0xff0000);
             } else {
                 this.lifeBar.setFillStyle(this.visualDNA.bodyColor);
             }
+            
+            // Morte: APENAS quando vitalidade chega a ZERO
+            // Velhice agora apenas deixa o Golem mais fraco, não mata diretamente
             if (this.vitality <= 0) {
-                this.addLifeEvent('starved', 'Morreu de fome - vitalidade esgotada');
-                this.die();
-            } else if (this.age >= this.maxLifespan) {
-                this.addLifeEvent('oldAge', 'Morreu de velhice natural');
+                const deathReason = this.age >= this.maxLifespan 
+                    ? 'Morreu de velhice - corpo fraco demais'
+                    : 'Morreu de fome - vitalidade esgotada';
+                this.addLifeEvent('died', deathReason);
                 this.die();
             }
         }});
@@ -2047,19 +2079,31 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
 
     die() {
-        if (this.lifeTimer) this.lifeTimer.remove();
-        if (this.expressionTimer) this.expressionTimer.remove();
-        if (this.roamingTimer) this.roamingTimer.remove();
-        if (this.emitter) this.emitter.stop();
-        if (this.body) this.body.setVelocity(0);
+        // Para todos os tweens no Golem
+        if (this.scene) {
+            try { this.scene.tweens.killTweensOf(this); } catch(e) {}
+        }
+        
+        // Remove todos os timers com safety
+        try { if (this.lifeTimer) this.lifeTimer.remove(); } catch(e) {}
+        try { if (this.expressionTimer) this.expressionTimer.remove(); } catch(e) {}
+        try { if (this.roamingTimer) this.roamingTimer.remove(); } catch(e) {}
+        try { if (this.emitter) this.emitter.stop(); } catch(e) {}
+        try { if (this.body) this.body.setVelocity(0); } catch(e) {}
+        
         if (this.typewriterEvent) {
-            this.typewriterEvent.remove();
+            try { this.typewriterEvent.remove(); } catch(e) {}
             this.typewriterEvent = null;
         }
         if (this.speechFadeTimer) {
-            this.speechFadeTimer.remove();
+            try { this.speechFadeTimer.remove(); } catch(e) {}
             this.speechFadeTimer = null;
         }
+        if (this.speechUpdateEvent) {
+            try { this.speechUpdateEvent.remove(); } catch(e) {}
+            this.speechUpdateEvent = null;
+        }
+        
         this.clearSpeechBubble();
         // Ensure we stop any in-progress eating/feeding animation
         try { this.stopEatingAnimation(); } catch(e) { }
@@ -2334,12 +2378,13 @@ export default class Golem extends Phaser.GameObjects.Container {
             callback: () => {
                 if (!this.active || !this.scene) {
                     if (this.typewriterEvent) {
-                        this.typewriterEvent.remove();
+                        try { this.typewriterEvent.remove(); } catch(e) {}
                         this.typewriterEvent = null;
                     }
                     return;
                 }
                 if (charIndex < text.length) {
+                    if (!this.speechText) return; // Safety check
                     displayText += text[charIndex];
                     this.speechText.setText(displayText);
                     if (charIndex % 2 === 0 && text[charIndex] !== ' ') {
@@ -2347,10 +2392,13 @@ export default class Golem extends Phaser.GameObjects.Container {
                     }
                     charIndex++;
                 } else {
-                    this.typewriterEvent.remove();
-                    this.typewriterEvent = null;
+                    if (this.typewriterEvent) {
+                        try { this.typewriterEvent.remove(); } catch(e) {}
+                        this.typewriterEvent = null;
+                    }
                     if (!this.active || !this.scene) return;
                     this.speechFadeTimer = this.scene.time.delayedCall(2500, () => {
+                        if (!this.active || !this.scene) return;
                         this.fadeOutSpeechBubble();
                     });
                 }
@@ -2424,24 +2472,44 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
 
     clearSpeechBubble() {
+        // Remove todos os timers relacionados a fala
         if (this.typewriterEvent) {
             this.typewriterEvent.remove();
             this.typewriterEvent = null;
         }
         if (this.speechUpdateEvent) {
-            this.speechUpdateEvent.remove();
+            try { this.speechUpdateEvent.remove(); } catch(e) {}
             this.speechUpdateEvent = null;
         }
         if (this.speechFadeTimer) {
-            this.speechFadeTimer.remove();
+            try { this.speechFadeTimer.remove(); } catch(e) {}
             this.speechFadeTimer = null;
         }
+        
+        // Para qualquer tween em andamento no container
+        if (this.speechContainer && this.scene) {
+            try { this.scene.tweens.killTweensOf(this.speechContainer); } catch(e) {}
+        }
+        
+        // Destrói container e filhos
         if (this.speechContainer) {
-            this.speechContainer.destroy();
+            try {
+                this.speechContainer.destroy(true); // true = destroy children
+            } catch(e) {}
             this.speechContainer = null;
         }
-        this.speechBubble = null;
-        this.speechText = null;
+        
+        // Destrói elementos individuais se ainda existirem
+        if (this.speechBubble) {
+            try { this.speechBubble.destroy(); } catch(e) {}
+            this.speechBubble = null;
+        }
+        if (this.speechText) {
+            try { this.speechText.destroy(); } catch(e) {}
+            this.speechText = null;
+        }
+        
+        this.isSpeaking = false;
     }
 
     speakContextual(context) {
@@ -2565,6 +2633,51 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.fillCircle(8*s + tremor.x, -5*s + tremor.y, pupilSize);
                 const mouthWobble = Math.sin(Date.now() / 40) * 3 * s * intensity;
                 g.strokeCircle(mouthWobble + tremor.x, 10*s + tremor.y, 6*s);
+                break;
+                
+            case 'angry':
+                // ═══ CARA DE RAIVA (GRR!) ═══
+                // Olhos semicerrados furiosos
+                g.lineStyle(lineWidth + 2*s, 0xff4444, 0.9);
+                g.beginPath();
+                g.moveTo(-12*s, -8*s);
+                g.lineTo(-4*s, -4*s);
+                g.moveTo(4*s, -4*s);
+                g.lineTo(12*s, -8*s);
+                g.strokePath();
+                
+                // Pupilas pequenas e intensas
+                g.fillStyle(0xff0000, 1);
+                g.fillCircle(-8*s, -5*s, 2*s);
+                g.fillCircle(8*s, -5*s, 2*s);
+                
+                // Sobrancelhas em V de raiva
+                g.lineStyle(lineWidth + 3*s, color, 1);
+                g.beginPath();
+                g.moveTo(-14*s, -14*s);
+                g.lineTo(-6*s, -10*s);
+                g.moveTo(6*s, -10*s);
+                g.lineTo(14*s, -14*s);
+                g.strokePath();
+                
+                // Boca em zig-zag de raiva (GRR teeth)
+                g.lineStyle(lineWidth + 2*s, 0xff6666, 0.9);
+                g.beginPath();
+                const wobble = Math.sin(Date.now() / 50) * 1.5 * s;
+                g.moveTo(-10*s, 8*s + wobble);
+                g.lineTo(-6*s, 12*s + wobble);
+                g.lineTo(-2*s, 8*s + wobble);
+                g.lineTo(2*s, 12*s + wobble);
+                g.lineTo(6*s, 8*s + wobble);
+                g.lineTo(10*s, 12*s + wobble);
+                g.strokePath();
+                
+                // Veias de raiva (linhas saindo da cabeça)
+                g.lineStyle(lineWidth, 0xff4444, 0.6);
+                g.beginPath();
+                g.moveTo(-16*s, -16*s); g.lineTo(-20*s, -22*s);
+                g.moveTo(16*s, -16*s); g.lineTo(20*s, -22*s);
+                g.strokePath();
                 break;
         }
     }

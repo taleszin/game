@@ -573,8 +573,29 @@ export function generateGolemData(ingredients) {
     return new Promise((resolve) => {
         setTimeout(() => {
             const baseLife = 80000; // Aumentado de 30s para 80s (com 5x speed = 16s)
-            const scaleX = 0.7 + Math.random() * 0.8;
-            const scaleY = 0.7 + Math.random() * 0.8;
+            
+            // ═══ ESCALA VARIADA COM DRAMA ═══
+            // Distribuição: 10% minúsculos, 60% normais, 20% grandes, 10% titans
+            const sizeRoll = Math.random();
+            let scaleBase;
+            if (sizeRoll < 0.10) {
+                // Minúsculos (bebês/sprites) - 0.4 a 0.6
+                scaleBase = 0.4 + Math.random() * 0.2;
+            } else if (sizeRoll < 0.70) {
+                // Normais - 0.7 a 1.3
+                scaleBase = 0.7 + Math.random() * 0.6;
+            } else if (sizeRoll < 0.90) {
+                // Grandes - 1.4 a 2.0
+                scaleBase = 1.4 + Math.random() * 0.6;
+            } else {
+                // TITANS! - 2.0 a 2.5
+                scaleBase = 2.0 + Math.random() * 0.5;
+            }
+            
+            // Adiciona variação assimétrica (alguns mais altos, outros mais largos)
+            const aspectVariation = 0.85 + Math.random() * 0.3; // 0.85 a 1.15
+            const scaleX = scaleBase * (Math.random() > 0.5 ? aspectVariation : 1);
+            const scaleY = scaleBase * (Math.random() > 0.5 ? 1 : aspectVariation);
             const avgScale = (scaleX + scaleY) / 2;
             
             const physicsId = ingredients.fisica?.id || 'luz';
@@ -685,7 +706,7 @@ export function breedGolemData(parent1, parent2) {
                 lineWidth: Math.round(inheritWithMutation(p1Visual.lineWidth || 2, p2Visual.lineWidth || 2, 0.25, 0.2))
             };
 
-            // ═══ HERANÇA DE ESCALA ═══
+            // ═══ HERANÇA DE ESCALA (com chance de gigantismo/nanismo) ═══
             const p1Stats = parent1.aiData?.stats || {};
             const p2Stats = parent2.aiData?.stats || {};
             
@@ -694,8 +715,26 @@ export function breedGolemData(parent1, parent2) {
             const sX2 = p2Stats.scaleX ?? parseFloat(p2Stats.scale) ?? 1;
             const sY2 = p2Stats.scaleY ?? parseFloat(p2Stats.scale) ?? 1;
 
-            const newScaleX = Math.max(0.4, Math.min(2.0, inheritWithMutation(sX1, sX2, 0.4, 0.15)));
-            const newScaleY = Math.max(0.4, Math.min(2.0, inheritWithMutation(sY1, sY2, 0.4, 0.15)));
+            // Herança com possibilidade de mutação de tamanho extremo
+            let newScaleX = inheritWithMutation(sX1, sX2, 0.4, 0.20);
+            let newScaleY = inheritWithMutation(sY1, sY2, 0.4, 0.20);
+            
+            // 5% chance de gigantismo (filho muito maior que pais)
+            if (Math.random() < 0.05) {
+                const giantFactor = 1.5 + Math.random() * 0.5; // 1.5x a 2x maior
+                newScaleX *= giantFactor;
+                newScaleY *= giantFactor;
+            }
+            // 5% chance de nanismo (filho muito menor)
+            else if (Math.random() < 0.05) {
+                const tinyFactor = 0.5 + Math.random() * 0.2; // 50-70% do tamanho
+                newScaleX *= tinyFactor;
+                newScaleY *= tinyFactor;
+            }
+            
+            // Clamp para limites seguros
+            newScaleX = Math.max(0.35, Math.min(2.5, newScaleX));
+            newScaleY = Math.max(0.35, Math.min(2.5, newScaleY));
 
             const geoStats = calculateGeoStats(childFormaData.id, newScaleX, newScaleY, childFormaData.params);
 

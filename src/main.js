@@ -10,10 +10,77 @@ import { UISoundSystem } from './systems/UISoundSystem.js';
 import { TutorialSystem } from './systems/TutorialSystem.js';
 import './style.css';
 
+// ═══════════════════════════════════════════════════════════════════
+// SISTEMA DE RESOLUÇÃO DINÂMICA
+// Carrega configuração salva e calcula melhor resolução
+// ═══════════════════════════════════════════════════════════════════
+
+function getGameResolution() {
+    // Resoluções disponíveis
+    const presets = {
+        '800x600': { width: 800, height: 600 },
+        '1024x768': { width: 1024, height: 768 },
+        '1280x720': { width: 1280, height: 720 },
+        '1366x768': { width: 1366, height: 768 },
+        '1920x1080': { width: 1920, height: 1080 }
+    };
+    
+    // Carrega configuração salva
+    let savedResolution = 'auto';
+    try {
+        const settings = JSON.parse(localStorage.getItem('hylomorph_settings') || '{}');
+        savedResolution = settings.resolution || 'auto';
+    } catch (e) {
+        savedResolution = 'auto';
+    }
+    
+    // Se tem preset específico, usa ele
+    if (presets[savedResolution]) {
+        console.log(`[Resolution] Usando preset: ${savedResolution}`);
+        return presets[savedResolution];
+    }
+    
+    // Auto: detecta melhor resolução baseada na tela
+    const screenWidth = window.innerWidth;
+    const screenHeight = window.innerHeight;
+    const screenRatio = screenWidth / screenHeight;
+    
+    // Determina se é mais próximo de 4:3 ou 16:9
+    const is16by9 = screenRatio > 1.5;
+    
+    // Escolhe a maior resolução que cabe na tela
+    let bestResolution = { width: 800, height: 600 };
+    
+    if (is16by9) {
+        // Resoluções 16:9
+        if (screenWidth >= 1920 && screenHeight >= 1080) {
+            bestResolution = { width: 1920, height: 1080 };
+        } else if (screenWidth >= 1366 && screenHeight >= 768) {
+            bestResolution = { width: 1366, height: 768 };
+        } else if (screenWidth >= 1280 && screenHeight >= 720) {
+            bestResolution = { width: 1280, height: 720 };
+        } else {
+            bestResolution = { width: 800, height: 600 };
+        }
+    } else {
+        // Resoluções 4:3
+        if (screenWidth >= 1024 && screenHeight >= 768) {
+            bestResolution = { width: 1024, height: 768 };
+        } else {
+            bestResolution = { width: 800, height: 600 };
+        }
+    }
+    
+    console.log(`[Resolution] Auto-detectado: ${bestResolution.width}x${bestResolution.height} (tela: ${screenWidth}x${screenHeight})`);
+    return bestResolution;
+}
+
+const resolution = getGameResolution();
+
 const config = {
   type: Phaser.AUTO,
-  width: 800,
-  height: 600,
+  width: resolution.width,
+  height: resolution.height,
   parent: 'game-container',
   backgroundColor: '#000',
   pixelArt: true,
@@ -22,7 +89,14 @@ const config = {
     default: 'arcade',
     arcade: { gravity: { y: 0 }, debug: false }
   },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: { 
+    mode: Phaser.Scale.ENVELOP,  // ENVELOP = preenche tudo (como CSS cover)
+    autoCenter: Phaser.Scale.CENTER_BOTH 
+  },
+  input: {
+    activePointers: 3, // Suporte multi-touch
+    touch: { capture: true }
+  },
   scene: [StartScene, MainMenuScene, SanctuaryScene]
 };
 
@@ -31,6 +105,13 @@ const game = new Phaser.Game(config);
 document.addEventListener('DOMContentLoaded', () => {
     let currentSelection = { forma: null, quimica: null, fisica: null };
     let activeCategory = 'forma';
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // DETECÇÃO MOBILE (Global - usado por vários sistemas)
+    // ═══════════════════════════════════════════════════════════════════
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+                     || ('ontouchstart' in window) 
+                     || (window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
 
     // ═══════════════════════════════════════════════════════════════════
     // INICIALIZAÇÃO DA UI DE FORMAS EVOLUÍDAS
@@ -96,10 +177,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // ═══════════════════════════════════════════════════════════════════
     // DRAGGABLE UI: permite arrastar btn-evolved-forms e chrono-deck
     // Persiste posições no localStorage e reposiciona modal próximo ao botão
+    // NOTA: Desabilitado no mobile onde posições são fixas via CSS
     // ═══════════════════════════════════════════════════════════════════
 
     function enableDrag(el, storageKey) {
         if (!el) return;
+        
+        // No mobile, não habilita drag (posições são fixas via CSS)
+        if (isMobile) return;
+        
         el.classList.add('draggable');
         el.style.touchAction = 'none';
         el.style.cursor = 'grab';
@@ -708,6 +794,121 @@ document.addEventListener('DOMContentLoaded', () => {
     const slotForma = document.getElementById('slot-forma');
     const slotChem = document.getElementById('slot-chem');
     const slotPhys = document.getElementById('slot-phys');
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MOBILE NAV SYSTEM: Sistema de navegação com FABs e Drawers
+    // Tela limpa - menus só aparecem quando solicitados
+    // ═══════════════════════════════════════════════════════════════════
+    
+    const mobileNav = document.getElementById('mobile-nav');
+    const mobileBackdrop = document.getElementById('mobile-backdrop');
+    const toolRack = document.getElementById('tool-rack');
+    const treeModalEl = document.getElementById('tree-modal');
+    
+    // Estado do mobile nav
+    let activeDrawer = null;
+    
+    if (isMobile && mobileNav) {
+        // CSS já cuida de display: flex para mobile via media query
+        
+        const navButtons = mobileNav.querySelectorAll('.mobile-nav-btn');
+        
+        navButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.dataset.target;
+                const targetEl = document.getElementById(targetId);
+                
+                if (!targetEl) return;
+                
+                // Se já está aberto, fecha
+                if (activeDrawer === targetId) {
+                    closeMobileDrawer();
+                    return;
+                }
+                
+                // Fecha drawer anterior se existir
+                if (activeDrawer) {
+                    const prevEl = document.getElementById(activeDrawer);
+                    if (prevEl) prevEl.classList.remove('mobile-visible');
+                    navButtons.forEach(b => b.classList.remove('active'));
+                }
+                
+                // Abre novo drawer
+                UISoundSystem.playOpen();
+                targetEl.classList.add('mobile-visible');
+                targetEl.classList.remove('hidden');
+                btn.classList.add('active');
+                activeDrawer = targetId;
+                
+                // Ações específicas por drawer
+                if (targetId === 'tree-modal') {
+                    // Backdrop só para tree-modal (ocupa tela inteira e precisa de forma de fechar)
+                    mobileBackdrop.classList.add('visible');
+                    renderFamilyTree(currentFamilyData);
+                } else if (targetId === 'creation-panel') {
+                    // Inicializa painel de criação (popula opções)
+                    initHolographicPanel();
+                    enterCreationMode();
+                }
+            });
+        });
+        
+        // Fecha ao clicar no backdrop
+        mobileBackdrop?.addEventListener('click', closeMobileDrawer);
+        
+        // Função para fechar drawer
+        function closeMobileDrawer() {
+            if (!activeDrawer) return;
+            
+            UISoundSystem.playClose();
+            const el = document.getElementById(activeDrawer);
+            
+            // Ações específicas ao fechar
+            if (activeDrawer === 'creation-panel') {
+                stopPreviewAnimation();
+                exitCreationMode(true);
+                resetSelection();
+            }
+            
+            if (el) {
+                el.classList.remove('mobile-visible');
+                // Restaura hidden para creation-panel e tree-modal
+                if (activeDrawer !== 'tool-rack') {
+                    el.classList.add('hidden');
+                }
+            }
+            mobileBackdrop?.classList.remove('visible');
+            navButtons.forEach(b => b.classList.remove('active'));
+            activeDrawer = null;
+        }
+        
+        // Expõe função para fechar drawer (usado pelos botões close internos)
+        window.closeMobileDrawer = closeMobileDrawer;
+        
+        // Swipe down para fechar drawers
+        document.addEventListener('touchstart', (e) => {
+            if (!activeDrawer) return;
+            window._touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+        
+        document.addEventListener('touchend', (e) => {
+            if (!activeDrawer || !window._touchStartY) return;
+            const deltaY = e.changedTouches[0].clientY - window._touchStartY;
+            if (deltaY > 80) { // Swipe down > 80px fecha
+                closeMobileDrawer();
+            }
+            window._touchStartY = null;
+        }, { passive: true });
+        
+        // Botões de fechar internos dos modais
+        document.querySelectorAll('.close-btn').forEach(closeBtn => {
+            closeBtn.addEventListener('click', () => {
+                if (isMobile && activeDrawer) {
+                    closeMobileDrawer();
+                }
+            });
+        });
+    }
 
     const btnTree = document.getElementById('btn-tree');
     const treeModal = document.getElementById('tree-modal');
@@ -2495,7 +2696,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Som de síntese (especial, energético)
         UISoundSystem.playClick('synthesize');
         
-        btnSynthesize.innerHTML = '<span class="btn-icon">⚡</span> SINTETIZANDO...';
+        btnSynthesize.innerHTML = '<span class="btn-icon"></span> SINTETIZANDO...';
         btnSynthesize.disabled = true;
         
         // Efeito visual no preview durante síntese
@@ -2707,6 +2908,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let ghostElement = null;
     let targetLockElement = null;
     let currentDragSlot = null;
+    
+    // Offset para dedo não cobrir o alvo no mobile
+    const MOBILE_DRAG_OFFSET_Y = isMobile ? -60 : 0;
 
     // Cria elemento de Target Lock
     function createTargetLock() {
@@ -2740,15 +2944,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     tools.forEach(tool => {
+        // Mouse events
         tool.addEventListener('mousedown', (e) => {
             e.preventDefault();
             const action = tool.dataset.action;
             const icon = tool.querySelector('.tool-icon').innerText;
             startDrag(action, icon, e.clientX, e.clientY, tool);
         });
+        
+        // Touch events para mobile
+        tool.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const action = tool.dataset.action;
+            const icon = tool.querySelector('.tool-icon').innerText;
+            startDrag(action, icon, touch.clientX, touch.clientY + MOBILE_DRAG_OFFSET_Y, tool, true);
+        }, { passive: false });
     });
 
-    function startDrag(action, iconChar, startX, startY, slotElement) {
+    function startDrag(action, iconChar, startX, startY, slotElement, isTouch = false) {
         draggedTool = action;
         currentDragSlot = slotElement;
         document.body.classList.add('grabbing');
@@ -2767,30 +2981,49 @@ document.addEventListener('DOMContentLoaded', () => {
         ghostElement.innerText = iconChar;
 
         document.body.appendChild(ghostElement);
-        updateGhostPosition(startX, startY);
+        updateGhostPosition(startX, startY + MOBILE_DRAG_OFFSET_Y);
 
+        // Mouse events
         document.addEventListener('mousemove', onDragMove);
         document.addEventListener('mouseup', onDragEnd);
+        
+        // Touch events
+        if (isTouch) {
+            document.addEventListener('touchmove', onTouchDragMove, { passive: false });
+            document.addEventListener('touchend', onTouchDragEnd);
+            document.addEventListener('touchcancel', onTouchDragEnd);
+        }
     }
 
     function onDragMove(e) {
         updateGhostPosition(e.clientX, e.clientY);
-        
+        emitDragPosition(e.clientX, e.clientY);
+    }
+    
+    function onTouchDragMove(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const offsetY = MOBILE_DRAG_OFFSET_Y;
+        updateGhostPosition(touch.clientX, touch.clientY + offsetY);
+        emitDragPosition(touch.clientX, touch.clientY + offsetY);
+    }
+    
+    function emitDragPosition(clientX, clientY) {
         // Emite posição do mouse para Golems calcularem distância da ameaça
         const canvas = document.querySelector('canvas');
         if (canvas && draggedTool) {
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-            const gameX = (e.clientX - rect.left) * scaleX;
-            const gameY = (e.clientY - rect.top) * scaleY;
+            const gameX = (clientX - rect.left) * scaleX;
+            const gameY = (clientY - rect.top) * scaleY;
             
             game.events.emit('tool-drag-move', {
                 action: draggedTool,
                 x: gameX,
                 y: gameY,
-                screenX: e.clientX,
-                screenY: e.clientY
+                screenX: clientX,
+                screenY: clientY + MOBILE_DRAG_OFFSET_Y
             });
         }
     }
@@ -2821,6 +3054,24 @@ document.addEventListener('DOMContentLoaded', () => {
     function onDragEnd(e) {
         document.removeEventListener('mousemove', onDragMove);
         document.removeEventListener('mouseup', onDragEnd);
+        finalizeDrag(e.clientX, e.clientY);
+    }
+    
+    function onTouchDragEnd(e) {
+        document.removeEventListener('touchmove', onTouchDragMove);
+        document.removeEventListener('touchend', onTouchDragEnd);
+        document.removeEventListener('touchcancel', onTouchDragEnd);
+        
+        // Usa última posição conhecida do touch
+        const touch = e.changedTouches?.[0];
+        if (touch) {
+            finalizeDrag(touch.clientX, touch.clientY + MOBILE_DRAG_OFFSET_Y);
+        } else {
+            finalizeDrag(-1, -1); // Fora da tela
+        }
+    }
+    
+    function finalizeDrag(clientX, clientY) {
         document.body.classList.remove('grabbing');
         
         // Remove classe de dragging do slot
@@ -2838,16 +3089,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (ghostElement) ghostElement.remove();
 
         const canvas = document.querySelector('canvas');
-        if (canvas) {
+        if (canvas && clientX >= 0) {
             const rect = canvas.getBoundingClientRect();
-            if (e.clientX >= rect.left && e.clientX <= rect.right &&
-                e.clientY >= rect.top && e.clientY <= rect.bottom) {
+            if (clientX >= rect.left && clientX <= rect.right &&
+                clientY >= rect.top && clientY <= rect.bottom) {
                 
                 const scaleX = canvas.width / rect.width;
                 const scaleY = canvas.height / rect.height;
                 
-                const gameX = (e.clientX - rect.left) * scaleX;
-                const gameY = (e.clientY - rect.top) * scaleY;
+                const gameX = (clientX - rect.left) * scaleX;
+                const gameY = (clientY - rect.top) * scaleY;
 
                 game.events.emit('tool-used', {
                     action: draggedTool,

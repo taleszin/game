@@ -31,6 +31,9 @@ export class MainMenuScene extends Phaser.Scene {
         // this.load.audio('menu-hover', 'sfx/menu-hover.mp3');
         // this.load.audio('menu-select', 'sfx/menu-select.mp3');
         // this.load.audio('menu-denied', 'sfx/menu-denied.mp3');
+        
+        // Pre-registra background para carregar depois (não carrega agora)
+        this.backgroundLoaded = false;
     }
     
     create() {
@@ -606,16 +609,159 @@ export class MainMenuScene extends Phaser.Scene {
     _startGame(loadGame) {
         console.log(`[MainMenu] Iniciando jogo. LoadGame: ${loadGame}`);
         
-        // Fade out
-        this.menuContainer.classList.add('fade-out');
+        // Mostra loading overlay
+        this._showLoadingOverlay();
         
-        setTimeout(() => {
-            this._cleanup();
-            this.scene.start('SanctuaryScene', { 
-                loadGame: loadGame,
-                newGame: !loadGame 
+        // Carrega assets necessários
+        this._loadGameAssets(() => {
+            // Assets carregados - transição
+            this.menuContainer.classList.add('fade-out');
+            
+            setTimeout(() => {
+                this._cleanup();
+                this.scene.start('SanctuaryScene', { 
+                    loadGame: loadGame,
+                    newGame: !loadGame 
+                });
+            }, 300);
+        });
+    }
+    
+    /**
+     * Mostra overlay de loading
+     */
+    _showLoadingOverlay() {
+        const overlay = document.createElement('div');
+        overlay.id = 'loading-overlay';
+        overlay.innerHTML = `
+            <div class="loading-content">
+                <div class="loading-text">PREPARANDO SANTUÁRIO</div>
+                <div class="loading-bar-container">
+                    <div class="loading-bar-fill"></div>
+                </div>
+                <div class="loading-status">Carregando ambiente...</div>
+            </div>
+        `;
+        overlay.style.cssText = `
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 5, 10, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            font-family: 'Press Start 2P', monospace;
+        `;
+        
+        const style = document.createElement('style');
+        style.textContent = `
+            #loading-overlay .loading-content {
+                text-align: center;
+            }
+            #loading-overlay .loading-text {
+                color: #0ff;
+                font-size: 14px;
+                margin-bottom: 20px;
+                text-shadow: 0 0 10px #0ff;
+                animation: pulse-glow 1s ease-in-out infinite;
+            }
+            #loading-overlay .loading-bar-container {
+                width: 300px;
+                height: 8px;
+                background: #111;
+                border: 1px solid #0ff;
+                margin: 0 auto 15px;
+            }
+            #loading-overlay .loading-bar-fill {
+                height: 100%;
+                width: 0%;
+                background: linear-gradient(90deg, #0ff, #0f0);
+                box-shadow: 0 0 10px #0ff;
+                transition: width 0.3s ease;
+            }
+            #loading-overlay .loading-status {
+                color: #666;
+                font-size: 8px;
+            }
+            @keyframes pulse-glow {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.7; }
+            }
+        `;
+        overlay.appendChild(style);
+        document.body.appendChild(overlay);
+        this.loadingOverlay = overlay;
+    }
+    
+    /**
+     * Atualiza barra de loading
+     */
+    _updateLoadingProgress(percent, status) {
+        if (!this.loadingOverlay) return;
+        const fill = this.loadingOverlay.querySelector('.loading-bar-fill');
+        const statusEl = this.loadingOverlay.querySelector('.loading-status');
+        if (fill) fill.style.width = `${percent}%`;
+        if (statusEl) statusEl.textContent = status;
+    }
+    
+    /**
+     * Carrega assets do jogo (background, etc)
+     */
+    _loadGameAssets(callback) {
+        this._updateLoadingProgress(10, 'Iniciando carregamento...');
+        
+        // Usa o loader do Phaser
+        if (!this.textures.exists('sanctuary-bg')) {
+            this._updateLoadingProgress(20, 'Carregando cenário...');
+            
+            // Caminho absoluto da raiz do servidor
+            this.load.image('sanctuary-bg', '/background.png');
+            
+            // Handler de erro
+            this.load.on('loaderror', (file) => {
+                console.error('[MainMenu] Erro ao carregar:', file.key, file.src);
+                // Continua mesmo sem background
+                this._updateLoadingProgress(100, 'Pronto (fallback)');
+                setTimeout(() => {
+                    if (this.loadingOverlay) {
+                        this.loadingOverlay.remove();
+                        this.loadingOverlay = null;
+                    }
+                    callback();
+                }, 200);
             });
-        }, 500);
+            
+            this.load.on('progress', (value) => {
+                const percent = 20 + Math.floor(value * 70);
+                this._updateLoadingProgress(percent, 'Carregando texturas...');
+            });
+            
+            this.load.on('complete', () => {
+                this._updateLoadingProgress(100, 'Pronto!');
+                this.backgroundLoaded = true;
+                
+                // Remove overlay após pequeno delay
+                setTimeout(() => {
+                    if (this.loadingOverlay) {
+                        this.loadingOverlay.remove();
+                        this.loadingOverlay = null;
+                    }
+                    callback();
+                }, 200);
+            });
+            
+            this.load.start();
+        } else {
+            // Já carregado
+            this._updateLoadingProgress(100, 'Pronto!');
+            setTimeout(() => {
+                if (this.loadingOverlay) {
+                    this.loadingOverlay.remove();
+                    this.loadingOverlay = null;
+                }
+                callback();
+            }, 200);
+        }
     }
     
     /**

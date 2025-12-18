@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import Golem from '../entities/Golem.js';
 import { breedGolemData } from '../services/MockAiService.js';
+import { initUIFlingSystem } from '../systems/UIFlingSystem.js';
 
 export default class SanctuaryScene extends Phaser.Scene {
   constructor() {
@@ -29,6 +30,12 @@ export default class SanctuaryScene extends Phaser.Scene {
     graphics.fillStyle(0xffffff, 1);
     graphics.fillRect(0, 0, 2, 2);
     graphics.generateTexture('pixel', 2, 2);
+    
+    // Fallback: carrega background se não foi carregado no MainMenu
+    if (!this.textures.exists('sanctuary-bg')) {
+      console.log('[SanctuaryScene] Carregando background (fallback)...');
+      this.load.image('sanctuary-bg', '/background.png');
+    }
   }
 
   create() {
@@ -43,6 +50,15 @@ export default class SanctuaryScene extends Phaser.Scene {
         
         if (uiLayer) {
             uiLayer.style.opacity = '1';
+            // NÃO definir pointer-events: auto no ui-layer!
+            // O ui-layer deve ser "transparente" para cliques passarem ao canvas
+            // Elementos filhos que precisam de interação já têm pointer-events: all
+        }
+        
+        // ═══ MOSTRA BOTÃO "NOVO EXPERIMENTO" (fora do ui-layer) ═══
+        const btnOpenLab = document.getElementById('btn-open-lab');
+        if (btnOpenLab) {
+            btnOpenLab.style.display = 'block';
         }
         
         // ═══ INICIA TUTORIAL SE FOR NOVO JOGO ═══
@@ -54,16 +70,18 @@ export default class SanctuaryScene extends Phaser.Scene {
             });
         }
         
+        // ═══ INICIALIZA UI FLING SYSTEM (God Mode!) ═══
+        this.uiFlingSystem = initUIFlingSystem(this);
+        console.log('[SanctuaryScene] 🎯 UI Fling System ativado - GOD MODE!');
+        
         this.golemRecords = [];
-        const bgGraphics = this.add.graphics();
-        bgGraphics.fillStyle(0x111111, 1);
-        bgGraphics.fillRect(0, 0, 800, 600);
-        bgGraphics.lineStyle(1, 0x222222, 1);
-        for (let y = 0; y < 600; y += 40) {
-            for (let x = 0; x < 800; x += 40) {
-                bgGraphics.strokeRect(x, y, 40, 40);
-            }
-        }
+        
+        // Usa dimensões dinâmicas do game
+        const gameWidth = this.sys.game.config.width;
+        const gameHeight = this.sys.game.config.height;
+        
+        // ═══ BACKGROUND DO SANTUÁRIO ═══
+        this._createBackground(gameWidth, gameHeight);
 
     this.golemsGroup = this.add.group();
 
@@ -119,8 +137,10 @@ export default class SanctuaryScene extends Phaser.Scene {
                 const canvas = document.querySelector('canvas');
                 if (canvas) {
                     const rect = canvas.getBoundingClientRect();
-                    const screenX = rect.left + (foundTarget.x / 800) * rect.width;
-                    const screenY = rect.top + (foundTarget.y / 600) * rect.height;
+                    const gw = this.sys.game.config.width;
+                    const gh = this.sys.game.config.height;
+                    const screenX = rect.left + (foundTarget.x / gw) * rect.width;
+                    const screenY = rect.top + (foundTarget.y / gh) * rect.height;
                     
                     this.game.events.emit('show-target-lock', {
                         screenX, screenY, type: lockType
@@ -145,7 +165,16 @@ export default class SanctuaryScene extends Phaser.Scene {
     this.input.on('pointerdown', (pointer) => {
         if (this.isPlacingMode && this.pendingData) {
             try {
-                this.spawnGolem(pointer.worldX, pointer.worldY, this.pendingData);
+                // Usa dimensões do game para clamp
+                const gameWidth = this.sys.game.config.width;
+                const gameHeight = this.sys.game.config.height;
+                
+                // Usa worldX/worldY que já considera câmera/zoom
+                // Clamp para bounds do mundo com margem
+                const spawnX = Phaser.Math.Clamp(pointer.worldX, 50, gameWidth - 50);
+                const spawnY = Phaser.Math.Clamp(pointer.worldY, 50, gameHeight - 50);
+                
+                this.spawnGolem(spawnX, spawnY, this.pendingData);
             } catch (error) { console.error(error); } 
             finally { this.exitPlacementMode(); }
         }
@@ -157,7 +186,8 @@ export default class SanctuaryScene extends Phaser.Scene {
         }
     });
 
-    this.physics.world.setBounds(0, 0, 800, 600);
+    // Usa dimensões dinâmicas do game config (reutiliza gameWidth/gameHeight do início)
+    this.physics.world.setBounds(0, 0, gameWidth, gameHeight);
     
     // === IDLE CHATTER: Golems falam aleatoriamente ===
     this.idleChatterTimer = this.time.addEvent({
@@ -560,8 +590,10 @@ export default class SanctuaryScene extends Phaser.Scene {
           
           // Efeito de glitch visual para Anomalias
           if (isAnomaly) {
-              // Flash de tela
-              const flash = this.add.rectangle(400, 300, 800, 600, feedbackColor, 0.3);
+              // Flash de tela - usa dimensões dinâmicas
+              const gw = this.sys.game.config.width;
+              const gh = this.sys.game.config.height;
+              const flash = this.add.rectangle(gw/2, gh/2, gw, gh, feedbackColor, 0.3);
               this.tweens.add({
                   targets: flash,
                   alpha: 0,
@@ -717,14 +749,18 @@ export default class SanctuaryScene extends Phaser.Scene {
   showPauseOverlay() {
     if (this.pauseOverlay) return;
 
+    // Dimensões dinâmicas
+    const gw = this.sys.game.config.width;
+    const gh = this.sys.game.config.height;
+
     // Overlay MUITO sutil - apenas um véu visual
     this.pauseOverlay = this.add.graphics();
     this.pauseOverlay.setDepth(50); // Abaixo dos Golems para não bloquear
     this.pauseOverlay.fillStyle(0x000000, 0.15); // Bem transparente
-    this.pauseOverlay.fillRect(0, 0, 800, 600);
+    this.pauseOverlay.fillRect(0, 0, gw, gh);
 
     // Ícone de pausa no canto (não centralizado para não atrapalhar)
-    const pauseIcon = this.add.text(780, 20, '⏸', {
+    const pauseIcon = this.add.text(gw - 20, 20, '⏸', {
       fontFamily: 'Arial',
       fontSize: '24px',
       fill: '#ff4400'
@@ -759,9 +795,94 @@ export default class SanctuaryScene extends Phaser.Scene {
 
   /**
    * Update loop - Processa reação de medo ao cursor com ferramenta
+   * + Gestos Mobile (Pinch-to-Zoom, Pan)
    */
   update(time, delta) {
       if (this.isPaused) return;
+      
+      // ═══════════════════════════════════════════════════════════════
+      // MOBILE GESTURES: Pinch-to-Zoom e Pan
+      // ═══════════════════════════════════════════════════════════════
+      const isMobile = !this.sys.game.device.os.desktop;
+      
+      if (isMobile) {
+          const pointer1 = this.input.pointer1;
+          const pointer2 = this.input.pointer2;
+          
+          // Safety check - pointers may not exist
+          if (!pointer1 || !pointer2) return;
+          
+          // ═══ PINCH-TO-ZOOM ═══
+          if (pointer1.isDown && pointer2.isDown) {
+              const dist = Phaser.Math.Distance.Between(
+                  pointer1.x, pointer1.y,
+                  pointer2.x, pointer2.y
+              );
+              
+              if (this.lastPinchDist === undefined) {
+                  this.lastPinchDist = dist;
+              }
+              
+              const pinchDelta = dist - this.lastPinchDist;
+              const zoomSpeed = 0.002;
+              const smoothing = 0.15; // Lerp factor
+              
+              if (Math.abs(pinchDelta) > 2) {
+                  const targetZoom = this.cameras.main.zoom + (pinchDelta * zoomSpeed);
+                  const clampedZoom = Phaser.Math.Clamp(targetZoom, 0.5, 2.5);
+                  
+                  // Smooth zoom with lerp
+                  this.cameras.main.zoom = Phaser.Math.Linear(
+                      this.cameras.main.zoom,
+                      clampedZoom,
+                      smoothing
+                  );
+              }
+              
+              this.lastPinchDist = dist;
+              this.isPinching = true;
+          } else {
+              this.lastPinchDist = undefined;
+              this.isPinching = false;
+          }
+          
+          // ═══ PAN (Mover Câmera) - Single finger drag no fundo ═══
+          if (pointer1.isDown && !pointer2.isDown && !this.isPinching && !this.isPlacingMode) {
+              // Só faz pan se não estiver sobre um Golem
+              const hitGolem = this.golemsGroup?.getChildren().some(g => {
+                  if (!g.active) return false;
+                  const dist = Phaser.Math.Distance.Between(g.x, g.y, pointer1.worldX, pointer1.worldY);
+                  return dist < 40;
+              });
+              
+              if (!hitGolem) {
+                  if (this.lastPanPos === undefined) {
+                      this.lastPanPos = { x: pointer1.x, y: pointer1.y };
+                  }
+                  
+                  const panDeltaX = this.lastPanPos.x - pointer1.x;
+                  const panDeltaY = this.lastPanPos.y - pointer1.y;
+                  
+                  if (Math.abs(panDeltaX) > 1 || Math.abs(panDeltaY) > 1) {
+                      this.cameras.main.scrollX += panDeltaX / this.cameras.main.zoom;
+                      this.cameras.main.scrollY += panDeltaY / this.cameras.main.zoom;
+                      
+                      // Clamp camera to world bounds
+                      const cam = this.cameras.main;
+                      const worldW = this.sys.game.config.width;
+                      const worldH = this.sys.game.config.height;
+                      const maxScrollX = worldW - (cam.width / cam.zoom);
+                      const maxScrollY = worldH - (cam.height / cam.zoom);
+                      cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, Math.max(0, maxScrollX));
+                      cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, Math.max(0, maxScrollY));
+                  }
+                  
+                  this.lastPanPos = { x: pointer1.x, y: pointer1.y };
+              }
+          } else {
+              this.lastPanPos = undefined;
+          }
+      }
       
       // ═══ REAÇÃO DE MEDO ═══
       // Golems fogem lentamente quando ferramentas perigosas estão sendo arrastadas
@@ -831,5 +952,414 @@ export default class SanctuaryScene extends Phaser.Scene {
               }
           }
       }
+  }
+  
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // BACKGROUND SYSTEM - Cemitério de Formas Geométricas (SNES Style!)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  
+  /**
+   * Cria background do santuário com imagem + efeitos SNES
+   */
+  _createBackground(gameWidth, gameHeight) {
+      // Layer 0: Cor de fallback (caso imagem falhe)
+      const fallbackBg = this.add.graphics();
+      fallbackBg.fillStyle(0x0a0510, 1);
+      fallbackBg.fillRect(0, 0, gameWidth, gameHeight);
+      fallbackBg.setDepth(-100);
+      
+      // Layer 1: Imagem de background com parallax
+      if (this.textures.exists('sanctuary-bg')) {
+          const texture = this.textures.get('sanctuary-bg');
+          const frame = texture.getSourceImage();
+          const imgWidth = frame.width;
+          const imgHeight = frame.height;
+          
+          // Escala para "cover" + margem extra para parallax
+          const scaleX = gameWidth / imgWidth;
+          const scaleY = gameHeight / imgHeight;
+          const scale = Math.max(scaleX, scaleY) * 1.15; // 15% extra para movimento
+          
+          this.backgroundImage = this.add.image(
+              gameWidth / 2, 
+              gameHeight / 2, 
+              'sanctuary-bg'
+          );
+          this.backgroundImage.setScale(scale);
+          this.backgroundImage.setDepth(-99);
+          this.backgroundImage.setAlpha(0.9);
+          
+          // Salva posição original para parallax
+          this.bgOriginalPos = { x: gameWidth / 2, y: gameHeight / 2 };
+          
+          console.log(`[SanctuaryScene] Background carregado: ${imgWidth}x${imgHeight}, scale: ${scale.toFixed(2)}`);
+      } else {
+          console.warn('[SanctuaryScene] Background não encontrado, usando fallback');
+          fallbackBg.lineStyle(1, 0x1a0f20, 0.3);
+          for (let y = 0; y < gameHeight; y += 40) {
+              for (let x = 0; x < gameWidth; x += 40) {
+                  fallbackBg.strokeRect(x, y, 40, 40);
+              }
+          }
+      }
+      
+      // Layer 2: Vignette escura nas bordas
+      this._createVignette(gameWidth, gameHeight);
+      
+      // Layer 3: Névoa sutil no chão
+      this._createFog(gameWidth, gameHeight);
+      
+      // Layer 4: Partículas de energia (estilo SNES)
+      this._createEnergyParticles(gameWidth, gameHeight);
+      
+      // Layer 5: Overlay de efeitos CSS (scanlines, glow)
+      this._createCRTOverlay();
+      
+      // ═══ SISTEMA DE ANIMAÇÃO DO BACKGROUND ═══
+      this._initBackgroundAnimation(gameWidth, gameHeight);
+  }
+  
+  /**
+   * Cria vignette com gradiente radial
+   */
+  _createVignette(gameWidth, gameHeight) {
+      const vignette = this.add.graphics();
+      vignette.setDepth(-98);
+      
+      const cx = gameWidth / 2;
+      const cy = gameHeight / 2;
+      const maxRadius = Math.sqrt(cx * cx + cy * cy);
+      
+      for (let i = 20; i > 0; i--) {
+          const radius = (maxRadius / 20) * i;
+          const alpha = (20 - i) * 0.018;
+          vignette.fillStyle(0x000000, alpha);
+          vignette.fillEllipse(cx, cy, radius * 2.2, radius * 1.8);
+      }
+  }
+  
+  /**
+   * Cria névoa no chão com animação
+   */
+  _createFog(gameWidth, gameHeight) {
+      this.fogLayers = [];
+      const fogHeight = gameHeight * 0.35;
+      
+      // Múltiplas camadas de névoa para efeito de profundidade
+      for (let layer = 0; layer < 3; layer++) {
+          const fog = this.add.graphics();
+          fog.setDepth(-97 + layer * 0.1);
+          
+          const baseAlpha = 0.12 - (layer * 0.03);
+          const yOffset = layer * 20;
+          
+          for (let i = 0; i < 8; i++) {
+              const y = gameHeight - fogHeight + (fogHeight / 8) * i + yOffset;
+              const alpha = baseAlpha - (i * 0.012);
+              fog.fillStyle(0x1a0820, Math.max(0, alpha));
+              fog.fillRect(0, y, gameWidth, fogHeight / 8);
+          }
+          
+          this.fogLayers.push({
+              graphics: fog,
+              baseX: 0,
+              speed: 0.1 + layer * 0.05,
+              amplitude: 3 + layer * 2
+          });
+      }
+  }
+  
+  /**
+   * Cria partículas de energia flutuante (SNES magic particles)
+   * REDUZIDO para dar destaque aos Golems
+   */
+  _createEnergyParticles(gameWidth, gameHeight) {
+      this.energyParticles = [];
+      const numParticles = 18; // Reduzido de 40 para não competir com Golems
+      
+      // Cores sutis, desaturadas para não competir com Golems
+      const subtleColors = [
+          0x4a3060, // Roxo escuro
+          0x304050, // Azul escuro
+          0x403050, // Índigo
+          0x503040, // Magenta escuro
+          0x305040, // Verde escuro
+          0x504030, // Âmbar escuro
+      ];
+      
+      for (let i = 0; i < numParticles; i++) {
+          const particle = this.add.graphics();
+          particle.setDepth(-95);
+          
+          const size = 1 + Math.random() * 1.5; // Menores
+          const color = Phaser.Math.RND.pick(subtleColors);
+          const alpha = 0.15 + Math.random() * 0.2; // Mais sutis
+          
+          // Desenha partícula simples (sem glow forte)
+          particle.fillStyle(color, alpha);
+          particle.fillCircle(0, 0, size);
+          
+          // Halo externo muito sutil
+          particle.fillStyle(color, alpha * 0.15);
+          particle.fillCircle(0, 0, size * 1.5);
+          
+          particle.x = Math.random() * gameWidth;
+          particle.y = Math.random() * gameHeight;
+          
+          this.energyParticles.push({
+              graphics: particle,
+              baseX: particle.x,
+              baseY: particle.y,
+              speedX: (Math.random() - 0.5) * 0.5,
+              speedY: -0.2 - Math.random() * 0.3, // Sobe lentamente
+              amplitude: 15 + Math.random() * 25,
+              phase: Math.random() * Math.PI * 2,
+              pulseSpeed: 1 + Math.random() * 2,
+              color: color,
+              maxY: gameHeight
+          });
+      }
+  }
+  
+  /**
+   * Cria overlay CSS com efeitos CRT (scanlines, glow, flicker)
+   */
+  _createCRTOverlay() {
+      // Remove overlay existente se houver
+      const existing = document.getElementById('sanctuary-crt-overlay');
+      if (existing) existing.remove();
+      
+      // Container do overlay
+      const overlay = document.createElement('div');
+      overlay.id = 'sanctuary-crt-overlay';
+      overlay.innerHTML = `
+          <div class="scanlines"></div>
+          <div class="glow-pulse"></div>
+          <div class="vhs-noise"></div>
+      `;
+      
+      // Estilos do overlay
+      const style = document.createElement('style');
+      style.id = 'sanctuary-crt-styles';
+      style.textContent = `
+          #sanctuary-crt-overlay {
+              position: fixed;
+              top: 0; left: 0; right: 0; bottom: 0;
+              pointer-events: none;
+              z-index: 5;
+              overflow: hidden;
+          }
+          
+          /* ═══ SCANLINES ANIMADAS (sutis para não competir com Golems) ═══ */
+          .scanlines {
+              position: absolute;
+              top: 0; left: 0; right: 0; bottom: 0;
+              background: repeating-linear-gradient(
+                  0deg,
+                  transparent 0px,
+                  transparent 3px,
+                  rgba(0, 0, 0, 0.06) 3px,
+                  rgba(0, 0, 0, 0.06) 6px
+              );
+              animation: scanline-scroll 12s linear infinite;
+          }
+          
+          @keyframes scanline-scroll {
+              0% { background-position: 0 0; }
+              100% { background-position: 0 100px; }
+          }
+          
+          /* ═══ GLOW PULSE (muito sutil - Golems são protagonistas) ═══ */
+          .glow-pulse {
+              position: absolute;
+              top: 0; left: 0; right: 0; bottom: 0;
+              background: radial-gradient(
+                  ellipse at center,
+                  transparent 50%,
+                  rgba(138, 43, 226, 0.015) 75%,
+                  rgba(75, 0, 130, 0.025) 100%
+              );
+              animation: glow-breathe 8s ease-in-out infinite;
+          }
+          
+          @keyframes glow-breathe {
+              0%, 100% { opacity: 0.3; transform: scale(1); }
+              50% { opacity: 0.6; transform: scale(1.01); }
+          }
+          
+          /* ═══ VHS NOISE (quase invisível) ═══ */
+          .vhs-noise {
+              position: absolute;
+              top: 0; left: 0; right: 0; bottom: 0;
+              opacity: 0.008;
+              background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+              animation: noise-flicker 0.1s steps(5) infinite;
+          }
+          
+          @keyframes noise-flicker {
+              0% { transform: translate(0, 0); }
+              25% { transform: translate(-1px, 1px); }
+              50% { transform: translate(1px, -1px); }
+              75% { transform: translate(-1px, -1px); }
+              100% { transform: translate(1px, 1px); }
+          }
+          
+          /* ═══ OCCASIONAL GLITCH (raro) ═══ */
+          @keyframes rare-glitch {
+              0%, 99% { clip-path: none; filter: none; }
+              99.5% { 
+                  clip-path: inset(20% 0 30% 0); 
+                  filter: hue-rotate(90deg);
+              }
+              100% { clip-path: none; filter: none; }
+          }
+      `;
+      
+      // Remove estilo antigo se existir
+      const oldStyle = document.getElementById('sanctuary-crt-styles');
+      if (oldStyle) oldStyle.remove();
+      
+      document.head.appendChild(style);
+      document.body.appendChild(overlay);
+      
+      this.crtOverlay = overlay;
+  }
+  
+  /**
+   * Inicializa sistema de animação do background
+   */
+  _initBackgroundAnimation(gameWidth, gameHeight) {
+      // Timer principal de animação (60fps)
+      this.bgAnimTime = 0;
+      
+      this.time.addEvent({
+          delay: 16, // ~60fps
+          callback: () => this._updateBackgroundEffects(gameWidth, gameHeight),
+          loop: true
+      });
+      
+      // Timer de color cycling (bem lento para não distrair)
+      this.colorCycleIndex = 0;
+      this.time.addEvent({
+          delay: 500, // Ciclo de cor a cada 500ms (mais lento)
+          callback: () => this._updateColorCycling(),
+          loop: true
+      });
+      
+      // Timer de parallax (vinculado ao movimento do mouse/câmera)
+      this.input.on('pointermove', (pointer) => {
+          this._updateParallax(pointer, gameWidth, gameHeight);
+      });
+  }
+  
+  /**
+   * Atualiza efeitos do background (chamado a cada frame)
+   */
+  _updateBackgroundEffects(gameWidth, gameHeight) {
+      this.bgAnimTime += 0.016;
+      const time = this.bgAnimTime;
+      
+      // ═══ PARALLAX BREATHING (background "respira") ═══
+      if (this.backgroundImage && this.bgOriginalPos) {
+          const breatheX = Math.sin(time * 0.3) * 2;
+          const breatheY = Math.cos(time * 0.2) * 1.5;
+          this.backgroundImage.x = this.bgOriginalPos.x + breatheX;
+          this.backgroundImage.y = this.bgOriginalPos.y + breatheY;
+      }
+      
+      // ═══ FOG DRIFT (névoa se move) ═══
+      if (this.fogLayers) {
+          for (const fog of this.fogLayers) {
+              const drift = Math.sin(time * fog.speed) * fog.amplitude;
+              fog.graphics.x = fog.baseX + drift;
+          }
+      }
+      
+      // ═══ ENERGY PARTICLES (partículas mágicas) ═══
+      if (this.energyParticles) {
+          for (const p of this.energyParticles) {
+              // Movimento senoidal horizontal
+              p.graphics.x = p.baseX + Math.sin(time * 0.5 + p.phase) * p.amplitude;
+              
+              // Sobe lentamente
+              p.baseY += p.speedY;
+              p.graphics.y = p.baseY + Math.cos(time * 0.3 + p.phase) * 5;
+              
+              // Pulso de alpha (pisca suavemente)
+              const pulse = 0.5 + Math.sin(time * p.pulseSpeed + p.phase) * 0.5;
+              p.graphics.setAlpha(0.2 + pulse * 0.5);
+              
+              // Wrap around quando sai da tela
+              if (p.baseY < -20) {
+                  p.baseY = p.maxY + 20;
+                  p.baseX = Math.random() * gameWidth;
+              }
+          }
+      }
+  }
+  
+  /**
+   * Color cycling - técnica clássica SNES (sutil)
+   */
+  _updateColorCycling() {
+      if (!this.energyParticles) return;
+      
+      this.colorCycleIndex = (this.colorCycleIndex + 1) % 6;
+      
+      // Cores sutis que não competem com Golems
+      const subtleColors = [
+          0x4a3060, 0x304050, 0x403050, 
+          0x503040, 0x305040, 0x504030
+      ];
+      
+      for (let i = 0; i < this.energyParticles.length; i++) {
+          // Apenas 30% das partículas fazem cycling
+          if (i % 3 === 0) {
+              const p = this.energyParticles[i];
+              const newColorIndex = (this.colorCycleIndex + i) % subtleColors.length;
+              p.color = subtleColors[newColorIndex];
+              
+              // Redesenha com nova cor
+              p.graphics.clear();
+              const size = 1 + (i % 3);
+              const alpha = 0.3 + (i % 5) * 0.1;
+              
+              p.graphics.fillStyle(p.color, alpha);
+              p.graphics.fillCircle(0, 0, size);
+              p.graphics.fillStyle(p.color, alpha * 0.3);
+              p.graphics.fillCircle(0, 0, size * 2);
+          }
+      }
+  }
+  
+  /**
+   * Parallax baseado na posição do mouse
+   */
+  _updateParallax(pointer, gameWidth, gameHeight) {
+      if (!this.backgroundImage || !this.bgOriginalPos) return;
+      
+      // Calcula offset baseado na posição do mouse (efeito parallax sutil)
+      const centerX = gameWidth / 2;
+      const centerY = gameHeight / 2;
+      
+      const offsetX = (pointer.x - centerX) / centerX; // -1 a 1
+      const offsetY = (pointer.y - centerY) / centerY; // -1 a 1
+      
+      // Movimento parallax suave (máximo 15px)
+      const parallaxStrength = 15;
+      this.bgOriginalPos.x = centerX - (offsetX * parallaxStrength);
+      this.bgOriginalPos.y = centerY - (offsetY * parallaxStrength * 0.5);
+  }
+  
+  /**
+   * Cleanup do overlay CRT ao sair da cena
+   */
+  shutdown() {
+      // Remove overlay CSS
+      const overlay = document.getElementById('sanctuary-crt-overlay');
+      if (overlay) overlay.remove();
+      
+      const style = document.getElementById('sanctuary-crt-styles');
+      if (style) style.remove();
   }
 }

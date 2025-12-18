@@ -76,16 +76,26 @@ body::after {
   box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.5);
 }
 
-/* ═══ CANVAS DO JOGO - OCULTO POR PADRÃO ═══
-   Só é mostrado quando SanctuaryScene inicia.
-   Isso evita flash durante transições de cena. */
+/* ═══ CANVAS DO JOGO - PREENCHE TODA A TELA ═══
+   Container do Phaser - deve ocupar viewport inteira */
 #game-container {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
+  width: 100vw;
+  height: 100vh;
   z-index: 1;
   opacity: 0;
   pointer-events: none;
+  overflow: hidden;
+}
+
+/* Garante que o canvas do Phaser preencha o container */
+#game-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
 }
 
 /* ═══ UI DO JOGO - OCULTA POR PADRÃO ═══
@@ -885,7 +895,13 @@ body::after {
 }
 
 #btn-open-lab {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
   transition: opacity 0.2s;
+  display: none; /* Escondido até SanctuaryScene mostrar */
 }
 
 #btn-open-lab.hidden {
@@ -3547,6 +3563,464 @@ body.grabbing * {
   transition: all 0.2s;
   opacity: 0;
   pointer-events: none;
+}
+
+/* ═══ MOBILE NAV - Oculto no Desktop ═══ */
+#mobile-nav {
+    display: none !important;
+}
+
+#mobile-backdrop {
+    display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE - UI Limpa com FABs e Drawers
+   Detectado via max-width: 768px - Desktop permanece inalterado
+   Foco: Tela 100% livre para ver Golems. Menus só quando solicitados.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    /* ═══ DESABILITAR HOVER STICKY NO MOBILE ═══ */
+    @media (hover: none) and (pointer: coarse) {
+        .tool-slot:hover,
+        .pixel-btn:hover,
+        .chrono-icon:hover,
+        #btn-evolved-forms:hover,
+        #btn-tree:hover,
+        .option-item:hover,
+        .evolved-form-card:hover {
+            transform: none !important;
+            box-shadow: inherit !important;
+            background: inherit !important;
+        }
+    }
+
+    /* ═══ OCULTAR ELEMENTOS DESKTOP POR PADRÃO ═══ */
+    #tool-rack,
+    #creation-panel,
+    #btn-open-lab,
+    #btn-evolved-forms,
+    #btn-tree {
+        display: none !important;
+    }
+    
+    /* ═══ HUD TOP - Esconder no mobile (tela limpa) ═══ */
+    .hud-top {
+        display: none !important;
+    }
+
+    /* ═══ CHRONO-DECK - Discreto no topo ═══ */
+    #chrono-deck {
+        position: fixed !important;
+        bottom: auto !important;
+        top: 12px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        right: auto !important;
+        z-index: 700 !important;
+        opacity: 0.85;
+    }
+    
+    #chrono-deck .chrono-pill {
+        padding: 4px 6px !important;
+        background: rgba(10, 15, 25, 0.9) !important;
+    }
+    
+    #chrono-deck .chrono-icon {
+        min-width: 36px !important;
+        min-height: 36px !important;
+        width: 36px !important;
+        height: 36px !important;
+        font-size: 14px !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MOBILE NAV BAR - Navegação Inferior Minimalista
+       3 FABs: CRIAR | FERRAMENTAS | ARQUIVOS
+       ═══════════════════════════════════════════════════════════════ */
+    #mobile-nav {
+        display: flex !important;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 60px;
+        padding-bottom: env(safe-area-inset-bottom);
+        background: linear-gradient(180deg, rgba(15, 20, 30, 0.95) 0%, rgba(5, 10, 15, 0.98) 100%);
+        border-top: 1px solid rgba(0, 255, 255, 0.2);
+        backdrop-filter: blur(12px);
+        z-index: 900;
+        justify-content: space-around;
+        align-items: center;
+    }
+    
+    .mobile-nav-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        width: 70px;
+        height: 52px;
+        background: transparent;
+        border: none;
+        color: #888;
+        font-family: 'Press Start 2P', monospace;
+        font-size: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        -webkit-tap-highlight-color: transparent;
+    }
+    
+    .mobile-nav-btn .nav-icon {
+        font-size: 22px;
+        transition: transform 0.2s;
+    }
+    
+    .mobile-nav-btn.active {
+        color: #0ff;
+    }
+    
+    .mobile-nav-btn.active .nav-icon {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 8px rgba(0, 255, 255, 0.6));
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       BACKDROP OVERLAY - Fundo escuro ao abrir menus
+       ═══════════════════════════════════════════════════════════════ */
+    #mobile-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 60px;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 850;
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+    
+    #mobile-backdrop.visible {
+        display: block;
+        opacity: 1;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TOOL RACK - Drawer Horizontal (aparece acima do nav)
+       ═══════════════════════════════════════════════════════════════ */
+    #tool-rack.mobile-visible {
+        display: flex !important;
+        position: fixed !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 60px !important;
+        top: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        max-height: 80px !important;
+        animation: slideUp 0.3s ease-out forwards !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        
+        /* Reset desktop styles */
+        clip-path: none !important;
+        border-radius: 12px 12px 0 0 !important;
+        border: none !important;
+        border-top: 1px solid rgba(0, 255, 255, 0.3) !important;
+        background: linear-gradient(180deg, rgba(15, 25, 35, 0.98) 0%, rgba(10, 15, 25, 0.98) 100%) !important;
+        backdrop-filter: blur(12px);
+        padding: 12px 8px !important;
+        padding-bottom: 8px !important;
+        z-index: 860 !important;
+    }
+    
+    #tool-rack.mobile-visible .rack-header {
+        display: none !important;
+    }
+    
+    #tool-rack.mobile-visible .rack-slots {
+        flex-direction: row !important;
+        gap: 8px !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        justify-content: center !important;
+        align-items: center !important;
+        width: 100%;
+        padding: 0 8px;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    
+    #tool-rack.mobile-visible .rack-slots::-webkit-scrollbar {
+        display: none;
+    }
+    
+    #tool-rack.mobile-visible .rack-divider {
+        width: 2px !important;
+        height: 28px !important;
+        margin: 0 4px !important;
+        flex-shrink: 0;
+        background: rgba(0, 255, 255, 0.2) !important;
+    }
+    
+    #tool-rack.mobile-visible .tool-slot {
+        min-width: 48px !important;
+        min-height: 48px !important;
+        width: 48px !important;
+        height: 48px !important;
+        flex-shrink: 0;
+    }
+    
+    #tool-rack.mobile-visible .tool-icon {
+        font-size: 20px !important;
+    }
+    
+    #tool-rack.mobile-visible .slot-tooltip {
+        display: none !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       CREATION PANEL - Full Drawer (desliza de baixo)
+       ═══════════════════════════════════════════════════════════════ */
+    #creation-panel.mobile-visible {
+        display: flex !important;
+        position: fixed !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 60px !important;
+        top: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: calc(85vh - 60px) !important;
+        animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        
+        border-radius: 16px 16px 0 0 !important;
+        border: none !important;
+        border-top: 1px solid rgba(0, 255, 255, 0.3) !important;
+        background: linear-gradient(180deg, rgba(10, 20, 30, 0.98) 0%, rgba(5, 10, 20, 0.99) 100%) !important;
+        backdrop-filter: blur(15px);
+        z-index: 870 !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    #creation-panel.mobile-visible::before {
+        content: '';
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: rgba(0, 255, 255, 0.4);
+        border-radius: 2px;
+        margin: 10px auto 6px;
+        flex-shrink: 0;
+    }
+    
+    #creation-panel.mobile-visible .lab-header {
+        padding: 8px 16px 12px !important;
+    }
+    
+    #creation-panel.mobile-visible .lab-header h2 {
+        font-size: 10px !important;
+    }
+    
+    #creation-panel.mobile-visible .close-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        padding: 12px !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       TREE MODAL - Full Screen Drawer
+       ═══════════════════════════════════════════════════════════════ */
+    #tree-modal.mobile-visible {
+        display: flex !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 60px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: none !important;
+        border-radius: 0 !important;
+        z-index: 880 !important;
+        animation: fadeIn 0.3s ease-out !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+    }
+    
+    #tree-modal.mobile-visible .tree-header {
+        padding: 12px 16px !important;
+    }
+    
+    #tree-modal.mobile-visible .close-btn {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        padding: 12px !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       MODAIS GENÉRICOS - Ajustes Mobile
+       ═══════════════════════════════════════════════════════════════ */
+    .evolved-modal.mobile-visible {
+        display: flex !important;
+        position: fixed !important;
+        top: 8px !important;
+        left: 8px !important;
+        right: 8px !important;
+        bottom: 68px !important;
+        width: auto !important;
+        max-height: none !important;
+        z-index: 890 !important;
+        animation: fadeIn 0.3s ease-out !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       INSPECT PANEL - Posição Mobile
+       ═══════════════════════════════════════════════════════════════ */
+    #inspect-panel {
+        position: fixed !important;
+        left: 8px !important;
+        right: 8px !important;
+        bottom: 68px !important;
+        top: auto !important;
+        width: auto !important;
+        max-height: 45vh !important;
+        z-index: 750 !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       GAME CONTAINER - Tela cheia no mobile
+       ═══════════════════════════════════════════════════════════════ */
+    #game-container {
+        padding: 0 !important;
+        height: calc(100vh - 60px) !important;
+    }
+    
+    #game-container canvas {
+        max-height: calc(100vh - 60px) !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       LEGIBILIDADE - Fontes 20% maiores no mobile
+       ═══════════════════════════════════════════════════════════════ */
+    .lab-header h2,
+    .tree-header h2,
+    .evolved-modal-header h2 {
+        font-size: 12px !important;
+    }
+    
+    .option-item .option-name {
+        font-size: 8px !important;
+    }
+    
+    .option-item .option-desc {
+        font-size: 7px !important;
+    }
+    
+    .synthesis-grid .option-item {
+        padding: 12px !important;
+        min-height: 52px !important;
+    }
+    
+    /* Botões de fechar com hitbox maior */
+    .close-btn {
+        min-width: 48px !important;
+        min-height: 48px !important;
+        padding: 16px !important;
+        font-size: 16px !important;
+    }
+    
+    /* ═══ TECH TOOLTIP - Desabilitado no Touch ═══ */
+    .tech-tooltip {
+        display: none !important;
+    }
+
+    /* ═══ TUTORIAL - Ajustes Mobile ═══ */
+    .tutorial-tooltip {
+        max-width: 90vw !important;
+        font-size: 9px !important;
+        padding: 16px !important;
+    }
+    
+    .tutorial-backdrop-highlight {
+        border-radius: 8px !important;
+    }
+
+    /* ═══ ANIMAÇÕES ═══ */
+    @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+}
+
+/* ═══ Landscape Mobile - Tool rack na lateral ═══ */
+@media (max-width: 768px) and (orientation: landscape) {
+    #mobile-nav {
+        width: 60px !important;
+        height: 100% !important;
+        flex-direction: column !important;
+        bottom: 0 !important;
+        right: 0 !important;
+        left: auto !important;
+        top: 0 !important;
+        border-top: none !important;
+        border-left: 1px solid rgba(0, 255, 255, 0.2) !important;
+    }
+    
+    .mobile-nav-btn {
+        width: 52px !important;
+    }
+    
+    #mobile-backdrop {
+        right: 60px !important;
+        bottom: 0 !important;
+    }
+    
+    #tool-rack.mobile-visible {
+        bottom: 0 !important;
+        right: 60px !important;
+        left: auto !important;
+        width: auto !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        flex-direction: column !important;
+        border-radius: 12px 0 0 12px !important;
+        border-top: none !important;
+        border-left: 1px solid rgba(0, 255, 255, 0.3) !important;
+    }
+    
+    #tool-rack.mobile-visible .rack-slots {
+        flex-direction: column !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+    
+    #creation-panel.mobile-visible,
+    #tree-modal.mobile-visible {
+        right: 60px !important;
+        bottom: 0 !important;
+    }
+    
+    #game-container {
+        height: 100vh !important;
+        width: calc(100vw - 60px) !important;
+    }
+    
+    #game-container canvas {
+        max-height: 100vh !important;
+        max-width: calc(100vw - 60px) !important;
+    }
 }
 
 .tutorial-skip-btn.visible {

@@ -2,8 +2,13 @@
 <html lang="pt-br">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Favicon retro minimal (triângulo, quadrado, círculo) -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" href="/favicon.svg" />
+    <link rel="icon" sizes="32x32" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <title>HYLOMORPH</title>
   </head>
@@ -120,7 +125,7 @@
                 <div class="recipe-formula" id="recipe-summary">[ ? ] + [ ? ] + [ ? ]</div>
             </div>
             <button id="btn-synthesize" class="pixel-btn btn-green" data-name="Sintetizar" data-desc="Combina Forma, Química e Física para criar um novo Golem. Requer todos os elementos selecionados." disabled>
-                <span class="btn-icon"></span> SINTETIZAR
+                <span class="btn-icon"></span> FUSÃO
             </button>
         </div>
       </div>
@@ -203,8 +208,6 @@
           </div>
       </div>
 
-      <button id="btn-open-lab" class="pixel-btn" data-name="Novo Experimento" data-desc="Abre o Laboratório de Síntese para criar um novo Golem.">NOVO EXPERIMENTO</button>
-
       <!-- ═══════════════════════════════════════════════════════════════════
            BOTÃO FLUTUANTE: FORMAS EVOLUÍDAS (DESCOBRIR)
            ═══════════════════════════════════════════════════════════════════ -->
@@ -230,6 +233,33 @@
         </div>
       </div>
     </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         MOBILE NAV - Barra de Navegação Inferior (Mobile Only)
+         Fora do ui-layer para funcionar independentemente
+         ═══════════════════════════════════════════════════════════════════ -->
+    <nav id="mobile-nav">
+        <button class="mobile-nav-btn" data-target="creation-panel">
+            <span class="nav-icon">🧬</span>
+            <span>CRIAR</span>
+        </button>
+        <button class="mobile-nav-btn" data-target="tool-rack">
+            <span class="nav-icon">🛠️</span>
+            <span>TOOLS</span>
+        </button>
+        <button class="mobile-nav-btn" data-target="tree-modal">
+            <span class="nav-icon">📂</span>
+            <span>ARQUIVO</span>
+        </button>
+    </nav>
+    
+    <!-- Backdrop para menus mobile -->
+    <div id="mobile-backdrop"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         BOTÃO PRINCIPAL: NOVO EXPERIMENTO (Fora do ui-layer para visibilidade independente)
+         ═══════════════════════════════════════════════════════════════════ -->
+    <button id="btn-open-lab" class="pixel-btn" data-name="Novo Experimento" data-desc="Abre o Laboratório de Síntese para criar um novo Golem.">NOVO EXPERIMENTO</button>
 
     <script type="module" src="/src/main.js"></script>
   </body>
