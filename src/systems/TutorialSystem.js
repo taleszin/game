@@ -38,7 +38,7 @@ const STEP_CONFIG = {
         type: 'modal',
         icon: '',
         title: 'HYLOMORPH',
-        message: 'Protocolo de calibragem iniciado.\nVocê irá criar sua primeira forma !',
+        message: 'Bem vindo, cientista ! \nVamos calibrar seu acesso ao laboratório com um rápido tutorial de criação e fusão de criaturas.',
         buttonText: 'INICIAR'
     },
     [STEPS.OPEN_LAB]: {
@@ -69,7 +69,7 @@ const STEP_CONFIG = {
     [STEPS.SYNTHESIZE_FIRST]: {
         type: 'highlight',
         selector: '#btn-synthesize',
-        message: '⚗️ SINTETIZAR!',
+        message: 'SINTETIZAR!',
         pointerPos: 'top'
     },
     [STEPS.WAIT_FIRST_GOLEM]: {
@@ -110,7 +110,7 @@ const STEP_CONFIG = {
     [STEPS.SYNTHESIZE_SECOND]: {
         type: 'highlight',
         selector: '#btn-synthesize',
-        message: '⚗️ SINTETIZAR!',
+        message: 'SINTETIZAR!',
         pointerPos: 'top'
     },
     [STEPS.WAIT_SECOND_GOLEM]: {

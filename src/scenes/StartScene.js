@@ -1625,12 +1625,175 @@ export class StartScene extends Phaser.Scene {
         setTimeout(() => {
             this.bootOverlay?.remove();
             
-            // Mostra loading overlay
-            this.loadingOverlay.classList.add('visible');
-            
-            // Inicia sequência de carregamento
-            this._runLoadingSequence();
+            // ═══ SEMPRE mostra dica de orientação (parte da intro) ═══
+            this._showOrientationHint(() => {
+                // Callback: Mostra loading após dica
+                this.loadingOverlay.classList.add('visible');
+                this._runLoadingSequence();
+            });
         }, 500);
+    }
+    
+    /**
+     * Detecta se é dispositivo mobile
+     */
+    _isMobileDevice() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+            || ('ontouchstart' in window) 
+            || (navigator.maxTouchPoints > 0);
+    }
+    
+    /**
+     * Mostra dica de orientação e fone de ouvido para mobile
+     */
+    _showOrientationHint(callback) {
+        // Cria overlay de dica
+        const hintOverlay = document.createElement('div');
+        hintOverlay.id = 'orientation-hint-overlay';
+        hintOverlay.innerHTML = `
+            <div class="orientation-hint-content">
+                <div class="hint-icons">
+                    <div class="hint-item headphones">
+                        <span class="hint-icon">🎧</span>
+                        <span class="hint-label">FONE RECOMENDADO</span>
+                    </div>
+                    <div class="hint-item landscape">
+                        <span class="hint-icon rotate-phone">📱</span>
+                        <span class="hint-label">VIRE A TELA</span>
+                    </div>
+                </div>
+                <div class="hint-tap">TOQUE PARA CONTINUAR</div>
+            </div>
+        `;
+        
+        // Adiciona estilos inline (para garantir que funcionem)
+        const style = document.createElement('style');
+        style.textContent = `
+            #orientation-hint-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                z-index: 30;
+                background: #000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: 'Press Start 2P', monospace;
+                animation: fadeIn 0.5s ease-out;
+                cursor: pointer;
+            }
+            
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            
+            .orientation-hint-content {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 40px;
+                padding: 20px;
+            }
+            
+            .hint-icons {
+                display: flex;
+                gap: 60px;
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            .hint-item {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 16px;
+            }
+            
+            .hint-icon {
+                font-size: 64px;
+                filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.5));
+            }
+            
+            .hint-item.headphones .hint-icon {
+                animation: pulse-headphones 2s ease-in-out infinite;
+            }
+            
+            @keyframes pulse-headphones {
+                0%, 100% { transform: scale(1); filter: drop-shadow(0 0 20px rgba(0, 255, 255, 0.5)); }
+                50% { transform: scale(1.1); filter: drop-shadow(0 0 30px rgba(0, 255, 255, 0.8)); }
+            }
+            
+            .rotate-phone {
+                display: inline-block;
+                animation: rotate-phone 2s ease-in-out infinite;
+            }
+            
+            @keyframes rotate-phone {
+                0%, 100% { transform: rotate(0deg); }
+                25% { transform: rotate(-90deg); }
+                50% { transform: rotate(-90deg); }
+                75% { transform: rotate(0deg); }
+            }
+            
+            .hint-label {
+                font-size: 10px;
+                color: #0ff;
+                text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+                text-align: center;
+            }
+            
+            .hint-tap {
+                font-size: 8px;
+                color: #888;
+                animation: blink 1.5s ease-in-out infinite;
+                margin-top: 20px;
+            }
+            
+            @keyframes blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.3; }
+            }
+            
+            @media (orientation: landscape) {
+                .hint-item.landscape {
+                    opacity: 0.3;
+                }
+                .hint-item.landscape .hint-label::after {
+                    content: ' ✓';
+                    color: #0f0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        document.body.appendChild(hintOverlay);
+        
+        // Tap para continuar
+        const continueToLoading = () => {
+            hintOverlay.style.animation = 'fadeOut 0.3s ease-out forwards';
+            
+            // Adiciona keyframe de fadeOut
+            const fadeOutStyle = document.createElement('style');
+            fadeOutStyle.textContent = `
+                @keyframes fadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+            `;
+            document.head.appendChild(fadeOutStyle);
+            
+            setTimeout(() => {
+                hintOverlay.remove();
+                style.remove();
+                fadeOutStyle.remove();
+                callback();
+            }, 300);
+        };
+        
+        hintOverlay.addEventListener('click', continueToLoading, { once: true });
+        hintOverlay.addEventListener('touchstart', continueToLoading, { once: true });
     }
     
     /**

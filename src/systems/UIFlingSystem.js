@@ -264,8 +264,10 @@ export class UIFlingSystem {
             /* ═══ RESET BUTTON ═══ */
             .ui-reset-positions-btn {
                 position: fixed;
-                bottom: 80px;
-                right: 10px;
+                top: 10px;
+                left: 10px;
+                bottom: auto;
+                right: auto;
                 padding: 6px 10px;
                 font-family: 'Press Start 2P', monospace;
                 font-size: 7px;
@@ -986,8 +988,54 @@ export class UIFlingSystem {
         localStorage.removeItem('hylomorph_ui_positions');
         this.savedPositions = {};
         
-        // Restaura posições originais (recarrega a página é mais seguro)
-        window.location.reload();
+        // Restaura posições originais de cada elemento sem recarregar página
+        this.flingableElements.forEach(({ element, originalPosition }) => {
+            // Remove estilos inline de posicionamento
+            element.style.position = '';
+            element.style.left = '';
+            element.style.top = '';
+            element.style.right = '';
+            element.style.bottom = '';
+            element.style.transform = '';
+            
+            // Força recálculo do layout aplicando posição original do CSS
+            if (originalPosition) {
+                // Pequeno delay para garantir reset completo
+                requestAnimationFrame(() => {
+                    element.style.position = originalPosition.position !== 'static' ? originalPosition.position : '';
+                    element.style.left = originalPosition.left !== 'auto' ? originalPosition.left : '';
+                    element.style.top = originalPosition.top !== 'auto' ? originalPosition.top : '';
+                    element.style.right = originalPosition.right !== 'auto' ? originalPosition.right : '';
+                    element.style.bottom = originalPosition.bottom !== 'auto' ? originalPosition.bottom : '';
+                    element.style.transform = originalPosition.transform !== 'none' ? originalPosition.transform : '';
+                });
+            }
+        });
+        
+        // Feedback visual
+        this._playResetSound();
+        
+        console.log('[UIFling] Posições restauradas sem reload');
+    }
+    
+    _playResetSound() {
+        try {
+            const ctx = this.scene?.sound?.context;
+            if (!ctx || ctx.state === 'suspended') return;
+            
+            // Som de "swoosh" indicando reset
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.1, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + 0.2);
+        } catch {}
     }
     
     // ═══════════════════════════════════════════════════════════════

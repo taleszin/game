@@ -127,6 +127,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (activeEl && activeEl !== document.body && activeEl.blur) {
                 activeEl.blur();
             }
+            
+            // Esconde tooltips imediatamente no mobile após tap
+            const techTooltip = document.getElementById('tech-tooltip');
+            if (techTooltip) {
+                techTooltip.classList.add('fade-out-mobile');
+                setTimeout(() => {
+                    techTooltip.classList.remove('visible', 'fade-out-mobile');
+                }, 200);
+            }
         }, { passive: true });
         
         // Alternativa: remove hover via classe temporária
@@ -169,6 +178,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="zoom-btn zoom-in" title="Zoom In (+)">+</button>
         `;
         document.body.appendChild(controls);
+        
+        // Inicialmente escondido - só aparece quando UI do jogo fica visível
+        controls.classList.add('hidden');
         
         // Estilos inline
         Object.assign(controls.style, {
@@ -238,6 +250,12 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Cria controles de zoom
     const zoomControls = createZoomControls();
+    
+    // Mostra zoom controls quando a UI do jogo ficar visível
+    game.events.on('ui-ready', () => {
+        const zc = document.getElementById('zoom-controls');
+        if (zc) zc.classList.remove('hidden');
+    });
     
     function showZoomIndicator(value) {
         // Atualiza o controle de zoom

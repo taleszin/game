@@ -61,6 +61,9 @@ export default class SanctuaryScene extends Phaser.Scene {
             btnOpenLab.style.display = 'block';
         }
         
+        // ═══ EMITE EVENTO DE UI PRONTA (para zoom controls, etc.) ═══
+        this.game.events.emit('ui-ready');
+        
         // ═══ INICIA TUTORIAL SE FOR NOVO JOGO ═══
         if (this.isNewGame) {
             console.log('[SanctuaryScene] Novo jogo detectado - iniciando tutorial...');

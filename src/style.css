@@ -1169,6 +1169,20 @@ canvas {
     filter: drop-shadow(0 0 2px currentColor);
 }
 
+/* ═══ PIXEL ICON STYLE - Estética 8-16 bits ═══ */
+.tool-slot .tool-icon.pixel-icon {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 18px;
+    font-weight: bold;
+    text-shadow: 
+        2px 2px 0 rgba(0, 0, 0, 0.8),
+        -1px -1px 0 rgba(255, 255, 255, 0.1);
+    /* Pixelização */
+    image-rendering: pixelated;
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: grayscale;
+}
+
 /* Hover - Ícone "flutua" para fora */
 .tool-slot:hover .tool-icon {
     transform: translateX(-4px) scale(1.1);
@@ -3854,43 +3868,81 @@ body.grabbing * {
     
     #tool-rack.mobile-visible .rack-slots {
         flex-direction: row !important;
-        gap: 8px !important;
+        gap: 10px !important;
         overflow-x: auto !important;
         overflow-y: hidden !important;
-        justify-content: center !important;
+        justify-content: flex-start !important;
         align-items: center !important;
         width: 100%;
-        padding: 0 8px;
+        padding: 0 16px;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
+        /* Scroll snap para melhor UX */
+        scroll-snap-type: x mandatory;
+        scroll-behavior: smooth;
     }
     
     #tool-rack.mobile-visible .rack-slots::-webkit-scrollbar {
         display: none;
     }
     
+    /* Indicadores de scroll nas laterais */
+    #tool-rack.mobile-visible::after {
+        content: '›';
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 20px;
+        color: rgba(0, 255, 255, 0.4);
+        pointer-events: none;
+        animation: scroll-hint 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes scroll-hint {
+        0%, 100% { opacity: 0.4; transform: translateY(-50%) translateX(0); }
+        50% { opacity: 0.8; transform: translateY(-50%) translateX(3px); }
+    }
+    
     #tool-rack.mobile-visible .rack-divider {
         width: 2px !important;
         height: 28px !important;
-        margin: 0 4px !important;
+        margin: 0 6px !important;
         flex-shrink: 0;
         background: rgba(0, 255, 255, 0.2) !important;
+        scroll-snap-align: none;
     }
     
     #tool-rack.mobile-visible .tool-slot {
-        min-width: 48px !important;
-        min-height: 48px !important;
-        width: 48px !important;
-        height: 48px !important;
+        min-width: 52px !important;
+        min-height: 52px !important;
+        width: 52px !important;
+        height: 52px !important;
         flex-shrink: 0;
+        /* Scroll snap em cada ferramenta */
+        scroll-snap-align: center;
     }
     
     #tool-rack.mobile-visible .tool-icon {
-        font-size: 20px !important;
+        font-size: 22px !important;
     }
     
     #tool-rack.mobile-visible .slot-tooltip {
         display: none !important;
+    }
+    
+    /* Label de ferramenta selecionada */
+    #tool-rack.mobile-visible .tool-slot.selected::after {
+        content: attr(data-name);
+        position: absolute;
+        bottom: -18px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-family: 'Press Start 2P', monospace;
+        font-size: 6px;
+        color: #0ff;
+        white-space: nowrap;
+        text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -4146,6 +4198,59 @@ body.grabbing * {
         max-height: 100vh !important;
         max-width: calc(100vw - 60px) !important;
     }
+    
+    /* ═══ TUTORIAL LANDSCAPE - Compacto e não obstrutivo ═══ */
+    .tutorial-modal {
+        width: 70% !important;
+        max-width: 350px !important;
+        padding: 16px !important;
+        right: 70px !important;
+        left: auto !important;
+        transform: translate(0, -50%) !important;
+    }
+    
+    .tutorial-modal.visible {
+        transform: translate(0, -50%) !important;
+    }
+    
+    .tutorial-modal-icon {
+        font-size: 28px !important;
+        margin-bottom: 10px !important;
+    }
+    
+    .tutorial-modal-title {
+        font-size: 9px !important;
+    }
+    
+    .tutorial-modal-message {
+        font-size: 7px !important;
+        line-height: 1.6 !important;
+        margin-bottom: 14px !important;
+    }
+    
+    .tutorial-modal-btn {
+        padding: 10px 24px !important;
+        font-size: 8px !important;
+    }
+    
+    .tutorial-tooltip {
+        max-width: 40vw !important;
+        font-size: 8px !important;
+        padding: 12px !important;
+    }
+    
+    .tutorial-tooltip-message {
+        font-size: 8px !important;
+    }
+    
+    .tutorial-pointer {
+        width: 28px !important;
+        height: 28px !important;
+    }
+    
+    .tutorial-breed-hint {
+        font-size: 24px !important;
+    }
 }
 
 .tutorial-skip-btn.visible {
@@ -4179,41 +4284,24 @@ body.grabbing * {
     opacity: 1;
 }
 
+/* Removido o fundo radial - agora é transparente */
 .placement-overlay::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: radial-gradient(
-        circle at center,
-        transparent 30%,
-        rgba(0, 255, 200, 0.08) 60%,
-        rgba(0, 255, 200, 0.15) 100%
-    );
-    animation: placement-pulse 2s ease-in-out infinite;
-}
-
-@keyframes placement-pulse {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 1; }
+    display: none;
 }
 
 .placement-hint {
     position: fixed;
-    top: 50%;
+    bottom: 100px;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translateX(-50%);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
-    padding: 24px 32px;
-    background: rgba(0, 20, 30, 0.95);
-    border: 2px solid rgba(0, 255, 200, 0.5);
-    border-radius: 12px;
-    backdrop-filter: blur(10px);
+    gap: 12px;
+    padding: 0;
+    /* Removido fundo, borda, backdrop-filter - agora é apenas texto flutuante */
+    background: transparent;
+    border: none;
     animation: hint-float 3s ease-in-out infinite;
     z-index: 501;
 }
@@ -4275,11 +4363,13 @@ body.grabbing * {
 /* ═══ Mobile específico ═══ */
 @media (max-width: 768px) {
     .placement-hint {
-        padding: 20px 24px;
-        bottom: 80px;
+        padding: 0;
+        bottom: 100px;
         top: auto;
         transform: translateX(-50%);
         animation: hint-float-mobile 3s ease-in-out infinite;
+        background: transparent;
+        border: none;
     }
     
     @keyframes hint-float-mobile {
@@ -4288,10 +4378,10 @@ body.grabbing * {
     }
     
     .placement-hint-icon {
-        font-size: 40px;
+        font-size: 56px;
     }
     
     .placement-hint-text {
-        font-size: 9px;
+        font-size: 11px;
     }
 }
