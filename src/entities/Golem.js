@@ -222,7 +222,9 @@ export default class Golem extends Phaser.GameObjects.Container {
         });
         this.emitter.startFollow(this);
 
-        this.setSize(60, 60);
+        // Tamanho do hitbox baseado na escala real do golem (raio base = 28)
+        const hitboxSize = Math.max(50, 60 * this.targetScale);
+        this.setSize(hitboxSize, hitboxSize);
         scene.add.existing(this);
         scene.physics.add.existing(this);
         
@@ -230,9 +232,17 @@ export default class Golem extends Phaser.GameObjects.Container {
         scene.golemsGroup.add(this);
 
         if (this.body) {
+            // Ajusta o body de física para o tamanho correto
+            this.body.setSize(hitboxSize, hitboxSize);
+            this.body.setOffset(-hitboxSize / 2, -hitboxSize / 2);
             this.body.setCollideWorldBounds(true);
             this.body.setBounce(1);
-            this.setInteractive();
+            // Hitbox interativo com tamanho proporcional à escala
+            this.setInteractive({
+                hitArea: new Phaser.Geom.Circle(0, 0, hitboxSize / 2),
+                hitAreaCallback: Phaser.Geom.Circle.Contains,
+                useHandCursor: true
+            });
             scene.input.setDraggable(this);
 
             // Velocidade base mais lenta para melhor UX (mais fácil de acertar)
@@ -2306,7 +2316,10 @@ export default class Golem extends Phaser.GameObjects.Container {
         measureText.destroy();
         const bubbleWidth = realTextWidth + (padding * 2);
         const bubbleHeight = realTextHeight + (padding * 2);
-        const offsetY = 75 + (this.targetScale * 15);
+        // Offset calculado baseado no raio real do golem (28 * escala) + altura do balão + pequena margem
+        // Isso posiciona o balão logo acima do "topo" do golem
+        const golemRadius = 28 * this.targetScale;
+        const offsetY = golemRadius + bubbleHeight + tailHeight + 5;
         this.speechContainer = this.scene.add.container(0, 0);
         this.speechContainer.setDepth(1000);
         this.speechBubble = this.scene.add.graphics();

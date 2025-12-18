@@ -156,70 +156,108 @@ document.addEventListener('DOMContentLoaded', () => {
         smoothing: 0.15   // Suavização da animação
     };
     
-    // Indicador visual de zoom
-    let zoomIndicator = null;
-    let zoomIndicatorTimeout = null;
-    
-    function createZoomIndicator() {
-        if (zoomIndicator) return;
+    function createZoomControls() {
+        if (document.getElementById('zoom-controls')) return;
         
-        zoomIndicator = document.createElement('div');
-        zoomIndicator.id = 'zoom-indicator';
-        zoomIndicator.innerHTML = `
-            <span class="zoom-icon">🔍</span>
-            <span class="zoom-value">100%</span>
+        const controls = document.createElement('div');
+        controls.id = 'zoom-controls';
+        controls.innerHTML = `
+            <button class="zoom-btn zoom-out" title="Zoom Out (-)">−</button>
+            <button class="zoom-reset" title="Reset Zoom (0)">
+                <span class="zoom-value">100%</span>
+            </button>
+            <button class="zoom-btn zoom-in" title="Zoom In (+)">+</button>
         `;
-        document.body.appendChild(zoomIndicator);
+        document.body.appendChild(controls);
         
-        // Estilos inline para não depender do CSS carregado
-        Object.assign(zoomIndicator.style, {
+        // Estilos inline
+        Object.assign(controls.style, {
             position: 'fixed',
-            bottom: isMobile ? '80px' : '20px',
-            right: '20px',
-            background: 'rgba(0, 20, 30, 0.9)',
-            border: '1px solid rgba(0, 255, 255, 0.5)',
-            borderRadius: '8px',
-            padding: '8px 14px',
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: '10px',
-            color: '#0ff',
+            bottom: isMobile ? '75px' : '15px',
+            right: '15px',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            opacity: '0',
-            transform: 'translateY(10px)',
-            transition: 'opacity 0.2s, transform 0.2s',
-            zIndex: '1000',
-            pointerEvents: 'none',
-            backdropFilter: 'blur(8px)'
+            gap: '2px',
+            background: 'rgba(0, 15, 25, 0.85)',
+            border: '1px solid rgba(0, 255, 255, 0.3)',
+            borderRadius: '6px',
+            padding: '3px',
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: '8px',
+            zIndex: '800',
+            backdropFilter: 'blur(8px)',
+            opacity: '0.7',
+            transition: 'opacity 0.2s'
         });
+        
+        controls.addEventListener('mouseenter', () => controls.style.opacity = '1');
+        controls.addEventListener('mouseleave', () => controls.style.opacity = '0.7');
+        
+        // Estilo dos botões
+        const btnStyle = {
+            background: 'transparent',
+            border: 'none',
+            color: '#0ff',
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: '10px',
+            cursor: 'pointer',
+            padding: '6px 8px',
+            minWidth: '28px',
+            transition: 'background 0.15s'
+        };
+        
+        controls.querySelectorAll('.zoom-btn').forEach(btn => {
+            Object.assign(btn.style, btnStyle);
+            btn.addEventListener('mouseenter', () => btn.style.background = 'rgba(0, 255, 255, 0.15)');
+            btn.addEventListener('mouseleave', () => btn.style.background = 'transparent');
+        });
+        
+        const resetBtn = controls.querySelector('.zoom-reset');
+        Object.assign(resetBtn.style, {
+            ...btnStyle,
+            padding: '6px 10px',
+            minWidth: '50px',
+            fontSize: '7px'
+        });
+        resetBtn.addEventListener('mouseenter', () => resetBtn.style.background = 'rgba(0, 255, 255, 0.15)');
+        resetBtn.addEventListener('mouseleave', () => resetBtn.style.background = 'transparent');
+        
+        // Event listeners
+        controls.querySelector('.zoom-in').addEventListener('click', () => {
+            applyZoom(zoomConfig.current + zoomConfig.step);
+        });
+        controls.querySelector('.zoom-out').addEventListener('click', () => {
+            applyZoom(zoomConfig.current - zoomConfig.step);
+        });
+        resetBtn.addEventListener('click', () => {
+            applyZoom(zoomConfig.default);
+        });
+        
+        return controls;
     }
     
+    // Cria controles de zoom
+    const zoomControls = createZoomControls();
+    
     function showZoomIndicator(value) {
-        if (!zoomIndicator) createZoomIndicator();
-        
-        const percent = Math.round(value * 100);
-        zoomIndicator.querySelector('.zoom-value').textContent = `${percent}%`;
-        zoomIndicator.style.opacity = '1';
-        zoomIndicator.style.transform = 'translateY(0)';
-        
-        // Cor baseada no zoom
-        if (value < 1) {
-            zoomIndicator.style.borderColor = 'rgba(100, 200, 255, 0.6)';
-        } else if (value > 1) {
-            zoomIndicator.style.borderColor = 'rgba(255, 200, 100, 0.6)';
-        } else {
-            zoomIndicator.style.borderColor = 'rgba(0, 255, 255, 0.5)';
-        }
-        
-        // Esconde após 1.5s
-        clearTimeout(zoomIndicatorTimeout);
-        zoomIndicatorTimeout = setTimeout(() => {
-            if (zoomIndicator) {
-                zoomIndicator.style.opacity = '0';
-                zoomIndicator.style.transform = 'translateY(10px)';
+        // Atualiza o controle de zoom
+        const zoomValueEl = document.querySelector('#zoom-controls .zoom-value');
+        if (zoomValueEl) {
+            const percent = Math.round(value * 100);
+            zoomValueEl.textContent = `${percent}%`;
+            
+            // Cor baseada no zoom
+            const controls = document.getElementById('zoom-controls');
+            if (controls) {
+                if (value < 1) {
+                    controls.style.borderColor = 'rgba(100, 200, 255, 0.5)';
+                } else if (value > 1) {
+                    controls.style.borderColor = 'rgba(255, 200, 100, 0.5)';
+                } else {
+                    controls.style.borderColor = 'rgba(0, 255, 255, 0.3)';
+                }
             }
-        }, 1500);
+        }
     }
     
     function applyZoom(newZoom, focusX = null, focusY = null) {
@@ -300,28 +338,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     document.addEventListener('touchend', () => {
         pinchState.active = false;
-    }, { passive: true });
-    
-    // ═══ RESET ZOOM (Double-tap no mobile, Double-click no desktop) ═══
-    let lastTapTime = 0;
-    
-    if (gameContainer) {
-        gameContainer.addEventListener('dblclick', (e) => {
-            if (e.target.closest('#creation-panel, #tree-modal, .evolved-modal')) return;
-            applyZoom(zoomConfig.default);
-        });
-    }
-    
-    // Double-tap detection para mobile
-    document.addEventListener('touchend', (e) => {
-        if (e.target.closest('#creation-panel, #tree-modal, .evolved-modal, #mobile-nav')) return;
-        
-        const now = Date.now();
-        if (now - lastTapTime < 300 && e.changedTouches.length === 1) {
-            // Double tap detectado - reset zoom
-            applyZoom(zoomConfig.default);
-        }
-        lastTapTime = now;
     }, { passive: true });
     
     // Expõe função de zoom globalmente para debug/atalhos

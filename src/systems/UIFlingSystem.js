@@ -288,8 +288,9 @@ export class UIFlingSystem {
     }
     
     _setupElements() {
+        // NOTA: .tool-slot NÃO é incluído pois ferramentas são arrastadas para o canvas
+        // Apenas containers inteiros (tool-rack, chrono-deck) são reposicionáveis
         const selectors = [
-            '.tool-slot',
             '#btn-open-lab',
             '#btn-tree',
             '#btn-evolved-forms',
