@@ -1048,7 +1048,7 @@ export class StartScene extends Phaser.Scene {
         this.audioElement = document.createElement('audio');
         this.audioElement.id = 'intro-audio';
         this.audioElement.loop = true;
-        this.audioElement.volume = 0.7;
+        this.audioElement.volume = 1.0; // Menu music stays at 100%
         this.audioElement.src = 'opening.mp3';
         document.body.appendChild(this.audioElement);
     }
@@ -1577,9 +1577,9 @@ export class StartScene extends Phaser.Scene {
         
         const currentResLabel = RESOLUTION_PRESETS.find(r => r.id === this.currentResolution)?.label || 'AUTO';
         
-        // Carrega volumes salvos
+        // Carrega configurações salvas
         const savedSettings = JSON.parse(localStorage.getItem('hylomorph_settings') || '{}');
-        const musicVol = savedSettings.musicVolume ?? 0.3;
+        const musicEnabled = ('musicEnabled' in savedSettings) ? !!savedSettings.musicEnabled : (typeof savedSettings.musicVolume === 'number' ? savedSettings.musicVolume > 0 : true);
         const sfxVol = savedSettings.sfxVolume ?? 0.8;
         
         this.settingsModal.innerHTML = `
@@ -1596,14 +1596,13 @@ export class StartScene extends Phaser.Scene {
                     <div class="audio-control">
                         <div class="audio-control-header">
                             <span class="audio-icon">🎵</span>
-                            <span class="audio-name">MÚSICA</span>
-                            <span class="audio-value" id="music-value">${Math.round(musicVol * 100)}%</span>
+                            <span class="audio-name">MÚSICA DE FUNDO</span>
+                            <span class="audio-value" id="music-status">${musicEnabled ? 'ATIVADA' : 'DESATIVADA'}</span>
                         </div>
-                        <input type="range" 
-                               class="audio-slider" 
-                               id="music-slider" 
-                               min="0" max="1" step="0.05" 
-                               value="${musicVol}">
+                        <label class="music-toggle">
+                            <input type="checkbox" id="music-toggle" ${musicEnabled ? 'checked' : ''}>
+                            <span class="toggle-label">Ativar música de fundo</span>
+                        </label>
                     </div>
                     
                     <div class="audio-control">
@@ -1648,10 +1647,10 @@ export class StartScene extends Phaser.Scene {
             });
         });
         
-        // ═══ AUDIO SLIDERS EVENT LISTENERS ═══
-        const musicSlider = this.settingsModal.querySelector('#music-slider');
+        // ═══ AUDIO CONTROLS EVENT LISTENERS ═══
+        const musicToggle = this.settingsModal.querySelector('#music-toggle');
         const sfxSlider = this.settingsModal.querySelector('#sfx-slider');
-        const musicValue = this.settingsModal.querySelector('#music-value');
+        const musicStatus = this.settingsModal.querySelector('#music-status');
         const sfxValue = this.settingsModal.querySelector('#sfx-value');
         
         // Função helper para atualizar visual do slider
@@ -1660,21 +1659,19 @@ export class StartScene extends Phaser.Scene {
             slider.style.setProperty('--progress', `${percent}%`);
         };
         
-        // Inicializa visual dos sliders
-        updateSliderVisual(musicSlider);
+        // Inicializa visual do SFX slider
         updateSliderVisual(sfxSlider);
         
-        // Música - atualiza em tempo real
-        musicSlider.addEventListener('input', (e) => {
-            const vol = parseFloat(e.target.value);
-            musicValue.textContent = `${Math.round(vol * 100)}%`;
-            updateSliderVisual(e.target);
-            
-            // Aplica em tempo real
-            if (window.uiSounds) {
-                window.uiSounds.setMusicVolume(vol);
-            }
-        });
+        // Música - toggle em tempo real (ON/OFF)
+        if (musicToggle) {
+            musicToggle.addEventListener('input', (e) => {
+                const enabled = !!e.target.checked;
+                musicStatus.textContent = enabled ? 'ATIVADA' : 'DESATIVADA';
+                if (window.uiSounds) {
+                    window.uiSounds.setMusicEnabled(enabled);
+                }
+            });
+        }
         
         // SFX - atualiza em tempo real
         sfxSlider.addEventListener('input', (e) => {
@@ -1730,15 +1727,15 @@ export class StartScene extends Phaser.Scene {
      * Aplica configurações e recarrega
      */
     _applySettings() {
-        // Salva volumes de áudio
-        const musicSlider = this.settingsModal.querySelector('#music-slider');
+        // Salva configurações de áudio
+        const musicToggle = this.settingsModal.querySelector('#music-toggle');
         const sfxSlider = this.settingsModal.querySelector('#sfx-slider');
         
-        const musicVol = parseFloat(musicSlider?.value ?? 0.3);
+        const musicEnabledVal = !!musicToggle?.checked;
         const sfxVol = parseFloat(sfxSlider?.value ?? 0.8);
         
         this._saveSettings({ 
-            musicVolume: musicVol,
+            musicEnabled: musicEnabledVal,
             sfxVolume: sfxVol
         });
         

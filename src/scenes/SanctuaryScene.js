@@ -1210,11 +1210,12 @@ export default class SanctuaryScene extends Phaser.Scene {
           document.body.appendChild(bgMusic);
       }
       
-      // Carrega volume das configurações
+      // Carrega configurações das preferências de áudio (música de jogo)
       const savedSettings = JSON.parse(localStorage.getItem('hylomorph_settings') || '{}');
-      const musicVolume = savedSettings.musicVolume ?? 0.3;
+      const musicEnabled = ('musicEnabled' in savedSettings) ? !!savedSettings.musicEnabled : (typeof savedSettings.musicVolume === 'number' ? savedSettings.musicVolume > 0 : true);
+      const bgVol = musicEnabled ? 0.05 : 0; // 5% para música de jogo
       
-      bgMusic.volume = musicVolume;
+      bgMusic.volume = bgVol;
       
       // Tenta tocar (pode ser bloqueado por autoplay policy)
       const playPromise = bgMusic.play();
@@ -1235,7 +1236,7 @@ export default class SanctuaryScene extends Phaser.Scene {
           });
       }
       
-      console.log(`[SanctuaryScene] 🎵 Música de fundo inicializada (volume: ${Math.round(musicVolume * 100)}%)`);
+      console.log(`[SanctuaryScene] 🎵 Música de fundo inicializada (${musicEnabled ? 'ON' : 'OFF'} - ${Math.round(bgVol * 100)}%)`); // bg music is 5% when enabled
   }
   
   /**

@@ -2881,10 +2881,21 @@ export default class Golem extends Phaser.GameObjects.Container {
 
     initAudio() {
         if (this.audioContext) return;
+
+        // Preferir o AudioContext centralizado do UISoundSystem quando disponível,
+        // assim todos os SFX compartilham o mesmo ganho SFX e respeitam o volume global.
         try {
+            if (window.uiSounds && typeof window.uiSounds.ensureContext === 'function' && window.uiSounds.ensureContext()) {
+                // Usa o mesmo AudioContext do sistema de som e o gain de SFX
+                this.audioContext = window.uiSounds.audioContext;
+                this.masterGain = window.uiSounds.getSfxGain();
+                return;
+            }
+
+            // Fallback: cria um AudioContext local (compatibilidade)
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
             this.masterGain = this.audioContext.createGain();
-            this.masterGain.gain.value = 0.15; 
+            this.masterGain.gain.value = 0.15;
             this.masterGain.connect(this.audioContext.destination);
         } catch (e) {
             console.warn('Web Audio API não disponível:', e);

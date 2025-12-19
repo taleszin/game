@@ -14,10 +14,14 @@ class UISoundSystemClass {
         this.masterGain = null;
         this.sfxGain = null;
         this.enabled = true;
-        this.masterVolume = 0.15;
+        // Master volume controls global output; keep at 100% so SFX and procedural sounds remain audible
+        this.masterVolume = 1.0;
         
         // ═══ VOLUMES SEPARADOS: MÚSICA vs SFX ═══
-        this.musicVolume = 0.3;  // Padrão 30% - background, não deve estourar
+        // Música de menu e música de jogo têm níveis distintos
+        this.musicEnabled = true; // controla apenas a música do jogo (bg-music / .game-music)
+        this.backgroundMusicVolume = 0.05; // 5% para música de jogo — mínima para priorizar SFX
+        this.menuMusicVolume = 1.0; // 100% para música do menu
         this.sfxVolume = 0.8;    // Padrão 80% - feedback prioritário
         
         // Cooldowns para evitar spam de sons
@@ -57,7 +61,7 @@ class UISoundSystemClass {
             this._loadSettings();
             
             console.log('[UISoundSystem] Inicializado com sucesso');
-            console.log(`[UISoundSystem] Music: ${Math.round(this.musicVolume * 100)}% | SFX: ${Math.round(this.sfxVolume * 100)}%`);
+            console.log(`[UISoundSystem] Game Music: ${this.musicEnabled ? 'ON' : 'OFF'} (${Math.round(this.backgroundMusicVolume * 100)}%) | Menu Music: ${Math.round(this.menuMusicVolume * 100)}% | SFX: ${Math.round(this.sfxVolume * 100)}%`);
         } catch (e) {
             console.warn('[UISoundSystem] Web Audio API não disponível:', e);
             this.enabled = false;
@@ -71,9 +75,13 @@ class UISoundSystemClass {
         try {
             const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
             
-            if (typeof settings.musicVolume === 'number') {
-                this.musicVolume = settings.musicVolume;
+            // Backwards-compat: se existir musicVolume salvo, usa-o para derivar enabled
+            if (typeof settings.musicEnabled === 'boolean') {
+                this.musicEnabled = settings.musicEnabled;
+            } else if (typeof settings.musicVolume === 'number') {
+                this.musicEnabled = settings.musicVolume > 0;
             }
+
             if (typeof settings.sfxVolume === 'number') {
                 this.sfxVolume = settings.sfxVolume;
                 if (this.sfxGain) {
@@ -92,39 +100,45 @@ class UISoundSystemClass {
      * Define volume da MÚSICA (elementos <audio> DOM)
      * @param {number} vol - Volume de 0 a 1
      */
-    setMusicVolume(vol) {
-        this.musicVolume = Math.max(0, Math.min(1, parseFloat(vol) || 0));
+    /**
+     * Ativa/desativa a música de fundo (somente ON/OFF)
+     * @param {boolean} enabled
+     */
+    setMusicEnabled(enabled) {
+        // Controla apenas a música de JOGO (bg-music / .game-music)
+        this.musicEnabled = !!enabled;
         this._applyMusicVolumeToDOM();
-        console.log(`[UISoundSystem] Music volume: ${Math.round(this.musicVolume * 100)}%`);
+        console.log(`[UISoundSystem] Game music: ${this.musicEnabled ? 'ON' : 'OFF'} (${this.musicEnabled ? Math.round(this.backgroundMusicVolume * 100) + '%' : 'muted'})`);
     }
     
     /**
      * Aplica volume de música a todos os elementos <audio> do DOM
      */
     _applyMusicVolumeToDOM() {
-        // Busca todos os elementos de áudio conhecidos
-        const audioSelectors = [
-            '#intro-audio',
-            '#bg-music', 
-            '#soundtrack',
-            'audio[data-type="music"]',
-            'audio.game-music'
-        ];
-        
-        audioSelectors.forEach(selector => {
-            const el = document.querySelector(selector);
+        // Define volumes distintos para música de jogo (bg) e música de menu
+        const bgVol = this.musicEnabled ? this.backgroundMusicVolume : 0;
+        const menuVol = this.menuMusicVolume;
+
+        // Menu intro / boot music (mantenha alta)
+        const intro = document.querySelector('#intro-audio');
+        if (intro && intro.tagName === 'AUDIO') {
+            intro.volume = menuVol;
+        }
+
+        // Música específica do jogo (bg-music / .game-music / #soundtrack)
+        const bg = document.querySelector('#bg-music');
+        if (bg && bg.tagName === 'AUDIO') {
+            bg.volume = bgVol;
+        }
+
+        document.querySelectorAll('audio.game-music, #soundtrack').forEach(el => {
             if (el && el.tagName === 'AUDIO') {
-                el.volume = this.musicVolume;
+                el.volume = bgVol;
             }
         });
-        
-        // Também busca qualquer <audio> genérico que esteja tocando música
-        document.querySelectorAll('audio').forEach(audio => {
-            // Se não tem data-type="sfx", assume que é música
-            if (audio.dataset.type !== 'sfx') {
-                audio.volume = this.musicVolume;
-            }
-        });
+
+        // Não alteramos elementos <audio> genéricos que não têm classe/ID óbvia
+        // Eventuais <audio data-type="music"> sem escopo específico não são modificados aqui
     }
     
     /**
@@ -146,7 +160,9 @@ class UISoundSystemClass {
      */
     getVolumes() {
         return {
-            music: this.musicVolume,
+            musicEnabled: this.musicEnabled,
+            backgroundMusicVolume: this.backgroundMusicVolume,
+            menuMusicVolume: this.menuMusicVolume,
             sfx: this.sfxVolume
         };
     }

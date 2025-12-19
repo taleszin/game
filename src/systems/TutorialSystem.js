@@ -75,7 +75,7 @@ const STEP_CONFIG = {
     [STEPS.SYNTHESIZE_FIRST]: {
         type: 'highlight',
         selector: '#btn-synthesize',
-        message: 'SINTETIZAR!',
+        message: 'ARROCHA!',
         pointerPos: 'top'
     },
     [STEPS.WAIT_FIRST_GOLEM]: {
@@ -116,7 +116,7 @@ const STEP_CONFIG = {
     [STEPS.SYNTHESIZE_SECOND]: {
         type: 'highlight',
         selector: '#btn-synthesize',
-        message: 'SINTETIZAR!',
+        message: 'ARROCHA DE NOVO!',
         pointerPos: 'top'
     },
     [STEPS.WAIT_SECOND_GOLEM]: {
@@ -125,7 +125,7 @@ const STEP_CONFIG = {
     },
     [STEPS.BREED]: {
         type: 'canvas',
-        message: '🧬 Arraste uma criatura sobre a outra',
+        message: ' Arraste uma criatura sobre a outra',
         subMessage: 'Isso iniciará a fusão genética'
     },
     [STEPS.WAIT_BREED]: {

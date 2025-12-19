@@ -214,7 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
             padding: '3px',
             fontFamily: "'Press Start 2P', monospace",
             fontSize: '8px',
-            zIndex: '800',
+            zIndex: '900',
             backdropFilter: 'blur(8px)',
             opacity: '0.7',
             transition: 'opacity 0.2s'
@@ -263,6 +263,32 @@ document.addEventListener('DOMContentLoaded', () => {
             applyZoom(zoomConfig.default);
         });
         
+        // MOBILE: Ajusta posição vertical se o drawer de ferramentas estiver visível
+        if (isMobile) {
+            const toolRackEl = document.getElementById('tool-rack');
+            const adjustBottom = () => {
+                const visible = toolRackEl && toolRackEl.classList.contains('mobile-visible');
+                // Se visível, posiciona o controle acima do drawer com folga
+                if (visible && toolRackEl) {
+                    const offset = (toolRackEl.offsetHeight || 80) + 18;
+                    controls.style.bottom = `${offset}px`;
+                } else {
+                    controls.style.bottom = '75px';
+                }
+            };
+
+            if (toolRackEl) {
+                const obs = new MutationObserver(adjustBottom);
+                obs.observe(toolRackEl, { attributes: true, attributeFilter: ['class'] });
+                adjustBottom();
+            } else {
+                // garante o valor padrão
+                controls.style.bottom = '75px';
+            }
+
+            window.addEventListener('resize', adjustBottom);
+        }
+
         return controls;
     }
     
@@ -1162,8 +1188,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Abre novo drawer
                 UISoundSystem.playOpen();
+                // Força visibilidade e z-index especialmente no mobile para evitar coberturas por outros elementos
                 targetEl.classList.add('mobile-visible');
                 targetEl.classList.remove('hidden');
+                targetEl.style.display = 'flex';
+                // Elevar ligeiramente acima do zoom control (que tem zIndex 900)
+                targetEl.style.zIndex = '1001';
+                console.log(`[MobileNav] Abrindo drawer: ${targetId} | classes: ${targetEl.className}`);
                 btn.classList.add('active');
                 activeDrawer = targetId;
                 
@@ -3017,6 +3048,32 @@ document.addEventListener('DOMContentLoaded', () => {
             btnSynthesize.innerHTML = '<span class="btn-icon">⏳</span> INCOMPLETO';
             btnSynthesize.classList.remove('synthesis-ready');
         }
+    }
+
+    // Randomize button: gera seleção aleatória e atualiza preview
+    const btnRandomize = document.getElementById('btn-randomize');
+    if (btnRandomize) {
+        btnRandomize.addEventListener('click', () => {
+            // Escolhe aleatoriamente cada categoria
+            const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
+            const f = rand(ELEMENTS.forma);
+            const q = rand(ELEMENTS.quimica);
+            const p = rand(ELEMENTS.fisica);
+
+            // Aplica seleção via função existente para manter UI consistente
+            selectItemHolographic('forma', f, optionsForma);
+            selectItemHolographic('quimica', q, optionsQuimica);
+            selectItemHolographic('fisica', p, optionsFisica);
+
+            // Feedback visual e habilita síntese
+            previewStatusText.textContent = 'GERADO ALEATÓRIO';
+            UISoundSystem.playClick('special');
+
+            // Pequeno delay para indicar ready
+            setTimeout(() => {
+                previewStatusText.textContent = 'PRONTO';
+            }, 700);
+        });
     }
 
     btnSynthesize.addEventListener('click', () => {
