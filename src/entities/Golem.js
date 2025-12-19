@@ -1997,6 +1997,12 @@ export default class Golem extends Phaser.GameObjects.Container {
 
     kill() {
         this.addLifeEvent('killed', 'Eliminado manualmente');
+        
+        // Emite evento para tutorial e outros sistemas
+        if (this.scene?.game?.events) {
+            this.scene.game.events.emit('golem-killed', { golemId: this.id });
+        }
+        
         this.currentLife = 0; this.die();
     }
 

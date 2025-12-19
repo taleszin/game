@@ -28,6 +28,12 @@ const STEPS = {
     WAIT_SECOND_GOLEM: 'WAIT_SECOND_GOLEM',
     BREED: 'BREED',
     WAIT_BREED: 'WAIT_BREED',
+    // === NOVOS PASSOS: FERRAMENTAS ===
+    SHOW_TOOLS: 'SHOW_TOOLS',
+    SELECT_KILL_TOOL: 'SELECT_KILL_TOOL',
+    USE_KILL_TOOL: 'USE_KILL_TOOL',
+    WAIT_KILL: 'WAIT_KILL',
+    // =================================
     FINISH: 'FINISH',
     DONE: 'DONE'
 };
@@ -126,12 +132,41 @@ const STEP_CONFIG = {
         type: 'waiting',
         message: 'Fusão em andamento...'
     },
+    // ═══════════════════════════════════════════════════════════════════
+    // NOVOS PASSOS: FERRAMENTAS DE INTERAÇÃO
+    // ═══════════════════════════════════════════════════════════════════
+    [STEPS.SHOW_TOOLS]: {
+        type: 'highlight',
+        selector: '#tool-rack',
+        message: '🛠️ Ferramentas de Interação',
+        subMessage: 'Use para alimentar, queimar, congelar ou eliminar suas criaturas',
+        pointerPos: 'left',
+        delay: 800,
+        clickThrough: true  // Permite ver mas não exige clique no elemento
+    },
+    [STEPS.SELECT_KILL_TOOL]: {
+        type: 'highlight',
+        selector: '.tool-slot[data-action="kill"]',
+        message: 'Selecione: ELIMINAR ☠',
+        subMessage: 'Clique para equipar a ferramenta',
+        pointerPos: 'right'
+    },
+    [STEPS.USE_KILL_TOOL]: {
+        type: 'canvas',
+        message: '☠ Clique em uma criatura para eliminá-la',
+        subMessage: 'O ciclo de vida é natural no Hylomorph'
+    },
+    [STEPS.WAIT_KILL]: {
+        type: 'waiting',
+        message: 'Eliminando...'
+    },
+    // ═══════════════════════════════════════════════════════════════════
     [STEPS.FINISH]: {
         type: 'modal',
-        icon: '',
+        icon: '🧬',
         title: 'CALIBRAGEM COMPLETA',
-        message: 'Acesso total concedido!\nVocê está pronto para explorar o Hylomorph, use sua criatividade para criar e evoluir formas incríveis.',
-        buttonText: 'COMEÇAR',
+        message: 'Acesso total concedido!\n\nVocê domina: criar, fundir e gerenciar suas criaturas.\n\nExplore todas as ferramentas e descubra novas formas!',
+        buttonText: 'EXPLORAR',
         celebratory: true
     }
 };
@@ -158,6 +193,8 @@ export class TutorialSystem {
         // Bindings
         this._onSpawnGolem = this._onSpawnGolem.bind(this);
         this._onBreedSuccess = this._onBreedSuccess.bind(this);
+        this._onToolSelected = this._onToolSelected.bind(this);
+        this._onGolemKilled = this._onGolemKilled.bind(this);
         
         // NÃO inicia automaticamente - espera chamada explícita
         console.log('[Tutorial] Sistema pronto. Aguardando ativação...');
@@ -262,6 +299,8 @@ export class TutorialSystem {
         if (this.game?.events) {
             this.game.events.on('spawn-golem', this._onSpawnGolem);
             this.game.events.on('breed-success', this._onBreedSuccess);
+            this.game.events.on('tool-selected', this._onToolSelected);
+            this.game.events.on('golem-killed', this._onGolemKilled);
         }
         
         // Delegação de cliques - usa capture para interceptar antes
@@ -357,18 +396,30 @@ export class TutorialSystem {
         console.log(`[Tutorial] ✓ Elemento encontrado: ${config.selector}`);
         
         // Ativa escudo invisível COM FURO para o elemento alvo
-        this.blocker.style.display = 'block';
-        this._updateBlockerHole(element);
+        // Se clickThrough, não bloqueia (apenas mostra o highlight)
+        if (!config.clickThrough) {
+            this.blocker.style.display = 'block';
+            this._updateBlockerHole(element);
+        }
         
         // Destaca elemento alvo
         element.classList.add('tutorial-active-target');
         this._currentTarget = element;
         
-        // Posiciona tooltip próximo ao elemento
-        this._positionTooltip(element, config.message, config.pointerPos);
+        // Posiciona tooltip próximo ao elemento (agora com suporte a subMessage)
+        this._positionTooltip(element, config.message, config.pointerPos, config.subMessage);
         
         // Posiciona pointer (mãozinha)
         this._positionPointer(element, config.pointerPos);
+        
+        // Se é clickThrough, auto-avança após um tempo
+        if (config.clickThrough) {
+            setTimeout(() => {
+                if (this.currentStep === this._getStepFromSelector(config.selector)) {
+                    this._advanceFromHighlight();
+                }
+            }, 3000); // 3 segundos para ler
+        }
     }
     
     _showTooltipOnly(config) {
@@ -418,12 +469,18 @@ export class TutorialSystem {
         this.breedHint.classList.add('visible');
     }
     
-    _positionTooltip(element, message, pointerPos) {
+    _positionTooltip(element, message, pointerPos, subMessage = null) {
         const rect = element.getBoundingClientRect();
         const tooltip = this.tooltip;
         
         tooltip.querySelector('.tutorial-tooltip-message').textContent = message;
-        tooltip.querySelector('.tutorial-tooltip-sub').style.display = 'none';
+        const subEl = tooltip.querySelector('.tutorial-tooltip-sub');
+        if (subMessage) {
+            subEl.textContent = subMessage;
+            subEl.style.display = 'block';
+        } else {
+            subEl.style.display = 'none';
+        }
         
         // Remove classes de seta anteriores
         tooltip.classList.remove('arrow-top', 'arrow-bottom', 'arrow-left', 'arrow-right');
@@ -476,8 +533,7 @@ export class TutorialSystem {
         tooltip.style.transform = 'none';
         tooltip.style.visibility = 'visible';
     }
-    
-    _updateBlockerHole(element) {
+        _updateBlockerHole(element) {
         const rect = element.getBoundingClientRect();
         const padding = 8; // Margem extra ao redor do elemento
         
@@ -596,7 +652,10 @@ export class TutorialSystem {
             [STEPS.SELECT_SQUARE]: STEPS.SELECT_IRON,
             [STEPS.SELECT_IRON]: STEPS.SELECT_ELECTRICITY,
             [STEPS.SELECT_ELECTRICITY]: STEPS.SYNTHESIZE_SECOND,
-            [STEPS.SYNTHESIZE_SECOND]: STEPS.WAIT_SECOND_GOLEM
+            [STEPS.SYNTHESIZE_SECOND]: STEPS.WAIT_SECOND_GOLEM,
+            // SHOW_TOOLS avança automaticamente (clickThrough) para SELECT_KILL_TOOL
+            [STEPS.SHOW_TOOLS]: STEPS.SELECT_KILL_TOOL
+            // SELECT_KILL_TOOL NÃO está aqui - avança via evento 'tool-selected'
         };
         
         const next = transitions[this.currentStep];
@@ -633,7 +692,28 @@ export class TutorialSystem {
         if (this.currentStep === STEPS.BREED || this.currentStep === STEPS.WAIT_BREED) {
             console.log('[Tutorial] Breeding detectado!');
             this._goToStep(STEPS.WAIT_BREED);
-            setTimeout(() => this._goToStep(STEPS.FINISH), 1500);
+            // Após fusão, vai para apresentação das ferramentas (não direto pro FINISH)
+            setTimeout(() => this._goToStep(STEPS.SHOW_TOOLS), 1500);
+        }
+    }
+    
+    _onToolSelected(data) {
+        if (!this.isActive) return;
+        
+        // Se estamos esperando a seleção da ferramenta kill
+        if (this.currentStep === STEPS.SELECT_KILL_TOOL && data?.action === 'kill') {
+            console.log('[Tutorial] Ferramenta KILL selecionada!');
+            setTimeout(() => this._goToStep(STEPS.USE_KILL_TOOL), 300);
+        }
+    }
+    
+    _onGolemKilled() {
+        if (!this.isActive) return;
+        
+        if (this.currentStep === STEPS.USE_KILL_TOOL || this.currentStep === STEPS.WAIT_KILL) {
+            console.log('[Tutorial] Golem eliminado!');
+            this._goToStep(STEPS.WAIT_KILL);
+            setTimeout(() => this._goToStep(STEPS.FINISH), 1000);
         }
     }
     
@@ -656,10 +736,17 @@ export class TutorialSystem {
         this._clearAll();
         this.skipBtn.classList.remove('visible');
         
+        // Limpa seleção de ferramenta se houver
+        if (window.clearToolSelection) {
+            window.clearToolSelection();
+        }
+        
         // Remove listeners
         if (this.game?.events) {
             this.game.events.off('spawn-golem', this._onSpawnGolem);
             this.game.events.off('breed-success', this._onBreedSuccess);
+            this.game.events.off('tool-selected', this._onToolSelected);
+            this.game.events.off('golem-killed', this._onGolemKilled);
         }
         
         // Remove elementos do DOM
