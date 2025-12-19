@@ -285,6 +285,44 @@ export class UIFlingSystem {
                 opacity: 1;
                 transform: scale(1.05);
             }
+
+            /* ═══ KILL ALL BUTTON (MATAR TODOS) ═══ */
+            .ui-kill-all-btn {
+                position: fixed;
+                top: 10px;
+                left: 110px;
+                padding: 6px 10px;
+                font-family: 'Press Start 2P', monospace;
+                font-size: 7px;
+                background: linear-gradient(90deg, rgba(80,0,0,0.95), rgba(40,0,0,0.9));
+                border: 1px solid #ff5544;
+                color: #ffd8d0;
+                border-radius: 4px;
+                cursor: pointer;
+                z-index: 1000;
+                opacity: 0.9;
+                transition: transform 0.12s ease, box-shadow 0.12s ease;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .ui-kill-all-btn .icon {
+                font-size: 12px;
+                line-height: 1;
+            }
+
+            .ui-kill-all-btn:hover {
+                transform: scale(1.06);
+                box-shadow: 0 0 12px rgba(255, 60, 0, 0.6);
+            }
+
+            .ui-kill-all-btn[disabled] {
+                opacity: 0.5;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
         `;
         document.head.appendChild(style);
     }
@@ -326,8 +364,9 @@ export class UIFlingSystem {
             });
         });
         
-        // Adiciona botão de reset
+        // Adiciona botões de controle UI
         this._createResetButton();
+        this._createKillAllButton();
         
         console.log(`[UIFling] ${this.flingableElements.length} elementos configurados`);
     }
@@ -345,6 +384,39 @@ export class UIFlingSystem {
             this._resetAllPositions();
         });
         
+        document.body.appendChild(btn);
+    }
+
+    _createKillAllButton() {
+        if (document.getElementById('ui-kill-all-btn')) return;
+
+        const btn = document.createElement('button');
+        btn.id = 'ui-kill-all-btn';
+        btn.className = 'ui-kill-all-btn';
+        btn.title = 'MATAR TODOS os Golems (confirmação requerida)';
+        btn.setAttribute('aria-label', 'Matar todos os Golems');
+
+        // ícone caveira + label curta (bom contraste para UX)
+        btn.innerHTML = `<span class="icon">☠</span><span style="font-size:8px;">MATAR TODOS</span>`;
+
+        btn.addEventListener('click', () => {
+            // Ação imediata ao clicar (sem confirmação)
+            if (btn.disabled) return;
+
+            // Bloqueia o botão brevemente para evitar cliques repetidos
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+
+            // Executa ação de matar imediatamente
+            this._killAllGolems();
+
+            // Feedback breve e reativa botão
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.style.opacity = '';
+            }, 800);
+        });
+
         document.body.appendChild(btn);
     }
     
@@ -1078,6 +1150,90 @@ export class UIFlingSystem {
             osc.stop(ctx.currentTime + 0.08);
         } catch {}
     }
+
+    _playKillSound() {
+        try {
+            const ctx = this.scene?.sound?.context;
+            if (!ctx || ctx.state === 'suspended') return;
+
+            const now = ctx.currentTime;
+            const osc1 = ctx.createOscillator();
+            const gain1 = ctx.createGain();
+            osc1.type = 'sawtooth';
+            osc1.frequency.setValueAtTime(220, now);
+            osc1.frequency.exponentialRampToValueAtTime(80, now + 0.18);
+            gain1.gain.setValueAtTime(0.12, now);
+            gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            osc1.connect(gain1);
+            gain1.connect(ctx.destination);
+            osc1.start();
+            osc1.stop(now + 0.18);
+
+            const osc2 = ctx.createOscillator();
+            const gain2 = ctx.createGain();
+            osc2.type = 'triangle';
+            osc2.frequency.setValueAtTime(40, now);
+            gain2.gain.setValueAtTime(0.06, now);
+            gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.start();
+            osc2.stop(now + 0.18);
+        } catch {}
+    }
+
+    _killAllGolems() {
+        if (!this.scene?.golemsGroup) return;
+
+        const golems = this.scene.golemsGroup.getChildren();
+        if (!golems || golems.length === 0) {
+            this._showKillFeedback(0);
+            return;
+        }
+
+        let killed = 0;
+        for (const golem of golems) {
+            try {
+                if (golem && golem.active && !golem.isDead) {
+                    // Preferir usar API do Golem (kill) para garantir efeitos e eventos
+                    if (typeof golem.kill === 'function') {
+                        golem.kill();
+                    } else if (typeof golem.die === 'function') {
+                        golem.die();
+                    } else {
+                        // fallback: desativar e remover
+                        golem.active = false;
+                        try { golem.destroy(); } catch(e) {}
+                    }
+                    killed++;
+
+                    // Efeito visual local (se houver câmera/tela)
+                    try {
+                        const camera = this.scene.cameras?.main;
+                        const screenX = golem.x - (camera?.scrollX || 0);
+                        const screenY = golem.y - (camera?.scrollY || 0);
+                        this._createImpact(screenX, screenY);
+                    } catch(e) {}
+                }
+            } catch (e) { console.warn('Erro ao matar golem', e); }
+        }
+
+        // Som + feedback textual
+        this._playKillSound();
+        this._showKillFeedback(killed);
+    }
+
+    _showKillFeedback(count) {
+        const txt = document.createElement('div');
+        txt.style.cssText = `
+            position: fixed; left: 50%; top: 30px; transform: translateX(-50%);
+            z-index: 10003; font-family: 'Press Start 2P', monospace; background: rgba(0,0,0,0.7);
+            color: #ffdddd; padding: 8px 12px; border-radius: 6px; border: 1px solid #ff4444; font-size: 10px;
+        `;
+        txt.textContent = count > 0 ? `✅ ${count} Golem(s) eliminados` : '⚠️ Nenhum Golem encontrado';
+        document.body.appendChild(txt);
+        setTimeout(() => { txt.style.transition = 'opacity 0.3s'; txt.style.opacity = '0'; setTimeout(()=> txt.remove(), 350); }, 1200);
+    }
     
     // ═══════════════════════════════════════════════════════════════
     // UTILITIES
@@ -1114,6 +1270,7 @@ export class UIFlingSystem {
         
         document.getElementById('ui-fling-v2-styles')?.remove();
         document.getElementById('ui-reset-positions-btn')?.remove();
+        document.getElementById('ui-kill-all-btn')?.remove();
     }
 }
 
