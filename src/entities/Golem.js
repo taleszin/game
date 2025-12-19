@@ -185,6 +185,9 @@ export default class Golem extends Phaser.GameObjects.Container {
             },
             aggression: 0.5, // Será calculado após setup
             attractiveness: 0.5, // Será calculado após setup
+            // Limite simples de reprodução por indivíduo para evitar overpopulation
+            maxBreeds: 2 + Math.floor(Math.random() * 3), // 2-4 vezes (variação genética)
+            breedCount: 0
         };
         
         // Calcula após inicialização para evitar erros
@@ -2537,8 +2540,13 @@ export default class Golem extends Phaser.GameObjects.Container {
             
             // Verifica parceiro
             if (this.isCompatibleForBreeding(other) && dist < mateDist) {
-                closestMate = other;
-                mateDist = dist;
+                // Checa limites de reprodução por indivíduo
+                const myCanBreed = (this.autonomy.breedCount || 0) < (this.autonomy.maxBreeds || 0);
+                const otherCanBreed = (other.autonomy && (other.autonomy.breedCount || 0) < (other.autonomy.maxBreeds || 0));
+                if (myCanBreed && otherCanBreed) {
+                    closestMate = other;
+                    mateDist = dist;
+                }
             }
         }
         
@@ -2548,8 +2556,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         // Prioridade 1: Combate (se tiver inimigo perto e for agressivo)
         if (closestEnemy && this.autonomy.cooldowns.combat <= 0) {
-            // Probabilidade aumentada: aggression * 0.8 (era só aggression)
-            const fightChance = this.autonomy.aggression * 0.8;
+            // Probabilidade aumentada com baseline (aggression + 15%), cap em 0.98
+            const fightChance = Math.min(0.98, this.autonomy.aggression * 1.0 + 0.15);
             const roll = Math.random();
             
             if (roll < fightChance) {
@@ -2611,6 +2619,19 @@ export default class Golem extends Phaser.GameObjects.Container {
         if (dist < breedDist) {
             console.log(`[BREED] ${this.nameText?.text || 'Golem'} + ${target.nameText?.text || 'parceiro'} reproduzindo!`);
             
+            // Atualiza contador de reprodução para ambos os pais
+            this.autonomy.breedCount = (this.autonomy.breedCount || 0) + 1;
+            if (target.autonomy) target.autonomy.breedCount = (target.autonomy.breedCount || 0) + 1;
+            console.log(`[BREED COUNT] ${this.nameText?.text || 'Golem'} (${this.autonomy.breedCount}/${this.autonomy.maxBreeds}), ${target.nameText?.text || 'parceiro'} (${target.autonomy.breedCount}/${target.autonomy.maxBreeds})`);
+            if (this.autonomy.breedCount >= this.autonomy.maxBreeds) {
+                console.log(`[BREED LIMIT] ${this.nameText?.text || 'Golem'} atingiu o limite de reprodução`);
+                this.setActionExpression('sad', 1200);
+            }
+            if (target.autonomy && target.autonomy.breedCount >= target.autonomy.maxBreeds) {
+                if (target.setActionExpression) target.setActionExpression('sad', 1000);
+                console.log(`[BREED LIMIT] ${target.nameText?.text || 'Golem'} atingiu o limite de reprodução`);
+            }
+            
             // Tenta reproduzir!
             this.autonomy.cooldowns.breeding = 20000; // 20s cooldown pessoal (era 30s)
             if (target.autonomy) target.autonomy.cooldowns.breeding = 20000;
@@ -2653,11 +2674,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         // Bump Attack! Acelera em direção ao inimigo
         const angle = Phaser.Math.Angle.Between(this.x, this.y, enemy.x, enemy.y);
-        const chargeSpeed = this.baseSpeed * 3; // Mais rápido
+        const chargeSpeed = this.baseSpeed * 3.5; // Mais rápido
         if (this.body) this.body.setVelocity(Math.cos(angle) * chargeSpeed, Math.sin(angle) * chargeSpeed);
         
-        // Cooldown de combate imediato
-        this.autonomy.cooldowns.combat = 4000;
+        // Cooldown de combate imediato (reduzido para aumentar frequência)
+        this.autonomy.cooldowns.combat = 3000;
         
         // Verifica colisão para knockback com delay
         this.scene.time.delayedCall(300, () => {
