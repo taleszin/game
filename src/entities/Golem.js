@@ -3227,8 +3227,16 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.isSpeaking = false;
         if (this.speechQueue.length > 0) {
             const nextText = this.speechQueue.shift();
-            this.scene.time.delayedCall(300, () => {
+            // Store the delayed call so it can be cancelled if the golem dies
+            if (this.scheduledSpeakCall) {
+                try { this.scheduledSpeakCall.remove(); } catch(e) {}
+                this.scheduledSpeakCall = null;
+            }
+            this.scheduledSpeakCall = this.scene.time.delayedCall(300, () => {
+                // Double-check we're still active before speaking
+                if (!this.active || !this.scene) { this.scheduledSpeakCall = null; return; }
                 this.speak(nextText);
+                this.scheduledSpeakCall = null;
             });
         }
     }
@@ -3246,6 +3254,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         if (this.speechFadeTimer) {
             try { this.speechFadeTimer.remove(); } catch(e) {}
             this.speechFadeTimer = null;
+        }
+        // Cancel any scheduled speak calls (to avoid recreating bubbles after death)
+        if (this.scheduledSpeakCall) {
+            try { this.scheduledSpeakCall.remove(); } catch(e) {}
+            this.scheduledSpeakCall = null;
         }
         
         // Para TODOS os tweens em andamento no container e filhos
