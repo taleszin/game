@@ -195,6 +195,45 @@ export default class SanctuaryScene extends Phaser.Scene {
     // Usa dimensões dinâmicas do game config (reutiliza gameWidth/gameHeight do início)
     this.physics.world.setBounds(0, 0, gameWidth, gameHeight);
     
+    // ═══════════════════════════════════════════════════════════════
+    // DESKTOP: ZOOM-TO-CURSOR VIA MOUSE WHEEL
+    // O ponto do mundo sob o mouse permanece fixo durante o zoom
+    // ═══════════════════════════════════════════════════════════════
+    this.input.on('wheel', (pointer, gameObjects, deltaX, deltaY, deltaZ) => {
+        if (this.isPaused || this.isPlacingMode) return;
+        
+        const cam = this.cameras.main;
+        const oldZoom = cam.zoom;
+        
+        // Calcula novo zoom (scroll up = zoom in, scroll down = zoom out)
+        const zoomDelta = deltaY > 0 ? -0.1 : 0.1;
+        const newZoom = Phaser.Math.Clamp(oldZoom + zoomDelta, 0.5, 3.0);
+        
+        // Se não mudou, ignora
+        if (Math.abs(newZoom - oldZoom) < 0.001) return;
+        
+        // ═══ MATEMÁTICA DO ZOOM-TO-CURSOR ═══
+        // 1. Captura o ponto do mundo sob o mouse ANTES do zoom
+        const worldPointBefore = cam.getWorldPoint(pointer.x, pointer.y);
+        
+        // 2. Aplica o novo zoom
+        cam.setZoom(newZoom);
+        
+        // 3. Calcula novo scroll para manter worldPoint sob o pointer
+        // Fórmula: scrollX = worldPoint.x - (pointer.x / newZoom)
+        const newScrollX = worldPointBefore.x - (pointer.x / newZoom);
+        const newScrollY = worldPointBefore.y - (pointer.y / newZoom);
+        
+        cam.scrollX = newScrollX;
+        cam.scrollY = newScrollY;
+        
+        // Clamp camera to world bounds
+        this._clampCameraToBounds();
+        
+        // Emite evento para sincronizar UI de zoom controls
+        this.game.events.emit('zoom-changed', newZoom);
+    });
+    
     // === IDLE CHATTER: Golems falam aleatoriamente ===
     this.idleChatterTimer = this.time.addEvent({
         delay: 8000, // A cada 8 segundos
@@ -873,13 +912,13 @@ export default class SanctuaryScene extends Phaser.Scene {
 
   /**
    * Update loop - Processa reação de medo ao cursor com ferramenta
-   * + Gestos Mobile (Pinch-to-Zoom, Pan)
+   * + Gestos Mobile (Pinch-to-Zoom com Zoom-to-Midpoint, Pan)
    */
   update(time, delta) {
       if (this.isPaused) return;
       
       // ═══════════════════════════════════════════════════════════════
-      // MOBILE GESTURES: Pinch-to-Zoom e Pan
+      // MOBILE GESTURES: Pinch-to-Zoom (Zoom-to-Midpoint) e Pan
       // ═══════════════════════════════════════════════════════════════
       const isMobile = !this.sys.game.device.os.desktop;
       
@@ -888,49 +927,85 @@ export default class SanctuaryScene extends Phaser.Scene {
           const pointer2 = this.input.pointer2;
           
           // Safety check - pointers may not exist
-          if (!pointer1 || !pointer2) return;
+          if (!pointer1 || !pointer2) {
+              this.lastPinchDist = undefined;
+              this.lastPinchMid = undefined;
+              this.isPinching = false;
+              return;
+          }
           
-          // ═══ PINCH-TO-ZOOM ═══
+          // ═══ PINCH-TO-ZOOM COM ZOOM-TO-MIDPOINT ═══
+          // O ponto médio entre os dedos permanece fixo na tela durante o zoom
           if (pointer1.isDown && pointer2.isDown) {
               const dist = Phaser.Math.Distance.Between(
                   pointer1.x, pointer1.y,
                   pointer2.x, pointer2.y
               );
               
+              // Calcula ponto médio na tela (entre os dois dedos)
+              const midX = (pointer1.x + pointer2.x) / 2;
+              const midY = (pointer1.y + pointer2.y) / 2;
+              
+              // Inicializa estado do pinch
               if (this.lastPinchDist === undefined) {
                   this.lastPinchDist = dist;
+                  this.lastPinchMid = { x: midX, y: midY };
               }
               
               const pinchDelta = dist - this.lastPinchDist;
-              const zoomSpeed = 0.002;
-              const smoothing = 0.15; // Lerp factor
+              const zoomSpeed = 0.003;
               
               if (Math.abs(pinchDelta) > 2) {
-                  const targetZoom = this.cameras.main.zoom + (pinchDelta * zoomSpeed);
-                  const clampedZoom = Phaser.Math.Clamp(targetZoom, 0.5, 2.5);
+                  const cam = this.cameras.main;
+                  const oldZoom = cam.zoom;
                   
-                  // Smooth zoom with lerp
-                  this.cameras.main.zoom = Phaser.Math.Linear(
-                      this.cameras.main.zoom,
-                      clampedZoom,
-                      smoothing
-                  );
+                  // Calcula novo zoom
+                  const targetZoom = oldZoom + (pinchDelta * zoomSpeed);
+                  const newZoom = Phaser.Math.Clamp(targetZoom, 0.5, 3.0);
+                  
+                  if (Math.abs(newZoom - oldZoom) > 0.001) {
+                      // ═══ MATEMÁTICA DO ZOOM-TO-MIDPOINT ═══
+                      // 1. Captura o ponto do mundo sob o midpoint ANTES do zoom
+                      const worldPointBefore = cam.getWorldPoint(midX, midY);
+                      
+                      // 2. Aplica o novo zoom
+                      cam.setZoom(newZoom);
+                      
+                      // 3. Calcula novo scroll para manter worldPoint sob o midpoint
+                      const newScrollX = worldPointBefore.x - (midX / newZoom);
+                      const newScrollY = worldPointBefore.y - (midY / newZoom);
+                      
+                      cam.scrollX = newScrollX;
+                      cam.scrollY = newScrollY;
+                      
+                      // Clamp camera to world bounds
+                      this._clampCameraToBounds();
+                      
+                      // Emite evento para sincronizar UI de zoom controls
+                      this.game.events.emit('zoom-changed', newZoom);
+                  }
               }
               
               this.lastPinchDist = dist;
+              this.lastPinchMid = { x: midX, y: midY };
               this.isPinching = true;
           } else {
               this.lastPinchDist = undefined;
+              this.lastPinchMid = undefined;
               this.isPinching = false;
           }
           
           // ═══ PAN (Mover Câmera) - Single finger drag no fundo ═══
-          if (pointer1.isDown && !pointer2.isDown && !this.isPinching && !this.isPlacingMode) {
-              // Só faz pan se não estiver sobre um Golem
+          // Não ativa se: pinching, placing golem, arrastando golem, ou usando tool
+          const isDraggingGolem = this.golemsGroup?.getChildren().some(g => g.isDragging);
+          const isUsingTool = !!this.currentThreat;
+          
+          if (pointer1.isDown && !pointer2.isDown && !this.isPinching && !this.isPlacingMode && !isDraggingGolem && !isUsingTool) {
+              // Só faz pan se não estiver sobre um Golem (evita conflito com drag de golem)
               const hitGolem = this.golemsGroup?.getChildren().some(g => {
                   if (!g.active) return false;
                   const dist = Phaser.Math.Distance.Between(g.x, g.y, pointer1.worldX, pointer1.worldY);
-                  return dist < 40;
+                  return dist < 50; // Margem generosa
               });
               
               if (!hitGolem) {
@@ -938,21 +1013,18 @@ export default class SanctuaryScene extends Phaser.Scene {
                       this.lastPanPos = { x: pointer1.x, y: pointer1.y };
                   }
                   
+                  // Delta em pixels de tela
                   const panDeltaX = this.lastPanPos.x - pointer1.x;
                   const panDeltaY = this.lastPanPos.y - pointer1.y;
                   
+                  // Aplica pan com correção de zoom (1:1 com o dedo)
                   if (Math.abs(panDeltaX) > 1 || Math.abs(panDeltaY) > 1) {
-                      this.cameras.main.scrollX += panDeltaX / this.cameras.main.zoom;
-                      this.cameras.main.scrollY += panDeltaY / this.cameras.main.zoom;
+                      const cam = this.cameras.main;
+                      cam.scrollX += panDeltaX / cam.zoom;
+                      cam.scrollY += panDeltaY / cam.zoom;
                       
                       // Clamp camera to world bounds
-                      const cam = this.cameras.main;
-                      const worldW = this.sys.game.config.width;
-                      const worldH = this.sys.game.config.height;
-                      const maxScrollX = worldW - (cam.width / cam.zoom);
-                      const maxScrollY = worldH - (cam.height / cam.zoom);
-                      cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, Math.max(0, maxScrollX));
-                      cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, Math.max(0, maxScrollY));
+                      this._clampCameraToBounds();
                   }
                   
                   this.lastPanPos = { x: pointer1.x, y: pointer1.y };
@@ -1032,6 +1104,30 @@ export default class SanctuaryScene extends Phaser.Scene {
       }
   }
   
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // CAMERA UTILITIES
+  // ═══════════════════════════════════════════════════════════════════════════════
+  
+  /**
+   * Clamp camera scroll to world bounds
+   * Evita que a câmera mostre áreas fora do mundo
+   */
+  _clampCameraToBounds() {
+      const cam = this.cameras.main;
+      const worldW = this.sys.game.config.width;
+      const worldH = this.sys.game.config.height;
+      
+      // Calcula limites máximos de scroll baseado no zoom
+      const viewWidth = cam.width / cam.zoom;
+      const viewHeight = cam.height / cam.zoom;
+      
+      const maxScrollX = Math.max(0, worldW - viewWidth);
+      const maxScrollY = Math.max(0, worldH - viewHeight);
+      
+      cam.scrollX = Phaser.Math.Clamp(cam.scrollX, 0, maxScrollX);
+      cam.scrollY = Phaser.Math.Clamp(cam.scrollY, 0, maxScrollY);
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════════
   // BACKGROUND SYSTEM - Cemitério de Formas Geométricas (SNES Style!)
   // ═══════════════════════════════════════════════════════════════════════════════

@@ -170,6 +170,47 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.fireDamageEvent = null;
         this.panicEvent = null;
         
+        // ═══════════════════════════════════════════════════════════════════
+        // SISTEMA DE AUTONOMIA - Comportamento emergente
+        // ═══════════════════════════════════════════════════════════════════
+        this.autonomy = {
+            lastDecisionTime: 0,
+            decisionInterval: 2000, // Sincronizado com roaming timer
+            state: 'idle', // idle, courting, combat, fleeing
+            target: null,  // Golem alvo (para combate ou cortejo)
+            cooldowns: {
+                breeding: 0,      // Cooldown pessoal de reprodução
+                combat: 0,        // Cooldown de combate
+                socialSpeak: 0    // Cooldown de fala autônoma
+            },
+            aggression: 0.5, // Será calculado após setup
+            attractiveness: 0.5, // Será calculado após setup
+        };
+        
+        // Calcula após inicialização para evitar erros
+        this.scene.time.delayedCall(100, () => {
+            if (this.active) {
+                this.autonomy.aggression = this.calculateAggression();
+                this.autonomy.attractiveness = this.calculateAttractiveness();
+            }
+        });
+        
+        // Cooldown global de reprodução para evitar superpopulação
+        if (!this.scene.globalBreedingCooldown) {
+            this.scene.globalBreedingCooldown = 0;
+        }
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // ASSINATURA VOCAL - Pitch único por Golem
+        // ═══════════════════════════════════════════════════════════════════
+        this.voiceSignature = this.generateVoiceSignature();
+        
+        // ═══════════════════════════════════════════════════════════════════
+        // LIP SYNC - Animação de boca durante fala
+        // ═══════════════════════════════════════════════════════════════════
+        this.lipSyncPhase = 0;
+        this.lipSyncSpeed = 0.3 + Math.random() * 0.2;
+        
         this.INSTINCT_RADIUS = 200;
         this.MAX_STEERING_FORCE = 150;
         this.SEPARATION_RADIUS = 80;
@@ -1220,11 +1261,14 @@ export default class Golem extends Phaser.GameObjects.Container {
         const g = this.faceGraphics;
         g.clear();
         
+        // ═══ NOVAS EXPRESSÕES DE AÇÃO ═══
         if (this.expressionState.action === 'breed' || 
             this.expressionState.action === 'mutate' || 
             this.expressionState.action === 'born' || 
             this.expressionState.action === 'feed' ||
-            this.expressionState.action === 'angry') {
+            this.expressionState.action === 'angry' ||
+            this.expressionState.action === 'love' ||
+            this.expressionState.action === 'hurt') {
             const s = this.faceScale || 1;
             const lineWidth = Math.max(this.minLineWidth, 2 * s);
             this.drawActionFace(g, this.expressionState.action, lineWidth, s);
@@ -1605,12 +1649,12 @@ export default class Golem extends Phaser.GameObjects.Container {
     
     /**
      * Método genérico para definir expressão (usado pelo UIFlingSystem)
-     * @param {string} expression - 'angry', 'happy', 'sad', 'neutral', etc
+     * @param {string} expression - 'angry', 'happy', 'sad', 'neutral', 'love', 'hurt', etc
      * @param {number} duration - Duração em ms (padrão 2000)
      */
     setExpression(expression, duration = 2000) {
         // Se for uma action expression (angry, breed, etc), usa o sistema de action
-        const actionExpressions = ['angry', 'breed', 'mutate', 'born', 'feed', 'begging', 'panic', 'burn', 'freeze'];
+        const actionExpressions = ['angry', 'breed', 'mutate', 'born', 'feed', 'begging', 'panic', 'burn', 'freeze', 'love', 'hurt'];
         
         if (actionExpressions.includes(expression)) {
             this.setActionExpression(expression, duration);
@@ -2312,12 +2356,458 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.body.setVelocity(Phaser.Math.Between(-this.baseSpeed, this.baseSpeed), Phaser.Math.Between(-this.baseSpeed, this.baseSpeed));
         this.roamingTimer = this.scene.time.addEvent({ delay: 2000, loop: true, callback: () => {
             if(this.active && this.scene && !this.isDragging && !this.isFrozen && this.body) {
-                this.body.setVelocity(Phaser.Math.Between(-this.baseSpeed, this.baseSpeed), Phaser.Math.Between(-this.baseSpeed, this.baseSpeed));
+                // Integra comportamento autônomo no ciclo de roaming
+                this.updateAutonomousBehavior();
+                
+                // Movimento padrão só se não estiver em estado autônomo especial
+                if (this.autonomy.state === 'idle') {
+                    this.body.setVelocity(Phaser.Math.Between(-this.baseSpeed, this.baseSpeed), Phaser.Math.Between(-this.baseSpeed, this.baseSpeed));
+                }
             }
         }});
     }
+    
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // SISTEMA DE AUTONOMIA - Comportamento Emergente
+    // ═══════════════════════════════════════════════════════════════════════════════
+    
+    /**
+     * Calcula nível de agressividade baseado na física
+     * Fogo/Radiação = agressivo, Luz/Frio = pacífico
+     */
+    calculateAggression() {
+        const aggressionMap = {
+            'calor': 0.9,
+            'radiacao': 0.8,
+            'eletricidade': 0.7,
+            'entropia': 0.85,
+            'magnetismo': 0.5,
+            'gravidade': 0.4,
+            'sonico': 0.5,
+            'luz': 0.2,
+            'frio': 0.3
+        };
+        return aggressionMap[this.currentPhysics] || 0.5;
+    }
+    
+    /**
+     * Calcula atratividade baseado na química
+     * Ouro/Cristal = atraente, Urânio = repelente
+     */
+    calculateAttractiveness() {
+        const attractMap = {
+            'ouro': 0.95,
+            'cristal': 0.85,
+            'bismuto': 0.7,
+            'carbono': 0.5,
+            'silicio': 0.6,
+            'ferro': 0.4,
+            'mercurio': 0.5,
+            'uranio': 0.2
+        };
+        return attractMap[this.currentChem] || 0.5;
+    }
+    
+    /**
+     * Gera assinatura vocal única baseada em atributos
+     */
+    generateVoiceSignature() {
+        // Base pitch: Golems pequenos = agudo, grandes = grave
+        let basePitch = 500 - (this.targetScale * 200);
+        
+        // Modificador por física
+        const physicsMod = {
+            'eletricidade': 150,
+            'gravidade': -150,
+            'luz': 80,
+            'calor': 50,
+            'frio': -50,
+            'radiacao': 100,
+            'magnetismo': 0,
+            'entropia': -200,
+            'sonico': 180
+        };
+        basePitch += physicsMod[this.currentPhysics] || 0;
+        
+        // Variação individual (DNA único)
+        basePitch += (Math.random() - 0.5) * 80;
+        
+        // Tipo de onda por física
+        const waveTypes = {
+            'eletricidade': 'square',
+            'luz': 'sine',
+            'calor': 'sawtooth',
+            'frio': 'triangle',
+            'gravidade': 'sine',
+            'radiacao': 'sawtooth',
+            'magnetismo': 'square',
+            'entropia': 'sawtooth',
+            'sonico': 'sine'
+        };
+        
+        return {
+            basePitch: Phaser.Math.Clamp(basePitch, 120, 800),
+            waveType: waveTypes[this.currentPhysics] || 'square',
+            speechSpeed: this.targetScale < 0.8 ? 1.3 : (this.targetScale > 1.3 ? 0.7 : 1.0),
+            vibrato: this.currentPhysics === 'eletricidade' ? 20 : 5
+        };
+    }
+    
+    /**
+     * Verifica se dois Golems são compatíveis para reprodução
+     * MAIS PERMISSIVO: qualquer par pode tentar, exceto opostos de física
+     */
+    isCompatibleForBreeding(other) {
+        if (!other || !other.active || other === this) return false;
+        if (other.lifePhase === 'child' || this.lifePhase === 'child') return false; // Crianças não
+        if (other.isFrozen || this.isFrozen) return false;
+        
+        // Física oposta = NÃO PODE (são inimigos)
+        const PHYSICS_OPPOSITES = {
+            'calor': 'frio', 'frio': 'calor',
+            'luz': 'entropia', 'entropia': 'luz',
+            'eletricidade': 'gravidade', 'gravidade': 'eletricidade'
+        };
+        const isOpposite = PHYSICS_OPPOSITES[this.currentPhysics] === other.currentPhysics;
+        
+        // Se são opostos físicos, não podem reproduzir (são inimigos!)
+        if (isOpposite) return false;
+        
+        // Qualquer outro par pode tentar reproduzir
+        // Bônus de compatibilidade (para log/debug) mas não bloqueia
+        const sameShape = this.currentShapeType === other.currentShapeType;
+        const samePhysics = this.currentPhysics === other.currentPhysics;
+        const sameChem = this.currentChem === other.currentChem;
+        
+        // Debug: mostra compatibilidade
+        // console.log(`[COMPAT] shape:${sameShape} phys:${samePhysics} chem:${sameChem}`);
+        
+        return true; // Qualquer não-inimigo pode tentar
+    }
+    
+    /**
+     * Verifica se dois Golems são inimigos naturais
+     */
+    isEnemyOf(other) {
+        if (!other || !other.active || other === this) return false;
+        
+        const PHYSICS_OPPOSITES = {
+            'calor': 'frio', 'frio': 'calor',
+            'luz': 'entropia', 'entropia': 'luz',
+            'eletricidade': 'gravidade', 'gravidade': 'eletricidade',
+            'radiacao': 'frio', 'magnetismo': 'entropia'
+        };
+        
+        return PHYSICS_OPPOSITES[this.currentPhysics] === other.currentPhysics;
+    }
+    
+    /**
+     * Ciclo de decisão autônoma - chamado pelo roaming timer (a cada 2s)
+     */
+    updateAutonomousBehavior() {
+        if (!this.active || this.isFrozen || this.isDragging || !this.scene) return;
+        if (this.scene.isPaused) return;
+        
+        // Decrementa cooldowns (2000ms por ciclo)
+        const dt = 2000;
+        if (this.autonomy.cooldowns.breeding > 0) this.autonomy.cooldowns.breeding -= dt;
+        if (this.autonomy.cooldowns.combat > 0) this.autonomy.cooldowns.combat -= dt;
+        if (this.autonomy.cooldowns.socialSpeak > 0) this.autonomy.cooldowns.socialSpeak -= dt;
+        if (this.scene.globalBreedingCooldown > 0) this.scene.globalBreedingCooldown -= dt;
+        
+        // Scan de outros Golems próximos - raio maior para mais interações
+        const others = this.scene.golemsGroup?.getChildren() || [];
+        const scanRadius = 350; // Aumentado de 180 para 350
+        
+        let closestEnemy = null;
+        let closestMate = null;
+        let enemyDist = Infinity;
+        let mateDist = Infinity;
+        
+        for (const other of others) {
+            if (other === this || !other.active) continue;
+            const dist = Phaser.Math.Distance.Between(this.x, this.y, other.x, other.y);
+            if (dist > scanRadius) continue;
+            
+            // Verifica inimigo
+            if (this.isEnemyOf(other) && dist < enemyDist) {
+                closestEnemy = other;
+                enemyDist = dist;
+            }
+            
+            // Verifica parceiro
+            if (this.isCompatibleForBreeding(other) && dist < mateDist) {
+                closestMate = other;
+                mateDist = dist;
+            }
+        }
+        
+        // ═══ DECISÃO DE COMPORTAMENTO ═══
+        // Debug: log para verificar se está rodando
+        // console.log(`[AUTONOMY] ${this.nameText?.text || 'Golem'} scanning... enemies:${closestEnemy?'YES':'no'} mates:${closestMate?'YES':'no'}`);
+        
+        // Prioridade 1: Combate (se tiver inimigo perto e for agressivo)
+        if (closestEnemy && this.autonomy.cooldowns.combat <= 0) {
+            // Probabilidade aumentada: aggression * 0.8 (era só aggression)
+            const fightChance = this.autonomy.aggression * 0.8;
+            const roll = Math.random();
+            
+            if (roll < fightChance) {
+                console.log(`[COMBAT] ${this.nameText?.text || 'Golem'} atacando ${closestEnemy.nameText?.text || 'inimigo'}! (roll:${roll.toFixed(2)} < chance:${fightChance.toFixed(2)})`);
+                this.startCombat(closestEnemy);
+                return;
+            }
+        }
+        
+        // Prioridade 2: Cortejo (energia alta, adulto)
+        const vitalityPct = this.vitality / this.maxVitality;
+        const canBreed = this.autonomy.cooldowns.breeding <= 0 && (this.scene.globalBreedingCooldown || 0) <= 0;
+        
+        if (closestMate && vitalityPct > 0.5 && canBreed) { // Reduzido de 0.7 para 0.5
+            // Probabilidade aumentada: attractiveness * 0.7 (era * 0.5)
+            const courtChance = this.autonomy.attractiveness * 0.7;
+            const roll = Math.random();
+            
+            if (roll < courtChance) {
+                console.log(`[COURT] ${this.nameText?.text || 'Golem'} cortejando ${closestMate.nameText?.text || 'parceiro'}! (roll:${roll.toFixed(2)} < chance:${courtChance.toFixed(2)})`);
+                this.startCourting(closestMate);
+                return;
+            }
+        }
+        
+        // Estado padrão: idle
+        this.autonomy.state = 'idle';
+        this.autonomy.target = null;
+    }
+    
+    /**
+     * Inicia comportamento de cortejo
+     */
+    startCourting(target) {
+        if (!target || !target.active) return;
+        
+        this.autonomy.state = 'courting';
+        this.autonomy.target = target;
+        
+        // Expressão de amor em ambos
+        this.setActionExpression('love', 3000);
+        if (target.setActionExpression) target.setActionExpression('love', 2000);
+        
+        // Fala de cortejo
+        if (this.autonomy.cooldowns.socialSpeak <= 0) {
+            this.speakContextual('courting');
+            this.autonomy.cooldowns.socialSpeak = 8000;
+        }
+        
+        // Move em direção ao parceiro
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, target.x, target.y);
+        const speed = this.baseSpeed * 1.5; // Mais rápido para chegar logo
+        if (this.body) this.body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+        
+        // Verifica se chegou perto o suficiente para acasalar
+        const dist = Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y);
+        const breedDist = 80 * Math.max(this.targetScale, 0.5); // Distância mais generosa
+        
+        if (dist < breedDist) {
+            console.log(`[BREED] ${this.nameText?.text || 'Golem'} + ${target.nameText?.text || 'parceiro'} reproduzindo!`);
+            
+            // Tenta reproduzir!
+            this.autonomy.cooldowns.breeding = 20000; // 20s cooldown pessoal (era 30s)
+            if (target.autonomy) target.autonomy.cooldowns.breeding = 20000;
+            this.scene.globalBreedingCooldown = 8000; // 8s cooldown global (era 10s)
+            
+            if (this.scene.triggerBreeding) {
+                this.scene.triggerBreeding(this, target);
+            }
+            
+            this.autonomy.state = 'idle';
+            this.autonomy.target = null;
+        } else {
+            // Se ainda não chegou, agenda próxima verificação
+            this.scene.time.delayedCall(500, () => {
+                if (this.active && target.active && this.autonomy.state === 'courting') {
+                    this.startCourting(target); // Continua perseguindo
+                }
+            });
+        }
+    }
+    
+    /**
+     * Inicia comportamento de combate
+     */
+    startCombat(enemy) {
+        if (!enemy || !enemy.active) return;
+        
+        this.autonomy.state = 'combat';
+        this.autonomy.target = enemy;
+        
+        // Expressão agressiva em ambos
+        this.setActionExpression('angry', 2000);
+        if (enemy.setActionExpression) enemy.setActionExpression('angry', 1500);
+        
+        // Fala de combate
+        if (this.autonomy.cooldowns.socialSpeak <= 0) {
+            this.speakContextual('combat_start');
+            this.autonomy.cooldowns.socialSpeak = 5000;
+        }
+        
+        // Bump Attack! Acelera em direção ao inimigo
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, enemy.x, enemy.y);
+        const chargeSpeed = this.baseSpeed * 3; // Mais rápido
+        if (this.body) this.body.setVelocity(Math.cos(angle) * chargeSpeed, Math.sin(angle) * chargeSpeed);
+        
+        // Cooldown de combate imediato
+        this.autonomy.cooldowns.combat = 4000;
+        
+        // Verifica colisão para knockback com delay
+        this.scene.time.delayedCall(300, () => {
+            if (!this.active || !enemy.active) return;
+            
+            const dist = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
+            const hitDist = 100 * Math.max(this.targetScale, 0.5); // Distância mais generosa
+            
+            if (dist < hitDist) {
+                this.performCombatHit(enemy);
+            } else {
+                // Ainda longe? Continua perseguindo
+                if (this.autonomy.state === 'combat') {
+                    const newAngle = Phaser.Math.Angle.Between(this.x, this.y, enemy.x, enemy.y);
+                    if (this.body) this.body.setVelocity(Math.cos(newAngle) * chargeSpeed, Math.sin(newAngle) * chargeSpeed);
+                    
+                    // Segunda tentativa de hit
+                    this.scene.time.delayedCall(400, () => {
+                        if (this.active && enemy.active && this.autonomy.state === 'combat') {
+                            const d2 = Phaser.Math.Distance.Between(this.x, this.y, enemy.x, enemy.y);
+                            if (d2 < hitDist * 1.2) {
+                                this.performCombatHit(enemy);
+                            }
+                        }
+                        this.autonomy.state = 'idle';
+                    });
+                }
+            }
+        });
+    }
+    
+    /**
+     * Executa hit de combate com knockback e efeitos
+     */
+    performCombatHit(enemy) {
+        if (!enemy || !enemy.active || !this.scene) return;
+        
+        // Knockback em ambos
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, enemy.x, enemy.y);
+        const knockbackForce = 200;
+        
+        // Empurra inimigo para longe
+        if (enemy.body) {
+            enemy.body.setVelocity(
+                Math.cos(angle) * knockbackForce,
+                Math.sin(angle) * knockbackForce
+            );
+        }
+        
+        // Recuo próprio
+        if (this.body) {
+            this.body.setVelocity(
+                -Math.cos(angle) * knockbackForce * 0.5,
+                -Math.sin(angle) * knockbackForce * 0.5
+            );
+        }
+        
+        // Dano leve em ambos
+        const damage = 2000; // ~4% da vitalidade
+        this.vitality = Math.max(0, this.vitality - damage * 0.5);
+        enemy.vitality = Math.max(0, enemy.vitality - damage);
+        
+        // Expressão de dor
+        this.setActionExpression('hurt', 500);
+        enemy.setActionExpression('hurt', 800);
+        
+        // Fala de hit
+        if (Math.random() < 0.6) {
+            enemy.speakContextual('combat_hit');
+        }
+        
+        // Efeito visual: faíscas/partículas
+        this.createCombatEffect(enemy);
+        
+        // Som de impacto
+        this.playCombatSound();
+        
+        // Reseta estado
+        this.autonomy.state = 'idle';
+        this.autonomy.target = null;
+    }
+    
+    /**
+     * Cria efeito visual de colisão de combate
+     */
+    createCombatEffect(enemy) {
+        if (!this.scene) return;
+        
+        const midX = (this.x + enemy.x) / 2;
+        const midY = (this.y + enemy.y) / 2;
+        
+        // Partículas de faísca
+        const sparks = this.scene.add.particles(midX, midY, 'pixel', {
+            speed: { min: 100, max: 200 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 1, end: 0 },
+            tint: [0xffff00, 0xff8800, 0xffffff],
+            lifespan: 300,
+            blendMode: 'ADD',
+            quantity: 15
+        });
+        
+        // Círculo de impacto
+        const impact = this.scene.add.circle(midX, midY, 20, 0xffffff, 0.8);
+        this.scene.tweens.add({
+            targets: impact,
+            scale: 2,
+            alpha: 0,
+            duration: 200,
+            onComplete: () => impact.destroy()
+        });
+        
+        // Limpa partículas após animação
+        this.scene.time.delayedCall(400, () => {
+            if (sparks) sparks.destroy();
+        });
+    }
+    
+    /**
+     * Som de impacto de combate
+     */
+    playCombatSound() {
+        this.initAudio();
+        if (!this.audioContext) return;
+        
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+        
+        // Som de impacto: ruído breve + tom grave
+        const osc = ctx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+        
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+        
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.15);
+    }
 
     die() {
+        // ══════════════════════════════════════════════════════════════════
+        // PRIMEIRO: Limpa balão de fala IMEDIATAMENTE para evitar que fique na tela
+        // ══════════════════════════════════════════════════════════════════
+        this.clearSpeechBubble();
+        
         // Para todos os tweens no Golem
         if (this.scene) {
             try { this.scene.tweens.killTweensOf(this); } catch(e) {}
@@ -2340,20 +2830,11 @@ export default class Golem extends Phaser.GameObjects.Container {
             if (this.panicEvent) { this.panicEvent.remove(); this.panicEvent = null; }
         } catch(e) {}
         
-        if (this.typewriterEvent) {
-            try { this.typewriterEvent.remove(); } catch(e) {}
-            this.typewriterEvent = null;
-        }
-        if (this.speechFadeTimer) {
-            try { this.speechFadeTimer.remove(); } catch(e) {}
-            this.speechFadeTimer = null;
-        }
-        if (this.speechUpdateEvent) {
-            try { this.speechUpdateEvent.remove(); } catch(e) {}
-            this.speechUpdateEvent = null;
-        }
+        // Timers de fala já removidos pelo clearSpeechBubble, mas garantir que estão nulos
+        this.typewriterEvent = null;
+        this.speechFadeTimer = null;
+        this.speechUpdateEvent = null;
         
-        this.clearSpeechBubble();
         // Ensure we stop any in-progress eating/feeding animation
         try { this.stopEatingAnimation(); } catch(e) { }
         // Detach event handlers
@@ -2432,30 +2913,39 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
         const ctx = this.audioContext;
         const now = ctx.currentTime;
-        let basePitch = 400;
-        if (this.targetScale < 0.8) {
-            basePitch = Phaser.Math.Between(600, 800); 
-        } else if (this.targetScale > 1.3) {
-            basePitch = Phaser.Math.Between(150, 300); 
-        } else {
-            basePitch = Phaser.Math.Between(350, 500); 
-        }
+        
+        // ═══ USA ASSINATURA VOCAL ÚNICA DO GOLEM ═══
+        const sig = this.voiceSignature || { basePitch: 400, waveType: 'square', vibrato: 5 };
+        
+        // Pitch base da assinatura + variação
+        let basePitch = sig.basePitch;
+        
+        // Modificador por fase de vida
         if (this.lifePhase === 'child') {
-            basePitch += 200; 
+            basePitch += 150; // Crianças mais agudas
         } else if (this.lifePhase === 'old') {
-            basePitch -= 80; 
+            basePitch -= 60; // Idosos mais graves
         }
-        switch (this.currentPhysics) {
-            case 'eletricidade': basePitch += 150; break;
-            case 'gravidade': basePitch -= 100; break;
-        }
-        const pitch = Phaser.Math.Clamp(basePitch + Phaser.Math.Between(-30, 30), 120, 900);
-        const waveType = (this.currentPhysics === 'luz' || this.currentPhysics === 'frio') 
-            ? 'triangle' 
-            : 'square';
+        
+        // Variação aleatória por beep
+        const pitch = Phaser.Math.Clamp(basePitch + Phaser.Math.Between(-40, 40), 100, 950);
+        
         const osc = ctx.createOscillator();
-        osc.type = waveType;
+        osc.type = sig.waveType;
         osc.frequency.setValueAtTime(pitch, now);
+        
+        // Adiciona vibrato para personalidade
+        if (sig.vibrato > 0) {
+            const vibrato = ctx.createOscillator();
+            const vibratoGain = ctx.createGain();
+            vibrato.frequency.value = 8; // 8Hz de modulação
+            vibratoGain.gain.value = sig.vibrato;
+            vibrato.connect(vibratoGain);
+            vibratoGain.connect(osc.frequency);
+            vibrato.start(now);
+            vibrato.stop(now + 0.06);
+        }
+        
         const gainNode = ctx.createGain();
         gainNode.gain.setValueAtTime(0, now);
         gainNode.gain.linearRampToValueAtTime(0.25, now + 0.008);  
@@ -2464,6 +2954,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         gainNode.connect(this.masterGain);
         osc.start(now);
         osc.stop(now + 0.055);
+        
+        // ═══ LIP SYNC: Atualiza fase da boca ═══
+        if (this.isSpeaking) {
+            this.lipSyncPhase = (this.lipSyncPhase + this.lipSyncSpeed) % 1;
+        }
     }
 
     playMunchSound() {
@@ -2741,7 +3236,7 @@ export default class Golem extends Phaser.GameObjects.Container {
     clearSpeechBubble() {
         // Remove todos os timers relacionados a fala
         if (this.typewriterEvent) {
-            this.typewriterEvent.remove();
+            try { this.typewriterEvent.remove(); } catch(e) {}
             this.typewriterEvent = null;
         }
         if (this.speechUpdateEvent) {
@@ -2753,9 +3248,17 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.speechFadeTimer = null;
         }
         
-        // Para qualquer tween em andamento no container
-        if (this.speechContainer && this.scene) {
-            try { this.scene.tweens.killTweensOf(this.speechContainer); } catch(e) {}
+        // Para TODOS os tweens em andamento no container e filhos
+        if (this.scene && this.scene.tweens) {
+            if (this.speechContainer) {
+                try { this.scene.tweens.killTweensOf(this.speechContainer); } catch(e) {}
+            }
+            if (this.speechBubble) {
+                try { this.scene.tweens.killTweensOf(this.speechBubble); } catch(e) {}
+            }
+            if (this.speechText) {
+                try { this.scene.tweens.killTweensOf(this.speechText); } catch(e) {}
+            }
         }
         
         // Destrói container e filhos
@@ -2766,7 +3269,7 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.speechContainer = null;
         }
         
-        // Destrói elementos individuais se ainda existirem
+        // Destrói elementos individuais se ainda existirem (fallback)
         if (this.speechBubble) {
             try { this.speechBubble.destroy(); } catch(e) {}
             this.speechBubble = null;
@@ -2777,6 +3280,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
         
         this.isSpeaking = false;
+        this.speechQueue = [];
     }
 
     speakContextual(context) {
@@ -2957,6 +3461,94 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.moveTo(-16*s, -16*s); g.lineTo(-20*s, -22*s);
                 g.moveTo(16*s, -16*s); g.lineTo(20*s, -22*s);
                 g.strokePath();
+                break;
+                
+            case 'love':
+                // ═══ CARA DE AMOR/CORTEJO ═══
+                // Olhos em forma de coração (ou muito brilhantes/grandes)
+                g.lineStyle(lineWidth + 2*s, 0xff6b9d, 0.9);
+                
+                // Desenha corações como olhos
+                this.drawHeart(g, -8*s, -5*s, 7*s);
+                this.drawHeart(g, 8*s, -5*s, 7*s);
+                
+                // Preenchimento rosa nos olhos
+                g.fillStyle(0xff6b9d, 0.6);
+                g.fillCircle(-8*s, -5*s, 4*s);
+                g.fillCircle(8*s, -5*s, 4*s);
+                
+                // Brilhos nos olhos
+                g.fillStyle(0xffffff, 1);
+                g.fillCircle(-10*s, -7*s, 1.5*s);
+                g.fillCircle(6*s, -7*s, 1.5*s);
+                
+                // Bochechas coradas
+                g.fillStyle(0xff6b6b, 0.4);
+                g.fillEllipse(-14*s, 2*s, 5*s, 3*s);
+                g.fillEllipse(14*s, 2*s, 5*s, 3*s);
+                
+                // Sorriso tímido/apaixonado
+                g.lineStyle(lineWidth + 2*s, 0xff9999, 0.9);
+                g.beginPath();
+                const loveWave = Math.sin(Date.now() / 200) * 2 * s;
+                g.arc(0, 8*s + loveWave, 6*s, 0.2, Math.PI - 0.2);
+                g.strokePath();
+                
+                // Partículas de coração flutuando (efeito visual)
+                const heartFloat = (Date.now() % 2000) / 2000;
+                g.fillStyle(0xff6b9d, 0.5 - heartFloat * 0.5);
+                g.fillCircle(-16*s, -20*s - heartFloat * 15*s, 2*s);
+                g.fillCircle(16*s, -18*s - heartFloat * 12*s, 1.5*s);
+                break;
+                
+            case 'hurt':
+                // ═══ CARA DE DOR/DANO ═══
+                // Olhos em X (knocked out style)
+                g.lineStyle(lineWidth + 3*s, 0xff4444, 0.9);
+                
+                // X no olho esquerdo
+                g.beginPath();
+                g.moveTo(-12*s, -9*s); g.lineTo(-4*s, -1*s);
+                g.moveTo(-4*s, -9*s); g.lineTo(-12*s, -1*s);
+                g.strokePath();
+                
+                // X no olho direito
+                g.beginPath();
+                g.moveTo(4*s, -9*s); g.lineTo(12*s, -1*s);
+                g.moveTo(12*s, -9*s); g.lineTo(4*s, -1*s);
+                g.strokePath();
+                
+                // Sobrancelhas de dor (arqueadas para cima)
+                g.lineStyle(lineWidth + 2*s, color, 0.8);
+                g.beginPath();
+                g.moveTo(-14*s, -10*s);
+                g.lineTo(-8*s, -14*s);
+                g.lineTo(-4*s, -10*s);
+                g.moveTo(4*s, -10*s);
+                g.lineTo(8*s, -14*s);
+                g.lineTo(14*s, -10*s);
+                g.strokePath();
+                
+                // Boca aberta de dor (O)
+                const hurtShake = Math.sin(Date.now() / 30) * 2 * s;
+                g.lineStyle(lineWidth + 2*s, 0xffaaaa, 0.9);
+                g.strokeCircle(hurtShake, 10*s, 5*s);
+                
+                // Lágrimas/gotas de suor
+                g.fillStyle(0x66ccff, 0.7);
+                const tearDrop = (Date.now() % 500) / 500 * 8 * s;
+                g.fillEllipse(-14*s, -2*s + tearDrop, 2*s, 3*s);
+                g.fillEllipse(14*s, 0 + tearDrop * 0.8, 2*s, 3*s);
+                
+                // Estrelas de impacto girando
+                g.lineStyle(lineWidth, 0xffff00, 0.6);
+                const starSpin = Date.now() / 100;
+                for (let i = 0; i < 3; i++) {
+                    const angle = starSpin + (i * Math.PI * 2 / 3);
+                    const sx = Math.cos(angle) * 20 * s;
+                    const sy = -15*s + Math.sin(angle) * 8 * s;
+                    g.strokeCircle(sx, sy, 2*s);
+                }
                 break;
         }
     }

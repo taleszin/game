@@ -263,13 +263,15 @@ function processTemplate(template, physicsId) {
 
 /**
  * Função de conveniência para gerar diálogo (compatibilidade)
- * Agora com suporte a templates generativos
+ * Agora com suporte a templates generativos e comportamentos autônomos
  */
 export function generateDialogue(golemData, context = 'idle') {
     const physicsId = golemData.fisica?.id || 'luz';
     const chemId = golemData.quimica?.id || 'carbono';
     
-    if (context === 'breed' || context === 'mutate') {
+    // Contextos especiais que independem da física (comportamentos autônomos)
+    const specialContexts = ['breed', 'mutate', 'courting', 'combat_start', 'combat_hit', 'combat_victory', 'panic'];
+    if (specialContexts.includes(context) && DIALOGUE_SPECIAL_ACTIONS[context]) {
         const phrases = DIALOGUE_SPECIAL_ACTIONS[context];
         return phrases[Math.floor(Math.random() * phrases.length)];
     }

@@ -581,6 +581,69 @@ export const DIALOGUE_SPECIAL_ACTIONS = {
         "ALTERANDO!", "NOVA FORMA!", "REESCREVENDO CÓDIGO!", "GLITCH!"
     ],
     
+    // ═══ COMPORTAMENTO AUTÔNOMO: CORTEJO ═══
+    // Golems compatíveis se aproximam e tentam reproduzir
+    courting: [
+        "Sua geometria é perfeita...",
+        "Vamos compilar juntos?",
+        "Sintetizando atração...",
+        "Você me completa~",
+        "Compatibilidade: 100%",
+        "Quero fusionar...",
+        "Seus ângulos são belos...",
+        "Sinto... atração...",
+        "DNA compatível detectado!",
+        "♥ Olá... ♥",
+        "Juntos somos... mais.",
+        "Sua frequência... ressoa.",
+        "Código genético... lindo~",
+        "Podemos... criar algo?",
+        "Você é como eu..."
+    ],
+    
+    // ═══ COMPORTAMENTO AUTÔNOMO: COMBATE ═══
+    // Golems de elementos opostos brigam por território
+    combat_start: [
+        "Saia do meu espaço!",
+        "Incompatível! AFASTE-SE!",
+        "Vou te deletar!",
+        "Este território é meu!",
+        "Você não pertence aqui!",
+        "Invasor detectado!",
+        "Preparar para conflito!",
+        "Seu tipo... me irrita!",
+        "COLISÃO IMINENTE!",
+        "Oponente hostil!",
+        "Erro de compatibilidade!",
+        "Sistema de defesa: ATIVO!"
+    ],
+    
+    // Reação ao ser atingido em combate
+    combat_hit: [
+        "Ai!",
+        "Glitch detectado!",
+        "Meus pixels!",
+        "DANO RECEBIDO!",
+        "Erro crítico!",
+        "Integridade comprometida!",
+        "*crash*",
+        "Oof!",
+        "Buffer overflow!",
+        "Segmentation fault!",
+        "Isso... doeu...",
+        "Contra-ataque!"
+    ],
+    
+    // Vitória em combate (outro fugiu ou morreu)
+    combat_victory: [
+        "Território seguro.",
+        "Invasor eliminado!",
+        "Dominância confirmada.",
+        "Esse é MEU espaço!",
+        "Sistema estabilizado.",
+        "Ameaça neutralizada."
+    ],
+    
     // ═══ TRAUMA HEREDITÁRIO DE FOGO ═══
     // Se o Golem (ou seus pais) já foi queimado, ele pode ter pânico de fogo
     panic: [
