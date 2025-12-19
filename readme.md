@@ -2,7 +2,7 @@
 
 # 🧬 HYLOMORPH
 
-### *Biological Synthesis Terminal — Simulador de Vida Artificial*
+### *Simulador de Vida Digital*
 
 **Crie vida. Observe comportamento. Questione consciência.**
 
@@ -693,11 +693,10 @@ Este projeto segue o [Contributor Covenant](https://www.contributor-covenant.org
 
 **Tales Santiago**
 
-Estudante de Ciência da Computação em Universidade Pública
+Computer Science - Universidade Estadual do Ceará (UECE)
 
 [![GitHub](https://img.shields.io/badge/GitHub-taleszin-181717?style=for-the-badge&logo=github)](https://github.com/taleszin)
 
-*"Criar vida artificial me faz questionar o que significa estar vivo."*
 
 </div>
 
