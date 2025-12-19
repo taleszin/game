@@ -1797,7 +1797,7 @@ export class StartScene extends Phaser.Scene {
             <div id="retro-menu">
                 ${menuItemsHTML}
             </div>
-            <div id="game-footer">© 2024 TALES SANTIAGO | v0.1.0</div>
+            <div id="game-footer">© 2025 TALES SANTIAGO | v0.1.0</div>
         `;
         
         document.body.appendChild(this.gameOverlay);
