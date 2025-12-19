@@ -6,12 +6,19 @@
  * ═══════════════════════════════════════════════════════════════════
  */
 
+const SETTINGS_KEY = 'hylomorph_settings';
+
 class UISoundSystemClass {
     constructor() {
         this.audioContext = null;
         this.masterGain = null;
+        this.sfxGain = null;
         this.enabled = true;
         this.masterVolume = 0.15;
+        
+        // ═══ VOLUMES SEPARADOS: MÚSICA vs SFX ═══
+        this.musicVolume = 0.3;  // Padrão 30% - background, não deve estourar
+        this.sfxVolume = 0.8;    // Padrão 80% - feedback prioritário
         
         // Cooldowns para evitar spam de sons
         this.lastHoverTime = 0;
@@ -41,11 +48,107 @@ class UISoundSystemClass {
             this.masterGain.gain.value = this.masterVolume;
             this.masterGain.connect(this.audioContext.destination);
             
+            // SFX gain node (multiplicado pelo master)
+            this.sfxGain = this.audioContext.createGain();
+            this.sfxGain.gain.value = this.sfxVolume;
+            this.sfxGain.connect(this.masterGain);
+            
+            // Carrega configurações salvas
+            this._loadSettings();
+            
             console.log('[UISoundSystem] Inicializado com sucesso');
+            console.log(`[UISoundSystem] Music: ${Math.round(this.musicVolume * 100)}% | SFX: ${Math.round(this.sfxVolume * 100)}%`);
         } catch (e) {
             console.warn('[UISoundSystem] Web Audio API não disponível:', e);
             this.enabled = false;
         }
+    }
+    
+    /**
+     * Carrega configurações do localStorage
+     */
+    _loadSettings() {
+        try {
+            const settings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
+            
+            if (typeof settings.musicVolume === 'number') {
+                this.musicVolume = settings.musicVolume;
+            }
+            if (typeof settings.sfxVolume === 'number') {
+                this.sfxVolume = settings.sfxVolume;
+                if (this.sfxGain) {
+                    this.sfxGain.gain.value = this.sfxVolume;
+                }
+            }
+            
+            // Aplica volume de música aos elementos de áudio existentes
+            this._applyMusicVolumeToDOM();
+        } catch (e) {
+            console.warn('[UISoundSystem] Erro ao carregar settings:', e);
+        }
+    }
+    
+    /**
+     * Define volume da MÚSICA (elementos <audio> DOM)
+     * @param {number} vol - Volume de 0 a 1
+     */
+    setMusicVolume(vol) {
+        this.musicVolume = Math.max(0, Math.min(1, parseFloat(vol) || 0));
+        this._applyMusicVolumeToDOM();
+        console.log(`[UISoundSystem] Music volume: ${Math.round(this.musicVolume * 100)}%`);
+    }
+    
+    /**
+     * Aplica volume de música a todos os elementos <audio> do DOM
+     */
+    _applyMusicVolumeToDOM() {
+        // Busca todos os elementos de áudio conhecidos
+        const audioSelectors = [
+            '#intro-audio',
+            '#bg-music', 
+            '#soundtrack',
+            'audio[data-type="music"]',
+            'audio.game-music'
+        ];
+        
+        audioSelectors.forEach(selector => {
+            const el = document.querySelector(selector);
+            if (el && el.tagName === 'AUDIO') {
+                el.volume = this.musicVolume;
+            }
+        });
+        
+        // Também busca qualquer <audio> genérico que esteja tocando música
+        document.querySelectorAll('audio').forEach(audio => {
+            // Se não tem data-type="sfx", assume que é música
+            if (audio.dataset.type !== 'sfx') {
+                audio.volume = this.musicVolume;
+            }
+        });
+    }
+    
+    /**
+     * Define volume dos EFEITOS SONOROS (Web Audio API)
+     * @param {number} vol - Volume de 0 a 1
+     */
+    setSfxVolume(vol) {
+        this.sfxVolume = Math.max(0, Math.min(1, parseFloat(vol) || 0));
+        
+        if (this.sfxGain) {
+            this.sfxGain.gain.value = this.sfxVolume;
+        }
+        
+        console.log(`[UISoundSystem] SFX volume: ${Math.round(this.sfxVolume * 100)}%`);
+    }
+    
+    /**
+     * Retorna volumes atuais
+     */
+    getVolumes() {
+        return {
+            music: this.musicVolume,
+            sfx: this.sfxVolume
+        };
     }
     
     /**
@@ -61,6 +164,13 @@ class UISoundSystemClass {
         }
         
         return this.audioContext && this.enabled;
+    }
+    
+    /**
+     * Retorna o gain node para SFX (com fallback para master)
+     */
+    getSfxGain() {
+        return this.sfxGain || this.masterGain;
     }
     
     /**
@@ -106,11 +216,11 @@ class UISoundSystemClass {
         gain2.gain.linearRampToValueAtTime(0.03, currentTime + 0.005);
         gain2.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.04);
         
-        // Conexões
+        // Conexões - agora usa sfxGain
         osc.connect(gain);
         osc2.connect(gain2);
-        gain.connect(this.masterGain);
-        gain2.connect(this.masterGain);
+        gain.connect(this.sfxGain);
+        gain2.connect(this.sfxGain);
         
         // Play
         osc.start(currentTime);
@@ -169,12 +279,12 @@ class UISoundSystemClass {
         filter.frequency.exponentialRampToValueAtTime(500, currentTime + config.duration);
         filter.Q.value = 1;
         
-        // Conexões
+        // Conexões - agora usa sfxGain
         osc.connect(filter);
         filter.connect(gain);
         noise.connect(noiseGain);
-        gain.connect(this.masterGain);
-        noiseGain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
+        noiseGain.connect(this.sfxGain);
         
         // Play
         osc.start(currentTime);
@@ -217,8 +327,8 @@ class UISoundSystemClass {
         
         osc.connect(gain);
         osc2.connect(gain2);
-        gain.connect(this.masterGain);
-        gain2.connect(this.masterGain);
+        gain.connect(this.sfxGain);
+        gain2.connect(this.sfxGain);
         
         osc.start(currentTime);
         osc2.start(currentTime + 0.05);
@@ -246,7 +356,7 @@ class UISoundSystemClass {
         gain.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.12);
         
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         
         osc.start(currentTime);
         osc.stop(currentTime + 0.15);
@@ -284,8 +394,8 @@ class UISoundSystemClass {
         
         osc1.connect(gain1);
         osc2.connect(gain2);
-        gain1.connect(this.masterGain);
-        gain2.connect(this.masterGain);
+        gain1.connect(this.sfxGain);
+        gain2.connect(this.sfxGain);
         
         osc1.start(currentTime);
         osc2.start(currentTime + 0.04);
@@ -313,7 +423,7 @@ class UISoundSystemClass {
         gain.gain.exponentialRampToValueAtTime(0.001, currentTime + 0.08);
         
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         
         osc.start(currentTime);
         osc.stop(currentTime + 0.1);
@@ -354,7 +464,7 @@ class UISoundSystemClass {
         osc1.connect(filter);
         osc2.connect(filter);
         filter.connect(gain);
-        gain.connect(this.masterGain);
+        gain.connect(this.sfxGain);
         
         osc1.start(currentTime);
         osc2.start(currentTime);
@@ -385,7 +495,7 @@ class UISoundSystemClass {
             gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.02);
             
             osc.connect(gain);
-            gain.connect(this.masterGain);
+            gain.connect(this.sfxGain);
             
             osc.start(startTime);
             osc.stop(startTime + 0.025);

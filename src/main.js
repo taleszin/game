@@ -10,6 +10,24 @@ import { UISoundSystem } from './systems/UISoundSystem.js';
 import { TutorialSystem } from './systems/TutorialSystem.js';
 import './style.css';
 
+// Remove the preload-hide class (added in index.html) as soon as the bundle runs
+function _revealApp() {
+    try {
+        document.documentElement.classList.remove('preload-hide');
+        document.documentElement.classList.add('js-ready');
+        document.body.classList.remove('preload-hide');
+        document.body.classList.add('js-ready');
+    } catch (e) {
+        // ignore if DOM not ready yet
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(_revealApp));
+} else {
+    requestAnimationFrame(_revealApp);
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SISTEMA DE RESOLUÇÃO DINÂMICA
 // Carrega configuração salva e calcula melhor resolução

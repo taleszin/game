@@ -86,7 +86,7 @@ const STEP_CONFIG = {
         type: 'tooltip',
         message: '✓ Primeira criatura criada!',
         subMessage: 'Observe-a no santuário.',
-        autoAdvance: 2000
+        autoAdvance: 4500
     },
     [STEPS.OPEN_LAB_SECOND]: {
         type: 'highlight',
@@ -303,8 +303,9 @@ export class TutorialSystem {
             this.game.events.on('golem-killed', this._onGolemKilled);
         }
         
-        // Delegação de cliques - usa capture para interceptar antes
+        // Delegação de cliques e touch - usa capture para interceptar antes
         document.addEventListener('click', (e) => this._onDocumentClick(e), true);
+        document.addEventListener('touchend', (e) => this._onDocumentClick(e), true);
     }
     
     // ═══════════════════════════════════════════════════════════════════
@@ -748,6 +749,10 @@ export class TutorialSystem {
             this.game.events.off('tool-selected', this._onToolSelected);
             this.game.events.off('golem-killed', this._onGolemKilled);
         }
+        
+        // Remove event listeners de input
+        document.removeEventListener('click', (e) => this._onDocumentClick(e), true);
+        document.removeEventListener('touchend', (e) => this._onDocumentClick(e), true);
         
         // Remove elementos do DOM
         setTimeout(() => {

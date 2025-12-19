@@ -605,6 +605,132 @@ export class StartScene extends Phaser.Scene {
                 margin-top: 12px;
             }
             
+            /* ═══ AUDIO SLIDERS - Bio-Hazard Style ═══ */
+            #settings-modal .audio-section {
+                margin-bottom: 24px;
+            }
+            
+            #settings-modal .audio-control {
+                margin-bottom: 16px;
+            }
+            
+            #settings-modal .audio-control-header {
+                display: flex;
+                align-items: center;
+                margin-bottom: 8px;
+                gap: 8px;
+            }
+            
+            #settings-modal .audio-icon {
+                font-size: 16px;
+                filter: drop-shadow(0 0 4px rgba(0, 255, 255, 0.5));
+            }
+            
+            #settings-modal .audio-name {
+                color: #aaa;
+                font-size: 8px;
+                letter-spacing: 1px;
+                flex: 1;
+            }
+            
+            #settings-modal .audio-value {
+                color: #0ff;
+                font-size: 10px;
+                min-width: 40px;
+                text-align: right;
+                text-shadow: 0 0 8px rgba(0, 255, 255, 0.5);
+            }
+            
+            /* ═══ Range Slider Customizado ═══ */
+            #settings-modal .audio-slider {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 100%;
+                height: 8px;
+                background: rgba(0, 20, 40, 0.8);
+                border: 1px solid rgba(0, 255, 255, 0.3);
+                border-radius: 4px;
+                outline: none;
+                cursor: pointer;
+            }
+            
+            /* Track - WebKit (Chrome, Safari, Edge) */
+            #settings-modal .audio-slider::-webkit-slider-runnable-track {
+                height: 6px;
+                background: linear-gradient(90deg, 
+                    rgba(0, 255, 255, 0.1) 0%, 
+                    rgba(0, 255, 255, 0.3) 100%
+                );
+                border-radius: 3px;
+            }
+            
+            /* Thumb - WebKit */
+            #settings-modal .audio-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 16px;
+                height: 20px;
+                background: linear-gradient(180deg, #0ff 0%, #088 100%);
+                border: 2px solid #0ff;
+                border-radius: 3px;
+                cursor: grab;
+                box-shadow: 
+                    0 0 10px rgba(0, 255, 255, 0.6),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+                margin-top: -7px;
+                transition: box-shadow 0.1s;
+            }
+            
+            #settings-modal .audio-slider::-webkit-slider-thumb:hover {
+                box-shadow: 
+                    0 0 20px rgba(0, 255, 255, 0.8),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+            }
+            
+            #settings-modal .audio-slider::-webkit-slider-thumb:active {
+                cursor: grabbing;
+                background: linear-gradient(180deg, #0ff 0%, #0aa 100%);
+            }
+            
+            /* Track - Firefox */
+            #settings-modal .audio-slider::-moz-range-track {
+                height: 6px;
+                background: linear-gradient(90deg, 
+                    rgba(0, 255, 255, 0.1) 0%, 
+                    rgba(0, 255, 255, 0.3) 100%
+                );
+                border-radius: 3px;
+                border: 1px solid rgba(0, 255, 255, 0.3);
+            }
+            
+            /* Thumb - Firefox */
+            #settings-modal .audio-slider::-moz-range-thumb {
+                width: 14px;
+                height: 18px;
+                background: linear-gradient(180deg, #0ff 0%, #088 100%);
+                border: 2px solid #0ff;
+                border-radius: 3px;
+                cursor: grab;
+                box-shadow: 
+                    0 0 10px rgba(0, 255, 255, 0.6),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            }
+            
+            #settings-modal .audio-slider::-moz-range-thumb:hover {
+                box-shadow: 
+                    0 0 20px rgba(0, 255, 255, 0.8),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+            }
+            
+            /* Progress fill visual (WebKit) */
+            #settings-modal .audio-slider {
+                background: linear-gradient(90deg, 
+                    rgba(0, 255, 255, 0.4) 0%, 
+                    rgba(0, 255, 255, 0.4) var(--progress, 30%), 
+                    rgba(0, 20, 40, 0.8) var(--progress, 30%)
+                );
+            }
+            
             /* ═══ VIDEO BACKGROUND - 1080p com aspect ratio preservado ═══ */
             #intro-video {
                 position: fixed;
@@ -1451,6 +1577,11 @@ export class StartScene extends Phaser.Scene {
         
         const currentResLabel = RESOLUTION_PRESETS.find(r => r.id === this.currentResolution)?.label || 'AUTO';
         
+        // Carrega volumes salvos
+        const savedSettings = JSON.parse(localStorage.getItem('hylomorph_settings') || '{}');
+        const musicVol = savedSettings.musicVolume ?? 0.3;
+        const sfxVol = savedSettings.sfxVolume ?? 0.8;
+        
         this.settingsModal.innerHTML = `
             <div class="settings-panel">
                 <div class="settings-header">
@@ -1458,15 +1589,47 @@ export class StartScene extends Phaser.Scene {
                     <button class="close-settings">✕</button>
                 </div>
                 
+                <!-- ═══ SEÇÃO DE ÁUDIO ═══ -->
+                <div class="settings-section audio-section">
+                    <div class="settings-label">🔊 CONTROLE DE ÁUDIO</div>
+                    
+                    <div class="audio-control">
+                        <div class="audio-control-header">
+                            <span class="audio-icon">🎵</span>
+                            <span class="audio-name">MÚSICA</span>
+                            <span class="audio-value" id="music-value">${Math.round(musicVol * 100)}%</span>
+                        </div>
+                        <input type="range" 
+                               class="audio-slider" 
+                               id="music-slider" 
+                               min="0" max="1" step="0.05" 
+                               value="${musicVol}">
+                    </div>
+                    
+                    <div class="audio-control">
+                        <div class="audio-control-header">
+                            <span class="audio-icon">🔊</span>
+                            <span class="audio-name">EFEITOS (SFX)</span>
+                            <span class="audio-value" id="sfx-value">${Math.round(sfxVol * 100)}%</span>
+                        </div>
+                        <input type="range" 
+                               class="audio-slider" 
+                               id="sfx-slider" 
+                               min="0" max="1" step="0.05" 
+                               value="${sfxVol}">
+                    </div>
+                </div>
+                
+                <!-- ═══ SEÇÃO DE RESOLUÇÃO ═══ -->
                 <div class="settings-section">
-                    <div class="settings-label">RESOLUÇÃO DO JOGO</div>
+                    <div class="settings-label">📺 RESOLUÇÃO DO JOGO</div>
                     <div class="resolution-grid">
                         ${resolutionOptionsHTML}
                     </div>
                 </div>
                 
                 <div class="settings-footer">
-                    <button class="apply-btn">APLICAR E REINICIAR</button>
+                    <button class="apply-btn">APLICAR</button>
                     <div class="current-res">Resolução atual: ${currentResLabel}</div>
                 </div>
             </div>
@@ -1483,6 +1646,53 @@ export class StartScene extends Phaser.Scene {
                 opt.classList.add('selected');
                 this.pendingResolution = opt.dataset.res;
             });
+        });
+        
+        // ═══ AUDIO SLIDERS EVENT LISTENERS ═══
+        const musicSlider = this.settingsModal.querySelector('#music-slider');
+        const sfxSlider = this.settingsModal.querySelector('#sfx-slider');
+        const musicValue = this.settingsModal.querySelector('#music-value');
+        const sfxValue = this.settingsModal.querySelector('#sfx-value');
+        
+        // Função helper para atualizar visual do slider
+        const updateSliderVisual = (slider) => {
+            const percent = parseFloat(slider.value) * 100;
+            slider.style.setProperty('--progress', `${percent}%`);
+        };
+        
+        // Inicializa visual dos sliders
+        updateSliderVisual(musicSlider);
+        updateSliderVisual(sfxSlider);
+        
+        // Música - atualiza em tempo real
+        musicSlider.addEventListener('input', (e) => {
+            const vol = parseFloat(e.target.value);
+            musicValue.textContent = `${Math.round(vol * 100)}%`;
+            updateSliderVisual(e.target);
+            
+            // Aplica em tempo real
+            if (window.uiSounds) {
+                window.uiSounds.setMusicVolume(vol);
+            }
+        });
+        
+        // SFX - atualiza em tempo real
+        sfxSlider.addEventListener('input', (e) => {
+            const vol = parseFloat(e.target.value);
+            sfxValue.textContent = `${Math.round(vol * 100)}%`;
+            updateSliderVisual(e.target);
+            
+            // Aplica em tempo real
+            if (window.uiSounds) {
+                window.uiSounds.setSfxVolume(vol);
+            }
+        });
+        
+        // SFX - toca som de teste ao soltar o slider
+        sfxSlider.addEventListener('change', () => {
+            if (window.uiSounds) {
+                window.uiSounds.playSelect();
+            }
         });
         
         this.settingsModal.querySelector('.apply-btn').addEventListener('click', () => {
@@ -1520,6 +1730,19 @@ export class StartScene extends Phaser.Scene {
      * Aplica configurações e recarrega
      */
     _applySettings() {
+        // Salva volumes de áudio
+        const musicSlider = this.settingsModal.querySelector('#music-slider');
+        const sfxSlider = this.settingsModal.querySelector('#sfx-slider');
+        
+        const musicVol = parseFloat(musicSlider?.value ?? 0.3);
+        const sfxVol = parseFloat(sfxSlider?.value ?? 0.8);
+        
+        this._saveSettings({ 
+            musicVolume: musicVol,
+            sfxVolume: sfxVol
+        });
+        
+        // Verifica se precisa recarregar (mudança de resolução)
         if (this.pendingResolution && this.pendingResolution !== this.currentResolution) {
             this._saveSettings({ resolution: this.pendingResolution });
             // Recarrega a página para aplicar nova resolução
@@ -1662,7 +1885,6 @@ export class StartScene extends Phaser.Scene {
                         <span class="hint-label">VIRE A TELA</span>
                     </div>
                 </div>
-                <div class="hint-tap">TOQUE PARA CONTINUAR</div>
             </div>
         `;
         
@@ -1682,7 +1904,12 @@ export class StartScene extends Phaser.Scene {
                 justify-content: center;
                 font-family: 'Press Start 2P', monospace;
                 animation: fadeIn 0.5s ease-out;
-                cursor: pointer;
+                opacity: 1;
+                transition: opacity 1s ease-out;
+            }
+            
+            #orientation-hint-overlay.fade-out {
+                opacity: 0;
             }
             
             @keyframes fadeIn {
@@ -1745,18 +1972,6 @@ export class StartScene extends Phaser.Scene {
                 text-align: center;
             }
             
-            .hint-tap {
-                font-size: 8px;
-                color: #888;
-                animation: blink 1.5s ease-in-out infinite;
-                margin-top: 20px;
-            }
-            
-            @keyframes blink {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.3; }
-            }
-            
             @media (orientation: landscape) {
                 .hint-item.landscape {
                     opacity: 0.3;
@@ -1770,30 +1985,16 @@ export class StartScene extends Phaser.Scene {
         document.head.appendChild(style);
         document.body.appendChild(hintOverlay);
         
-        // Tap para continuar
-        const continueToLoading = () => {
-            hintOverlay.style.animation = 'fadeOut 0.3s ease-out forwards';
-            
-            // Adiciona keyframe de fadeOut
-            const fadeOutStyle = document.createElement('style');
-            fadeOutStyle.textContent = `
-                @keyframes fadeOut {
-                    from { opacity: 1; }
-                    to { opacity: 0; }
-                }
-            `;
-            document.head.appendChild(fadeOutStyle);
+        // Auto-desaparece após 3 segundos com transição suave
+        setTimeout(() => {
+            hintOverlay.classList.add('fade-out');
             
             setTimeout(() => {
                 hintOverlay.remove();
                 style.remove();
-                fadeOutStyle.remove();
                 callback();
-            }, 300);
-        };
-        
-        hintOverlay.addEventListener('click', continueToLoading, { once: true });
-        hintOverlay.addEventListener('touchstart', continueToLoading, { once: true });
+            }, 1000); // Aguarda a transição de fade out completar (1s)
+        }, 3000); // 3 segundos visível
     }
     
     /**

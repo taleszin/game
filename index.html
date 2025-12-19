@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html class="preload-hide" lang="pt-br">
   <head>
     <meta charset="UTF-8" />
     <!-- Favicon retro minimal (triângulo, quadrado, círculo) -->
@@ -9,6 +9,11 @@
     <link rel="apple-touch-icon" href="./favicon.svg" />
     <meta name="theme-color" content="#000000" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <style>
+            /* Prevent flash of unstyled content until JS/CSS initialize */
+            html.preload-hide, body.preload-hide { visibility: hidden; opacity: 0; }
+            html.js-ready, body.js-ready { visibility: visible; opacity: 1; transition: opacity 180ms linear; }
+        </style>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <title>HYLOMORPH</title>
   </head>
@@ -18,7 +23,6 @@
     <div id="ui-layer">
       <div class="hud-top">
         <h1>HYLOMORPH</h1>
-        <p>Status: Sistema Online</p>
       </div>
       
       <button id="btn-tree" data-name="Arquivo Genético" data-desc="Acessa o Banco de Dados Genômico. Visualize linhagens, mutações e histórico evolutivo de todas as entidades." title="Arquivo Genético"><span class="dna-icon">🧬</span></button>

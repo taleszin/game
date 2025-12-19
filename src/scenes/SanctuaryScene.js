@@ -61,6 +61,9 @@ export default class SanctuaryScene extends Phaser.Scene {
             btnOpenLab.style.display = 'block';
         }
         
+        // ═══ INICIA MÚSICA DE FUNDO ═══
+        this._initBackgroundMusic();
+        
         // ═══ EMITE EVENTO DE UI PRONTA (para zoom controls, etc.) ═══
         this.game.events.emit('ui-ready');
         
@@ -1092,6 +1095,51 @@ export default class SanctuaryScene extends Phaser.Scene {
       
       // ═══ SISTEMA DE ANIMAÇÃO DO BACKGROUND ═══
       this._initBackgroundAnimation(gameWidth, gameHeight);
+  }
+  
+  /**
+   * Inicializa a música de fundo com volume configurável
+   */
+  _initBackgroundMusic() {
+      // Verifica se já existe
+      let bgMusic = document.getElementById('bg-music');
+      
+      if (!bgMusic) {
+          bgMusic = document.createElement('audio');
+          bgMusic.id = 'bg-music';
+          bgMusic.className = 'game-music';
+          bgMusic.src = 'soundtrack.mp3';
+          bgMusic.loop = true;
+          bgMusic.preload = 'auto';
+          document.body.appendChild(bgMusic);
+      }
+      
+      // Carrega volume das configurações
+      const savedSettings = JSON.parse(localStorage.getItem('hylomorph_settings') || '{}');
+      const musicVolume = savedSettings.musicVolume ?? 0.3;
+      
+      bgMusic.volume = musicVolume;
+      
+      // Tenta tocar (pode ser bloqueado por autoplay policy)
+      const playPromise = bgMusic.play();
+      
+      if (playPromise !== undefined) {
+          playPromise.catch(error => {
+              console.log('[SanctuaryScene] Autoplay bloqueado, aguardando interação...');
+              
+              // Listener para tocar após primeira interação
+              const startMusic = () => {
+                  bgMusic.play().catch(() => {});
+                  document.removeEventListener('click', startMusic);
+                  document.removeEventListener('touchstart', startMusic);
+              };
+              
+              document.addEventListener('click', startMusic, { once: true });
+              document.addEventListener('touchstart', startMusic, { once: true });
+          });
+      }
+      
+      console.log(`[SanctuaryScene] 🎵 Música de fundo inicializada (volume: ${Math.round(musicVolume * 100)}%)`);
   }
   
   /**
