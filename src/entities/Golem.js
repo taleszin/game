@@ -40,6 +40,10 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         this.targetScaleX = stats.scaleX ? parseFloat(stats.scaleX) : (stats.scale ? parseFloat(stats.scale) : 1);
         this.targetScaleY = stats.scaleY ? parseFloat(stats.scaleY) : (stats.scale ? parseFloat(stats.scale) : 1);
+        // Sanitiza e limita scales para evitar valores extremos que causam glitches visuais
+        const titanCap = (data?.alchemyMeta && data.alchemyMeta.isTitan) ? 4.0 : 2.0;
+        this.targetScaleX = Phaser.Math.Clamp(Number(this.targetScaleX) || 1, 0.4, titanCap);
+        this.targetScaleY = Phaser.Math.Clamp(Number(this.targetScaleY) || 1, 0.4, titanCap);
         this.targetScale = (this.targetScaleX + this.targetScaleY) / 2;
         
         this.setScale(this.targetScaleX, this.targetScaleY);
@@ -123,7 +127,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.blinkTimer = 0;
         this.isBlinking = false;
 
-        const minFaceScale = 0.6;
+        const minFaceScale = (data?.alchemyMeta && data.alchemyMeta.isTitan) ? 0.9 : 0.6;
         const rawFaceScale = 1 / this.targetScale;
         this.faceScale = Math.max(rawFaceScale, minFaceScale / this.targetScale);
         this.minLineWidth = Math.max(1.5, 2 / this.targetScale);
@@ -232,10 +236,13 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.add(this.graphics);
         this.add(this.faceGraphics);
 
+        // Pulso sutil apenas de escala — evitamos animar alpha para prevenir conflitos que geram "piscadas" em escalas grandes
+        const pulseScale = (this.alchemyMeta && this.alchemyMeta.isTitan) ? 1.12 : 1.05;
+        const pulseDuration = (this.alchemyMeta && this.alchemyMeta.isTitan) ? 1400 : 1000;
         this.pulseTween = scene.tweens.add({
             targets: this.graphics,
-            scaleX: 1.05, scaleY: 1.05, alpha: 0.9,
-            duration: 1000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+            scaleX: pulseScale, scaleY: pulseScale,
+            duration: pulseDuration, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
         });
 
         this.expressionTimer = scene.time.addEvent({
@@ -515,7 +522,7 @@ export default class Golem extends Phaser.GameObjects.Container {
 
             // Pointer move handler (scene-level) - supports rotation even if pointer leaves the golem
             this._pointerMoveHandler = (pointer) => {
-                if (!this.active || this.scene.isPaused) return;
+                if (!this.active || this.scene?.isPaused) return;
                 if (!pointer.isDown) return;
                 if (!this.rotationPending) return;
 
@@ -1821,6 +1828,12 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
     
     updateExpression() {
+        // Guard against scene being destroyed while timers still call this
+        if (!this.scene) {
+            try { if (this.expressionTimer) { this.expressionTimer.remove(); this.expressionTimer = null; } } catch(e){}
+            return;
+        }
+
         if (this.expressionState.action && Date.now() > this.expressionState.actionTimer) {
             this.expressionState.action = null;
         }
@@ -1842,7 +1855,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         if (this.blinkTimer >= blinkInterval) {
             this.isBlinking = true;
-            this.scene.time.delayedCall(100, () => { this.isBlinking = false; });
+            // Use safe access to scene.time in case the scene is removed before delayed call fires
+            this.scene?.time?.delayedCall?.(100, () => { this.isBlinking = false; });
             this.blinkTimer = 0;
         }
 
@@ -1884,15 +1898,18 @@ export default class Golem extends Phaser.GameObjects.Container {
         } 
         // Prioridade 2: Mouse Idle (Olhar casual se estiver perto)
         else {
-            const pointer = this.scene.input.activePointer;
-            // Verifica se o mouse moveu recentemente para não travar em posição morta
-            const isActive = (Date.now() - pointer.moveTime < 3000) || pointer.isDown;
-            
-            if (isActive) {
-                const dist = Phaser.Math.Distance.Between(this.x, this.y, pointer.worldX, pointer.worldY);
-                if (dist < 250) { // Raio de visão casual
-                    lookTarget = { x: pointer.worldX, y: pointer.worldY };
-                    lookIntensity = Math.max(0, 1 - (dist / 250)); // Foco diminui com distância
+            // Safety: scene or input may be undefined during teardown; guard access
+            if (this.scene && this.scene.input && this.scene.input.activePointer) {
+                const pointer = this.scene.input.activePointer;
+                // Verifica se o mouse moveu recentemente para não travar em posição morta
+                const isActive = (Date.now() - (pointer.moveTime || 0) < 3000) || pointer.isDown;
+                
+                if (isActive) {
+                    const dist = Phaser.Math.Distance.Between(this.x, this.y, pointer.worldX || 0, pointer.worldY || 0);
+                    if (dist < 250) { // Raio de visão casual
+                        lookTarget = { x: pointer.worldX, y: pointer.worldY };
+                        lookIntensity = Math.max(0, 1 - (dist / 250)); // Foco diminui com distância
+                    }
                 }
             }
             
@@ -2340,6 +2357,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         // Periodic munch sound and particle bursts (tighter rhythm while chewing)
         if (!this.eatingAudioEvent && this.scene) {
             this.eatingAudioEvent = this.scene.time.addEvent({ delay: 160, loop: true, callback: () => {
+                // Guard against scene being removed while timers still run
+                if (!this.scene) { try { if (this.eatingAudioEvent) { this.eatingAudioEvent.remove(); this.eatingAudioEvent = null; } } catch(e) {} return; }
                 try { this.playMunchSound(); } catch(e) {}
                 try { if (this.munchEmitter) this.munchEmitter.explode(3, this.x, this.y + (14 * (this.faceScale || 1))); } catch(e) {}
             }});
@@ -2371,7 +2390,12 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.setScale(this.targetScaleX * this.currentScale, this.targetScaleY * this.currentScale);
         this._lastVelocity = { x: 0, y: 0 };
         this.lifeTimer = this.scene.time.addEvent({ delay: 100, loop: true, callback: () => {
-            if (this.scene.isPaused) {
+            // If scene was destroyed/cleared, stop this timer and bail out
+            if (!this.scene) {
+                try { if (this.lifeTimer) { this.lifeTimer.remove(); this.lifeTimer = null; } } catch(e) {}
+                return;
+            }
+            if (this.scene?.isPaused) {
                 if (this.body && this.body.velocity) {
                     if (this.body.velocity.x !== 0 || this.body.velocity.y !== 0) {
                         this._lastVelocity = { x: this.body.velocity.x, y: this.body.velocity.y };
@@ -2453,7 +2477,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         } else {
             this.lifePhase = 'old';
             const ageProgress = (agePct - 0.8) / 0.2; 
-            if (!this.scene.isPaused) {
+            if (!this.scene?.isPaused) {
                 const slowdownFactor = Phaser.Math.Linear(1.0, 0.5, ageProgress);
                 if (this.body && this.baseSpeed) {
                     const currentSpeed = this.body.velocity.length();
@@ -2469,14 +2493,14 @@ export default class Golem extends Phaser.GameObjects.Container {
             if (this.emitter) {
                 this.emitter.setAlpha(Phaser.Math.Linear(1.0, 0.3, ageProgress));
             }
-            if (this.pulseTween && ageProgress > 0.5 && !this.scene.isPaused) {
+            if (this.pulseTween && ageProgress > 0.5 && !this.scene?.isPaused) {
                 this.pulseTween.timeScale = 0.6 + Math.random() * 0.4; 
             }
             if (ageProgress > 0.7 && !this.hasSpokenDying) {
                 this.hasSpokenDying = true;
                 this.expressionState.mood = 'dying';
                 this.drawFace();
-                if (Math.random() < 0.5 && !this.scene.isPaused) {
+                if (Math.random() < 0.5 && !this.scene?.isPaused) {
                     this.scene.time.delayedCall(500, () => this.speakContextual('dying'));
                 }
             }
@@ -2615,6 +2639,9 @@ export default class Golem extends Phaser.GameObjects.Container {
         // Apenas golems 'old' não podem reproduzir; recém-nascidos agora podem participar
         if (other.lifePhase === 'old' || this.lifePhase === 'old') return false;
         if (other.isFrozen || this.isFrozen) return false;
+
+        // Titãs não podem reproduzir — regra explícita para prevenir superpopulação
+        if ((this.alchemyMeta && this.alchemyMeta.isTitan) || (other.alchemyMeta && other.alchemyMeta.isTitan)) return false;
         
         // Física oposta = NÃO PODE (são inimigos)
         const PHYSICS_OPPOSITES = {
@@ -2662,7 +2689,7 @@ export default class Golem extends Phaser.GameObjects.Container {
      */
     updateAutonomousBehavior() {
         if (!this.active || this.isFrozen || this.isDragging || !this.scene) return;
-        if (this.scene.isPaused) return;
+        if (this.scene?.isPaused) return;
         
         // Decrementa cooldowns (2000ms por ciclo)
         const dt = 2000;
@@ -3027,9 +3054,26 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.expressionState.action = null;
         this.drawFace();
         this.addLifeEvent('died', 'Fim do ciclo - dados perdidos');
-        const msg = this.scene.add.text(this.x, this.y - 50, "DADOS PERDIDOS", { fontFamily: '"Press Start 2P"', fontSize: '6px', fill: '#ff0000' }).setOrigin(0.5);
-        this.scene.tweens.add({ targets: msg, y: this.y - 80, alpha: 0, duration: 2000 });
-        this.scene.tweens.add({ targets: this, alpha: 0, scale: 0.1, duration: 1000, onComplete: () => { msg.destroy(); if (this.emitter) this.emitter.destroy(); if (this.faceGraphics) this.faceGraphics.destroy(); this.destroy(); } });
+        if (this.scene) {
+            try {
+                const msg = this.scene.add.text(this.x, this.y - 50, "DADOS PERDIDOS", { fontFamily: '"Press Start 2P"', fontSize: '6px', fill: '#ff0000' }).setOrigin(0.5);
+                this.scene.tweens.add({ targets: msg, y: this.y - 80, alpha: 0, duration: 2000, onComplete: () => { try { msg.destroy(); } catch(e){} } });
+            } catch(e) { /* ignore */ }
+
+            try {
+                this.scene.tweens.add({ targets: this, alpha: 0, scale: 0.1, duration: 1000, onComplete: () => { try { if (this.emitter) this.emitter.destroy(); } catch(e){} try { if (this.faceGraphics) this.faceGraphics.destroy(); } catch(e){} try { this.destroy(); } catch(e){} } });
+            } catch(e) {
+                // fallback cleanup
+                try { if (this.emitter) this.emitter.destroy(); } catch(e){}
+                try { if (this.faceGraphics) this.faceGraphics.destroy(); } catch(e){}
+                try { this.destroy(); } catch(e){}
+            }
+        } else {
+            // Scene missing - quick cleanup
+            try { if (this.emitter) this.emitter.destroy(); } catch(e){}
+            try { if (this.faceGraphics) this.faceGraphics.destroy(); } catch(e){}
+            try { this.destroy(); } catch(e){}
+        }
     }
 
     setBreedingExpression() {

@@ -458,8 +458,8 @@ export default class SanctuaryScene extends Phaser.Scene {
       const duration = 3000;
       const startTime = Date.now();
       const pullStrength = 150;
-      const pullRadius = 200;
-      const captureRadius = 50; // dentro disso é 'capturado' para fusão
+      const pullRadius = Math.round(200 * 1.2); // 20% maior
+      const captureRadius = Math.round(50 * 1.2); // 20% maior, mais permissivo para capturas
       const captured = [];
       let merging = false;
       
@@ -516,10 +516,13 @@ export default class SanctuaryScene extends Phaser.Scene {
                       // Se atingirmos 5 capturados, iniciamos a fusão imediatamente
                       if (captured.length >= 5 && !merging) {
                           merging = true;
+                          // Evita spawns duplicados entre chamadas simultâneas
+                          if (this._titanSpawnLock) return;
+                          this._titanSpawnLock = true;
                           // cancelar o gravidade imediatamente
                           try { gravityEvent.remove(false); } catch(e) {}
-                          // inicia efeito de fusão
-                          this._createTitanFromCaptured(captured.slice(), x, y);
+                          // inicia efeito de fusão (libera lock ao terminar)
+                          this._createTitanFromCaptured(captured.slice(), x, y).finally(() => { try { this._titanSpawnLock = false; } catch(e) {} });
                           return; // sai do loop
                       }
                   }
@@ -565,6 +568,7 @@ export default class SanctuaryScene extends Phaser.Scene {
   // TITAN MERGING: cria um Golem Titã quando vários golems são sugados pelo buraco negro
   // ═══════════════════════════════════════════════════════════════════════════
   async _createTitanFromCaptured(capturedList, x, y) {
+      console.log('[Singularity] Starting Titan merge for', (capturedList || []).length, 'golems at', x, y);
       try {
           // Visual: coleção de partículas e implosão
           const mergeRing = this.add.circle(x, y, 8, 0xffffff).setDepth(80);
@@ -594,26 +598,107 @@ export default class SanctuaryScene extends Phaser.Scene {
 
           // Amplifica características para tornar um Titã
           const count = capturedList.length;
-          const titanScaleFactor = Math.min(2.5, 1.6 + (count - 2) * 0.25); // grows with number of contributors
+          // Titan growth is now more aggressive so titans feel imposing
+          const titanScaleFactor = Math.min(4.0, 2.0 + (count - 2) * 0.8);
+
           if (!mergedData.aiData) mergedData.aiData = { stats: {} };
           mergedData.aiData.stats = mergedData.aiData.stats || {};
-          mergedData.aiData.stats.scaleX = (parseFloat(mergedData.aiData.stats.scaleX || mergedData.aiData.stats.scale || 1) * titanScaleFactor);
-          mergedData.aiData.stats.scaleY = (parseFloat(mergedData.aiData.stats.scaleY || mergedData.aiData.stats.scale || 1) * titanScaleFactor);
+
+          const rawSX = parseFloat(mergedData.aiData.stats.scaleX || mergedData.aiData.stats.scale || 1) || 1;
+          const rawSY = parseFloat(mergedData.aiData.stats.scaleY || mergedData.aiData.stats.scale || 1) || 1;
+
+          // Allow big Titans (caps increased)
+          mergedData.aiData.stats.scaleX = Phaser.Math.Clamp(rawSX * titanScaleFactor, 0.8, 6.0);
+          mergedData.aiData.stats.scaleY = Phaser.Math.Clamp(rawSY * titanScaleFactor, 0.8, 6.0);
+          mergedData.aiData.stats.scale = ((mergedData.aiData.stats.scaleX + mergedData.aiData.stats.scaleY) / 2) || titanScaleFactor;
+
+          // Lifespan / toughness boost so Titans feel substantial
+          if (mergedData.aiData.stats.lifespan) mergedData.aiData.stats.lifespan = Math.round(mergedData.aiData.stats.lifespan * 1.8);
+
           mergedData.alchemyMeta = mergedData.alchemyMeta || {};
           mergedData.alchemyMeta.isTitan = true;
           mergedData.parents = capturedList.map(g => g.id || g.nameText?.text || null);
+
+          // Ensure Titans cannot breed — set a hard limit and flag
+          mergedData.aiData = mergedData.aiData || { stats: {} };
+          mergedData.aiData.stats.maxBreeds = 0;
+          mergedData.__isTitan = true;
+
+          // Visual merge: average colors, mix face genes and create a small palette
+          mergedData.visualDNA = mergedData.visualDNA || {};
+          const collectColors = (prop) => {
+              const vals = capturedList.map(g => g.visualDNA?.[prop]).filter(v => v != null);
+              if (!vals || vals.length === 0) return mergedData.visualDNA?.[prop] || 0xffffff;
+              let r = 0, gg = 0, b = 0;
+              for (const v of vals) {
+                  const c = Phaser.Display.Color.IntegerToRGB(v);
+                  r += c.r; gg += c.g; b += c.b;
+              }
+              r = Math.round(r / vals.length); gg = Math.round(gg / vals.length); b = Math.round(b / vals.length);
+              return Phaser.Display.Color.GetColor(r, gg, b);
+          };
+          mergedData.visualDNA.bodyColor = collectColors('bodyColor');
+          mergedData.visualDNA.detailColor = collectColors('detailColor');
+          mergedData.visualDNA.auraColor = collectColors('auraColor');
+          mergedData.visualDNA.eyeColor = collectColors('eyeColor');
+
+          // Palette for particles/aura: up to 3 distinct colors from contributors
+          const paletteSet = new Set();
+          for (const g of capturedList) {
+              if (g.visualDNA?.bodyColor) paletteSet.add(g.visualDNA.bodyColor);
+              if (g.visualDNA?.detailColor) paletteSet.add(g.visualDNA.detailColor);
+              if (g.visualDNA?.auraColor) paletteSet.add(g.visualDNA.auraColor);
+              if (paletteSet.size >= 3) break;
+          }
+          mergedData.visualDNA.palette = Array.from(paletteSet).slice(0, 3);
+
+          // Face genes mixing (sample contributors per key)
+          const faceGenes = {};
+          const keys = new Set();
+          capturedList.forEach(g => { if (g.visualDNA?.faceGenes) Object.keys(g.visualDNA.faceGenes).forEach(k => keys.add(k)); });
+          keys.forEach(k => {
+              const choices = capturedList.map(g => g.visualDNA?.faceGenes?.[k]).filter(v => v !== undefined);
+              if (choices.length) faceGenes[k] = choices[Math.floor(Math.random() * choices.length)];
+          });
+          mergedData.visualDNA.faceGenes = faceGenes;
+
+          // Remove captured golems from group to avoid lingering tweens/side-effects
+          try {
+              for (const g of capturedList) {
+                  try { this.golemsGroup.remove(g, true, true); } catch(e) {}
+              }
+          } catch (e) {}
+
+          // (Spawn deferred until after explosion effects)
+          // We will spawn once after the visual burst to avoid duplicate spawns / early physics interactions.
 
           // Explosion visuals: each small golem bursts into light
           for (const g of capturedList) {
               try {
                   // Sparkles
-                  const sparks = this.add.particles(g.x, g.y, 'pixel', { speed: { min: 50, max: 200 }, scale: { start: 2, end: 0 }, lifespan: 600, blendMode: 'ADD', frequency: -1, quantity: 8 });
-                  sparks.emitParticleAt(g.x, g.y, 16);
+                  const sparks = this.add.particles((g?.x)||x, (g?.y)||y, 'pixel', { speed: { min: 50, max: 200 }, scale: { start: 2, end: 0 }, lifespan: 600, blendMode: 'ADD', frequency: -1, quantity: 8 });
+                  sparks.emitParticleAt((g?.x)||x, (g?.y)||y, 16);
                   // Flash
-                  const flash = this.add.circle(g.x, g.y, 20, 0xffffff, 0.9).setDepth(70);
+                  const flash = this.add.circle((g?.x)||x, (g?.y)||y, 20, 0xffffff, 0.9).setDepth(70);
                   this.tweens.add({ targets: flash, alpha: 0, scale: 1.6, duration: 400, onComplete: () => flash.destroy() });
-                  // Remove golem entity
-                  if (typeof g.kill === 'function') g.kill(); else if (typeof g.die === 'function') g.die(); else { try { g.destroy(); } catch(e) {} }
+
+                  // Safe removal: prefer calling API if scene exists, else destroy directly
+                  if (g) {
+                      try {
+                          if (g.scene && typeof g.kill === 'function') {
+                              g.kill();
+                          } else if (g.scene && typeof g.die === 'function') {
+                              g.die();
+                          } else {
+                              try { g.destroy(); } catch(e) {}
+                          }
+                      } catch(e) {
+                          console.warn('error killing captured golem', e);
+                          try { if (g.destroy) g.destroy(); } catch(e) {}
+                      }
+                      // Ensure removal from group if still present
+                      try { if (this.golemsGroup) this.golemsGroup.remove(g, true, true); } catch(e) {}
+                  }
               } catch (e) { console.warn('error exploding golem', e); }
           }
 
@@ -632,12 +717,82 @@ export default class SanctuaryScene extends Phaser.Scene {
           const ringA = this.add.circle(x, y, 10, 0xffd700, 0.9).setDepth(80);
           this.tweens.add({ targets: ringA, scale: 6, alpha: 0, duration: 600, ease: 'Back.easeOut', onComplete: () => ringA.destroy() });
 
-          // Spawn using existing function (keeps all initialization)
-          this.spawnGolem(x, y, mergedData);
+
+          // Candy-like spawn: simpler, safer implementation
+          const spawned = this.spawnGolem(x, y, mergedData);
+          let peeked = spawned || this.golemsGroup.getChildren().slice(-1)[0];
+
+          if (peeked) {
+              try { peeked.aiData = peeked.aiData || {}; peeked.aiData.talkativeness = 90; peeked.talkativeness = 90; } catch(e){}
+              try { peeked.setPosition(x, y); } catch(e){}
+
+              if (peeked.body) {
+                  try { if (typeof peeked.body.reset === 'function') peeked.body.reset(x, y); } catch(e){}
+                  try { peeked.body.velocity.x = 0; peeked.body.velocity.y = 0; peeked.body.enable = false; } catch(e){}
+              }
+
+              try { peeked.setVisible(true); if (peeked.graphics) peeked.graphics.alpha = 1; if (peeked.faceGraphics) peeked.faceGraphics.alpha = 1; } catch(e){}
+              try { peeked.isFrozen = true; } catch(e){}
+
+              try {
+                  this.tweens.timeline({
+                      targets: peeked,
+                      tweens: [
+                          { scaleX: 0.22, scaleY: 0.22, duration: 1 },
+                          { scaleX: (peeked.targetScaleX || peeked.targetScale || 1) * 1.08, scaleY: (peeked.targetScaleY || peeked.targetScale || 1) * 1.08, duration: 520 },
+                          { scaleX: (peeked.targetScaleX || peeked.targetScale || 1), scaleY: (peeked.targetScaleY || peeked.targetScale || 1), duration: 260, ease: 'Sine.easeInOut' }
+                      ],
+                      onComplete: () => {
+                          if (peeked.body) {
+                              try { if (typeof peeked.body.reset === 'function') peeked.body.reset(x, y); peeked.body.velocity.x = 0; peeked.body.velocity.y = 0; peeked.body.enable = true; } catch(e){}
+                          }
+                          this.time.delayedCall(220, () => { try { peeked.isFrozen = false; } catch(e){} });
+
+                          try {
+                              const repelRadius = 220;
+                              for (const o of this.golemsGroup.getChildren()) {
+                                  if (!o || o === peeked || !o.active) continue;
+                                  const d = Phaser.Math.Distance.Between(o.x, o.y, x, y);
+                                  if (d < repelRadius) {
+                                      const ang = Phaser.Math.Angle.Between(x, y, o.x, o.y);
+                                      const force = 240 * (1 - d / repelRadius);
+                                      if (o.body) { o.body.velocity.x += Math.cos(ang) * force; o.body.velocity.y += Math.sin(ang) * force; }
+                                      else { o.x += Math.cos(ang) * force * 0.06; o.y += Math.sin(ang) * force * 0.06; }
+                                  }
+                              }
+                              try { this.cameras.main.shake(260, 0.008); } catch(e){}
+                          } catch(e){}
+
+                          try {
+                              const colors = mergedData.visualDNA?.palette?.length ? mergedData.visualDNA.palette : [mergedData.visualDNA?.bodyColor || 0xffffff];
+                              const emitters = [];
+                              for (let i=0; i < Math.min(4, colors.length); i++) {
+                                  const tint = colors[i] || colors[0];
+                                  const em = this.add.particles(x, y, 'pixel', { speed: { min: 40, max: 260 }, scale: { start: 3.2, end: 0 }, lifespan: 900, blendMode: 'ADD', tint: tint, frequency: -1, quantity: 8 });
+                                  em.emitParticleAt(x + Phaser.Math.Between(-10, 10), y + Phaser.Math.Between(-10, 10), 8);
+                                  emitters.push(em);
+                              }
+                              this.time.delayedCall(900, () => { try { emitters.forEach(e => e.destroy()); } catch(e){} });
+                          } catch(e){}
+
+                          try { if (peeked.speak) peeked.speak('...EU SOU O TITÃ', 12000); } catch(e){}
+
+                          this.time.delayedCall(300, () => { try { if (Math.abs((peeked.x||0)-x) > 48 || Math.abs((peeked.y||0)-y) > 48) { if (peeked.body && typeof peeked.body.reset === 'function') peeked.body.reset(x, y); peeked.setPosition(x, y); peeked.body.velocity.x = 0; peeked.body.velocity.y = 0; } } catch(e){} });
+                      }
+                  });
+              } catch(e) { console.warn('titan spawn anim error', e); }
+          }
 
           // Small celebratory feedback
           const trophy = this.add.text(x, y - 120, 'TITÃ CRIADA!', { fontFamily: 'Press Start 2P', fontSize: '10px', color: '#ffd700', backgroundColor: '#000' }).setOrigin(0.5);
           this.tweens.add({ targets: trophy, y: y - 160, alpha: 0, duration: 1400, onComplete: () => trophy.destroy() });
+
+          // Cleanup: ensure any residual captured flags are cleared (safety)
+          try {
+              for (const g of capturedList) {
+                  try { if (g && g._capturedBySingularity) g._capturedBySingularity = false; } catch(e) {}
+              }
+          } catch(e) {}
 
       } catch (e) {
           console.error('Error creating Titan', e);
@@ -964,11 +1119,16 @@ export default class SanctuaryScene extends Phaser.Scene {
       // ambiente sem window ou sem tutorial — ignora
     }
 
-    new Golem(this, x, y, spawnData);
+    const spawnedGolem = new Golem(this, x, y, spawnData);
     
     const circle = this.add.circle(x, y, 5);
     circle.setStrokeStyle(2, 0xffffff);
     this.tweens.add({ targets: circle, scale: 8, alpha: 0, duration: 400, onComplete: () => circle.destroy() });
+
+    // Restore previous simulation speed after a short delay to ensure stable initialization
+    setTimeout(() => { try { if (previousSpeed !== undefined && previousSpeed !== null) this.setSimulationSpeed(previousSpeed); } catch(e){} }, 40);
+
+    return spawnedGolem;
   }
 
   // ═══════════════════════════════════════════════════════════════════
