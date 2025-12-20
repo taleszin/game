@@ -236,7 +236,7 @@ export default class SanctuaryScene extends Phaser.Scene {
     
     // === IDLE CHATTER: Golems falam aleatoriamente ===
     this.idleChatterTimer = this.time.addEvent({
-        delay: 8000, // A cada 8 segundos
+        delay: 16000, // A cada 16 segundos (menos poluição visual)
         loop: true,
         callback: () => this.triggerIdleChatter()
     });
@@ -252,8 +252,8 @@ export default class SanctuaryScene extends Phaser.Scene {
       // Escolhe um Golem aleatório
       const randomGolem = golems[Math.floor(Math.random() * golems.length)];
       
-      // 30% de chance de falar (para não ser muito frequente)
-      if (Math.random() < 0.3) {
+      // ~8% de chance de falar para reduzir ainda mais o ruído visual
+      if (Math.random() < 0.08) {
           randomGolem.speakContextual('idle');
       }
   }
@@ -459,31 +459,74 @@ export default class SanctuaryScene extends Phaser.Scene {
       const startTime = Date.now();
       const pullStrength = 150;
       const pullRadius = 200;
+      const captureRadius = 50; // dentro disso é 'capturado' para fusão
+      const captured = [];
+      let merging = false;
       
       const gravityEvent = this.time.addEvent({
           delay: 16,
           repeat: Math.floor(duration / 16),
-          callback: () => {
-              const elapsed = Date.now() - startTime;
-              const progress = elapsed / duration;
-              const currentStrength = pullStrength * (1 - progress * 0.5); // Enfraquece ao longo do tempo
-              
-              const golems = this.golemsGroup.getChildren();
-              for (const golem of golems) {
-                  if (!golem.active || !golem.body) continue;
-                  
-                  const dist = Phaser.Math.Distance.Between(golem.x, golem.y, x, y);
-                  if (dist < pullRadius && dist > 20) {
-                      const angle = Phaser.Math.Angle.Between(golem.x, golem.y, x, y);
-                      const force = currentStrength * (1 - dist / pullRadius);
-                      
-                      golem.body.velocity.x += Math.cos(angle) * force * 0.5;
-                      golem.body.velocity.y += Math.sin(angle) * force * 0.5;
+          callback: () => {}
+      });
+
+      // Define callback separadamente para evitar problemas de parsing/escopo
+      gravityEvent.callback = () => {
+          const elapsed = Date.now() - startTime;
+          const progress = elapsed / duration;
+          const currentStrength = pullStrength * (1 - progress * 0.5); // Enfraquece ao longo do tempo
+          
+          const golems = this.golemsGroup.getChildren();
+          for (const golem of golems) {
+              if (!golem.active || !golem.body) continue;
+               
+              const dist = Phaser.Math.Distance.Between(golem.x, golem.y, x, y);
+              if (dist < pullRadius && dist > 20) {
+                  const angle = Phaser.Math.Angle.Between(golem.x, golem.y, x, y);
+                  const force = currentStrength * (1 - dist / pullRadius);
+                   
+                  golem.body.velocity.x += Math.cos(angle) * force * 0.5;
+                  golem.body.velocity.y += Math.sin(angle) * force * 0.5;
+              }
+
+              // Captura para possível fusão quando muito perto do centro
+              if (!merging && dist <= captureRadius) {
+                  // Evita duplicatas e protege tutorial spawns
+                  if (!captured.includes(golem) && golem.active && !golem._capturedBySingularity) {
+                      golem._capturedBySingularity = true;
+                      captured.push(golem);
+                      // Anima golem sendo sugado para o centro e apagando
+                      this.tweens.add({
+                          targets: golem,
+                          x: x,
+                          y: y,
+                          scaleX: 0.4,
+                          scaleY: 0.4,
+                          alpha: 0.0,
+                          duration: 420,
+                          ease: 'Quad.easeIn',
+                          onComplete: () => {
+                              try { golem.active = false; golem.visible = false; } catch(e) {}
+                          }
+                      });
+
+                      // Pequeno flash/partícula no ponto
+                      const flash = this.add.circle(golem.x, golem.y, 6, 0xffffff, 0.9).setDepth(60);
+                      this.tweens.add({ targets: flash, scale: 3, alpha: 0, duration: 480, onComplete: () => flash.destroy() });
+
+                      // Se atingirmos 5 capturados, iniciamos a fusão imediatamente
+                      if (captured.length >= 5 && !merging) {
+                          merging = true;
+                          // cancelar o gravidade imediatamente
+                          try { gravityEvent.remove(false); } catch(e) {}
+                          // inicia efeito de fusão
+                          this._createTitanFromCaptured(captured.slice(), x, y);
+                          return; // sai do loop
+                      }
                   }
               }
           }
-      });
-      
+      };
+
       // Cleanup após 3 segundos
       this.time.delayedCall(duration, () => {
           this.tweens.add({
@@ -495,9 +538,110 @@ export default class SanctuaryScene extends Phaser.Scene {
                   blackHole.destroy();
                   ring1.destroy();
                   ring2.destroy();
+                  // Se houver capturados mas não houve fusão, 'liberta' os golems de forma divertida
+                  try {
+                      if (captured.length > 0 && !merging) {
+                          for (const g of captured) {
+                              try {
+                                  // revive e empurra para fora com um tween
+                                  g.active = true; g.visible = true; g._capturedBySingularity = false;
+                                  const angle = Phaser.Math.Angle.Between(x, y, g.x, g.y) + (Math.random() - 0.5) * 0.6;
+                                  const pushDist = 120 + Math.random() * 80;
+                                  const tx = x + Math.cos(angle) * pushDist;
+                                  const ty = y + Math.sin(angle) * pushDist;
+                                  this.tweens.add({ targets: g, x: tx, y: ty, alpha: 1, scaleX: g.targetScale || 1, scaleY: g.targetScale || 1, duration: 500, ease: 'Back.easeOut' });
+                              } catch (e) {}
+                          }
+                          // pequenos efeitos de 'boing' e som
+                          try { const ctx = this.sound?.context; if (ctx && ctx.state !== 'suspended') { const now = ctx.currentTime; const o = ctx.createOscillator(); const g = ctx.createGain(); o.type='sine'; o.frequency.setValueAtTime(400, now); o.frequency.exponentialRampToValueAtTime(220, now + 0.15); g.gain.setValueAtTime(0.0, now); g.gain.linearRampToValueAtTime(0.28, now + 0.01); g.gain.exponentialRampToValueAtTime(0.001, now + 0.2); o.connect(g); g.connect(ctx.destination); o.start(now); o.stop(now+0.2);} } catch(e){}
+                      }
+                  } catch (e) { console.warn('release captured error', e); }
               }
           });
       });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TITAN MERGING: cria um Golem Titã quando vários golems são sugados pelo buraco negro
+  // ═══════════════════════════════════════════════════════════════════════════
+  async _createTitanFromCaptured(capturedList, x, y) {
+      try {
+          // Visual: coleção de partículas e implosão
+          const mergeRing = this.add.circle(x, y, 8, 0xffffff).setDepth(80);
+          mergeRing.setStrokeStyle(2, 0xffd700, 0.9);
+          this.tweens.add({ targets: mergeRing, scale: 6, alpha: 0, duration: 600, ease: 'Cubic.easeOut', onComplete: () => mergeRing.destroy() });
+
+          // Play a satisfying merge sound
+          try { if (this.sound && this.sound.context && this.sound.context.state !== 'suspended') {
+              const ctx = this.sound.context; const now = ctx.currentTime;
+              const osc = ctx.createOscillator(); const g = ctx.createGain();
+              osc.type = 'sine'; osc.frequency.setValueAtTime(220, now); osc.frequency.exponentialRampToValueAtTime(440, now + 0.5);
+              g.gain.setValueAtTime(0.0, now); g.gain.linearRampToValueAtTime(0.6, now + 0.02); g.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+              osc.connect(g); g.connect(ctx.destination); osc.start(now); osc.stop(now + 0.6);
+          } } catch (e) {}
+
+          // Collect ids and prepare initial data by iterative breeding
+          // Start from first golem data
+          if (!capturedList || capturedList.length === 0) return;
+          let mergedData = capturedList[0].dataAttributes || capturedList[0].data || {};
+          for (let i = 1; i < capturedList.length; i++) {
+              try {
+                  mergedData = await breedGolemData(mergedData, capturedList[i].dataAttributes || capturedList[i].data || {});
+              } catch (e) {
+                  console.warn('merge step failed', e);
+              }
+          }
+
+          // Amplifica características para tornar um Titã
+          const count = capturedList.length;
+          const titanScaleFactor = Math.min(2.5, 1.6 + (count - 2) * 0.25); // grows with number of contributors
+          if (!mergedData.aiData) mergedData.aiData = { stats: {} };
+          mergedData.aiData.stats = mergedData.aiData.stats || {};
+          mergedData.aiData.stats.scaleX = (parseFloat(mergedData.aiData.stats.scaleX || mergedData.aiData.stats.scale || 1) * titanScaleFactor);
+          mergedData.aiData.stats.scaleY = (parseFloat(mergedData.aiData.stats.scaleY || mergedData.aiData.stats.scale || 1) * titanScaleFactor);
+          mergedData.alchemyMeta = mergedData.alchemyMeta || {};
+          mergedData.alchemyMeta.isTitan = true;
+          mergedData.parents = capturedList.map(g => g.id || g.nameText?.text || null);
+
+          // Explosion visuals: each small golem bursts into light
+          for (const g of capturedList) {
+              try {
+                  // Sparkles
+                  const sparks = this.add.particles(g.x, g.y, 'pixel', { speed: { min: 50, max: 200 }, scale: { start: 2, end: 0 }, lifespan: 600, blendMode: 'ADD', frequency: -1, quantity: 8 });
+                  sparks.emitParticleAt(g.x, g.y, 16);
+                  // Flash
+                  const flash = this.add.circle(g.x, g.y, 20, 0xffffff, 0.9).setDepth(70);
+                  this.tweens.add({ targets: flash, alpha: 0, scale: 1.6, duration: 400, onComplete: () => flash.destroy() });
+                  // Remove golem entity
+                  if (typeof g.kill === 'function') g.kill(); else if (typeof g.die === 'function') g.die(); else { try { g.destroy(); } catch(e) {} }
+              } catch (e) { console.warn('error exploding golem', e); }
+          }
+
+          // Delay breve para deixar os efeitos ocorrerem
+          await new Promise(r => setTimeout(r, 420));
+
+          // Spawn the Titan at position
+          mergedData.forma = mergedData.forma || { id: mergedData.forma?.id || mergedData.biologia?.id || 'mega' };
+          // For titans, ensure scales are in stats for spawn
+          if (!mergedData.aiData) mergedData.aiData = { stats: {} };
+          mergedData.aiData.stats.scale = ((mergedData.aiData.stats.scaleX + mergedData.aiData.stats.scaleY) / 2) || titanScaleFactor;
+
+          // Spawn visual: big flash + ring
+          const bigFlash = this.add.circle(x, y, 40, 0xffffff, 0.95).setDepth(80);
+          this.tweens.add({ targets: bigFlash, scale: 1.6, alpha: 0, duration: 500, ease: 'Cubic.easeOut', onComplete: () => bigFlash.destroy() });
+          const ringA = this.add.circle(x, y, 10, 0xffd700, 0.9).setDepth(80);
+          this.tweens.add({ targets: ringA, scale: 6, alpha: 0, duration: 600, ease: 'Back.easeOut', onComplete: () => ringA.destroy() });
+
+          // Spawn using existing function (keeps all initialization)
+          this.spawnGolem(x, y, mergedData);
+
+          // Small celebratory feedback
+          const trophy = this.add.text(x, y - 120, 'TITÃ CRIADA!', { fontFamily: 'Press Start 2P', fontSize: '10px', color: '#ffd700', backgroundColor: '#000' }).setOrigin(0.5);
+          this.tweens.add({ targets: trophy, y: y - 160, alpha: 0, duration: 1400, onComplete: () => trophy.destroy() });
+
+      } catch (e) {
+          console.error('Error creating Titan', e);
+      }
   }
 
   /**
@@ -516,16 +660,17 @@ export default class SanctuaryScene extends Phaser.Scene {
       // Flash amarelo
       this.cameras.main.flash(100, 255, 255, 0, false);
       
-      // Shake no golem
+      // Shake no golem (tween auxiliar)
       this.tweens.add({
           targets: golem,
           x: golem.x + Phaser.Math.Between(-5, 5),
           duration: 50,
           repeat: 10,
-          yoyo: true
+          yoyo: true,
+          onComplete: () => { try { golem.x = Math.round(golem.x); } catch(e){} }
       });
       
-      // Remove texto
+      // Remove texto com fade
       this.tweens.add({
           targets: lightning,
           y: golem.y - 60,
@@ -661,6 +806,23 @@ export default class SanctuaryScene extends Phaser.Scene {
       const x = (parent1.x + parent2.x) / 2;
       const y = (parent1.y + parent2.y) / 2;
 
+      // Verifica se algum dos pais está 'old' — apenas idosos não podem reproduzir
+      try {
+          const isTutorialCase = (parent1.dataAttributes && parent1.dataAttributes.__tutorialSpawn) || (parent2.dataAttributes && parent2.dataAttributes.__tutorialSpawn) || (window?.tutorial && window.tutorial.isActive);
+          if (!isTutorialCase) {
+              if (parent1.lifePhase === 'old' || parent2.lifePhase === 'old') {
+                  if (parent1.setActionExpression) parent1.setActionExpression('sad', 1000);
+                  if (parent2.setActionExpression) parent2.setActionExpression('sad', 1000);
+                  // Pequeno feedback textual
+                  const info = this.add.text(x, y - 30, 'Não podem reproduzir (idosos)', { fontFamily: 'Arial', fontSize: '8px', fill: '#ffffff', backgroundColor: '#000000' }).setOrigin(0.5);
+                  this.tweens.add({ targets: info, y: y - 60, alpha: 0, duration: 1000, onComplete: () => info.destroy() });
+                  return;
+              }
+          }
+      } catch (e) {
+          // fallback: prossegue se erro
+      }
+
       // Ativa expressão de acasalamento nos pais
       if (parent1.setBreedingExpression) parent1.setBreedingExpression();
       if (parent2.setBreedingExpression) parent2.setBreedingExpression();
@@ -790,7 +952,19 @@ export default class SanctuaryScene extends Phaser.Scene {
       this.setSimulationSpeed(1);
     }
     
-    new Golem(this, x, y, data);
+    // Marca spawns originados durante o tutorial para evitar regras restritivas de reprodução
+    let spawnData = data;
+    try {
+      if (window?.tutorial && window.tutorial.isActive) {
+        // Garante que golems do tutorial falem (para não atrapalhar o passo do FTUE)
+        const forcedAi = Object.assign({}, data?.aiData || {}, { talkativeness: 100 });
+        spawnData = Object.assign({}, data, { __tutorialSpawn: true, aiData: forcedAi });
+      }
+    } catch (e) {
+      // ambiente sem window ou sem tutorial — ignora
+    }
+
+    new Golem(this, x, y, spawnData);
     
     const circle = this.add.circle(x, y, 5);
     circle.setStrokeStyle(2, 0xffffff);

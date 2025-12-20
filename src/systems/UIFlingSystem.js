@@ -545,8 +545,9 @@ export class UIFlingSystem {
         
         // Move clone
         if (this.drag.clone) {
-            const newLeft = point.x - this.drag.offsetX;
-            const newTop = point.y - this.drag.offsetY;
+            const scale = this.drag.uiScale || 1;
+            const newLeft = point.x - (this.drag.offsetX * scale);
+            const newTop = point.y - (this.drag.offsetY * scale);
             this.drag.clone.style.left = `${newLeft}px`;
             this.drag.clone.style.top = `${newTop}px`;
         }
@@ -641,14 +642,21 @@ export class UIFlingSystem {
         const clone = element.cloneNode(true);
         clone.className = element.className + ' ui-drag-clone';
         clone.classList.remove('dragging-source', 'ui-draggable');
+        // Apply initial unscaled position/size and then scale via transform (transform-origin top-left)
         clone.style.left = `${rect.left}px`;
         clone.style.top = `${rect.top}px`;
         clone.style.width = `${rect.width}px`;
         clone.style.height = `${rect.height}px`;
         clone.style.margin = '0';
-        
+        clone.style.transformOrigin = 'top left';
+        const uiScale = this._getUiScale();
+        clone.style.transform = `scale(${uiScale})`;
+        clone.style.willChange = 'transform, left, top';
+
         document.body.appendChild(clone);
         this.drag.clone = clone;
+        // store scale for use while dragging and when launching projectile
+        this.drag.uiScale = uiScale;
     }
     
     _createIndicators() {
@@ -722,6 +730,7 @@ export class UIFlingSystem {
         clone.classList.remove('ui-drag-clone', 'mode-position', 'mode-fling');
         clone.classList.add('ui-projectile');
         
+        const uiScale = this.drag?.uiScale || this._getUiScale();
         const projectile = {
             element: clone,
             originalElement: element,
@@ -729,12 +738,13 @@ export class UIFlingSystem {
             elementData: elementData,
             x: parseFloat(clone.style.left),
             y: parseFloat(clone.style.top),
-            width: originalPos.width,
-            height: originalPos.height,
+            width: originalPos.width * uiScale,
+            height: originalPos.height * uiScale,
             vx: vx,
             vy: vy,
             rotation: 0,
             rotationSpeed: (vx + vy) * 0.01,
+            scale: uiScale,
             isReturning: false,
             trailTimer: 0,
             lifetime: 0,
@@ -750,6 +760,29 @@ export class UIFlingSystem {
             requestAnimationFrame(update);
         };
         update();
+    }
+
+    // Retorna o scale a aplicar a elementos UI para compensar devicePixelRatio
+    // Valores maiores de devicePixelRatio tendem a reduzir o visual dos elementos
+    // Clamp entre 0.6 e 1 para evitar exageros
+    _getUiScale() {
+        try {
+            const dpr = (window && window.devicePixelRatio) ? window.devicePixelRatio : 1;
+            // Caso a cena tenha zoom (raro para UI), podemos considerar também, mas o DOM UI deve respeitar dpr
+            const camZoom = this.scene?.cameras?.main?.zoom || 1;
+            let scale = 1 / Math.max(1, dpr);
+            // Não reduzir abaixo de 0.6 para manter legibilidade
+            if (scale < 0.6) scale = 0.6;
+            if (scale > 1) scale = 1;
+            // Se a câmera estiver com zoom < 1 (ver tudo), não aumentamos UI demais
+            if (camZoom && camZoom > 1) {
+                // diminui ainda mais se a câmera estiver muito próxima
+                scale = Math.max(0.5, scale / camZoom);
+            }
+            return scale;
+        } catch (e) {
+            return 1;
+        }
     }
     
     _updateProjectiles() {
@@ -809,11 +842,11 @@ export class UIFlingSystem {
                     this._createImpact(p.x + p.width / 2, screenH);
                 }
                 
-                // Trail
+                        // Trail
                 p.trailTimer += 16;
                 if (p.trailTimer > this.config.trailInterval) {
                     p.trailTimer = 0;
-                    this._createTrail(p.x + p.width / 2, p.y + p.height / 2);
+                    this._createTrail(p.x + p.width / 2, p.y + p.height / 2, p.scale || 1);
                 }
                 
                 // Colisão com Golems
@@ -830,15 +863,20 @@ export class UIFlingSystem {
             // Atualiza posição visual
             p.element.style.left = `${p.x}px`;
             p.element.style.top = `${p.y}px`;
-            p.element.style.transform = `rotate(${p.rotation}deg)`;
+            // Combine scale (from clone creation) with rotation so projectiles keep the intended size
+            const pScale = typeof p.scale === 'number' ? p.scale : (this.drag?.uiScale || 1);
+            p.element.style.transform = `scale(${pScale}) rotate(${p.rotation}deg)`;
         }
     }
     
-    _createTrail(x, y) {
+    _createTrail(x, y, scale = 1) {
         const particle = document.createElement('div');
         particle.className = 'fling-trail-particle';
-        particle.style.left = `${x - 3}px`;
-        particle.style.top = `${y - 3}px`;
+        const size = Math.max(3, Math.round(6 * scale));
+        particle.style.width = `${size}px`;
+        particle.style.height = `${size}px`;
+        particle.style.left = `${x - size/2}px`;
+        particle.style.top = `${y - size/2}px`;
         document.body.appendChild(particle);
         setTimeout(() => particle.remove(), 350);
     }

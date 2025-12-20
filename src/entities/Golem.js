@@ -187,7 +187,10 @@ export default class Golem extends Phaser.GameObjects.Container {
             attractiveness: 0.5, // Será calculado após setup
             // Limite simples de reprodução por indivíduo para evitar overpopulation
             maxBreeds: 2 + Math.floor(Math.random() * 3), // 2-4 vezes (variação genética)
-            breedCount: 0
+            breedCount: 0,
+            // Vitalidade (percentual) dentro do qual o Golem consegue reproduzir
+            // Golems muito cheios (recém-nascidos) ou muito fracos (idosos) NÃO se reproduzem
+            breedVitalityRange: { min: 0.2, max: 0.9 }
         };
         
         // Calcula após inicialização para evitar erros
@@ -208,6 +211,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         // ═══════════════════════════════════════════════════════════════════
         this.voiceSignature = this.generateVoiceSignature();
         
+        // Probabilidade de falar (0-100). Pode ser definida via data.aiData.talkativeness ou gerada aleatoriamente no nascimento.
+        this.talkativeness = (data?.aiData?.talkativeness != null)
+            ? Phaser.Math.Clamp(Number(data.aiData.talkativeness), 0, 100)
+            : Math.floor(Math.random() * 101);
+
         // ═══════════════════════════════════════════════════════════════════
         // LIP SYNC - Animação de boca durante fala
         // ═══════════════════════════════════════════════════════════════════
@@ -339,23 +347,78 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.on('pointerout', () => { scene.game.events.emit('hide-inspect'); this.graphics.scale = 1; });
             
             this.pokeStartTime = 0;
-            this.on('pointerdown', () => {
+            // Rotation / press gesture state
+            this.isPointerDown = false;
+            this.rotationPending = false; // will be true after a short hold
+            this.isRotating = false; // true while actively rotating
+            this.pointerDownDelayedCall = null;
+            this.rotationStartAngle = 0;
+            this.rotationAnchorAngle = 0;
+            this.targetRotation = this.rotation || 0;
+            this.pointerDownStart = null;
+
+            this.on('pointerdown', (pointer) => {
                 this.pokeStartTime = Date.now();
+                this.isPointerDown = true;
+                this.pointerDownStart = { x: pointer.worldX, y: pointer.worldY };
+
+                // Se segura por mais que 160ms sem iniciar drag, entra em modo de rotação
+                try { if (this.pointerDownDelayedCall) this.pointerDownDelayedCall.remove(); } catch(e) {}
+                this.pointerDownDelayedCall = scene.time.delayedCall(160, () => {
+                    if (!this.isDragging) {
+                        this.rotationPending = true;
+                        // Inicializa estado de rotação baseada no ângulo atual do ponteiro
+                        const anchor = Phaser.Math.Angle.Between(this.x, this.y, pointer.worldX, pointer.worldY);
+                        this.lastPointerAngle = anchor; // usado para calcular deltas incrementais
+                        this.targetRotation = this.rotation; // mantém a rotação atual como base
+                        // Visual feedback: cara de tonto durante rotação
+                        this.setActionExpression('dizzy', 800);
+                    }
+                });
             });
-            this.on('pointerup', () => {
+            this.on('pointerup', (pointer) => {
                 const clickDuration = Date.now() - this.pokeStartTime;
+                // Cleanup delayed call
+                try { if (this.pointerDownDelayedCall) { this.pointerDownDelayedCall.remove(); this.pointerDownDelayedCall = null; } } catch(e) {}
+
+                // If rotation was pending/active, finish rotation (no poke sound)
+                if (this.rotationPending || this.isRotating) {
+                    this.rotationPending = false;
+                    this.isRotating = false;
+                    this.lastPointerAngle = null;
+                    // small wobble to finish
+                    this.scene.tweens.add({ targets: this, rotation: this.targetRotation, duration: 220, ease: 'Sine.easeOut' });
+                    return;
+                }
+
                 if (clickDuration < 200 && !this.isDragging) {
                     this.speakContextual('poke');
                 }
+                this.isPointerDown = false;
             });
             
             this.on('dragstart', () => { 
+                // Cancel any pending rotation when starting a drag (moving the golem)
+                try { if (this.pointerDownDelayedCall) { this.pointerDownDelayedCall.remove(); this.pointerDownDelayedCall = null; } } catch(e) {}
+                this.rotationPending = false;
+                this.isPointerDown = false;
+
                 this.isDragging = true; 
                 this.body.setVelocity(0); 
                 this.alpha = 0.6; 
                 this.pettingActive = true;
                 this.pettingHistory = [];
                 scene.game.events.emit('hide-inspect');
+
+                // Drag trail: remember origin and create graphics
+                try {
+                    this._dragOrigin = { x: this.x, y: this.y };
+                    if (this.dragTrail) { try { this.dragTrail.destroy(); } catch(e) {} }
+                    this.dragTrail = this.scene.add.graphics();
+                    this.dragTrail.setDepth(1200);
+                    this._dragTrailColor = 'red';
+                    this._dragTrailPulse = 0;
+                } catch (e) { console.warn('drag trail init error', e); }
             });
             this.on('drag', (p, x, y) => { 
                 this.x = x; 
@@ -385,6 +448,32 @@ export default class Golem extends Phaser.GameObjects.Container {
                         }
                     }
                 }
+
+                // ═══════════════════════════════════════════════════════════════════
+                // DRAG TRAIL: atualização visual e validação de destino (verde = vai fundir)
+                // ═══════════════════════════════════════════════════════════════════
+                try {
+                    if (this.dragTrail && this._dragOrigin) {
+                        // Procura parceiro compatível e próximo
+                        const others = this.scene.golemsGroup?.getChildren() || [];
+                        let willFuse = false;
+                        let closestMate = null;
+                        let bestDist = Infinity;
+                        const breedDist = 80 * Math.max(this.targetScale, 0.5);
+                        for (const other of others) {
+                            if (other === this || !other.active) continue;
+                            const dist = Phaser.Math.Distance.Between(this.x, this.y, other.x, other.y);
+                            if (dist < bestDist) { bestDist = dist; closestMate = other; }
+                            // Check compatibility quickly
+                            if (dist <= breedDist && this.isCompatibleForBreeding(other)) {
+                                willFuse = true; break;
+                            }
+                        }
+
+                        this._dragTrailColor = willFuse ? 'green' : 'red';
+                        this._updateDragTrail();
+                    }
+                } catch (e) { console.warn('drag trail update error', e); }
             });
             this.on('dragend', () => {
                 this.isDragging = false; 
@@ -399,8 +488,69 @@ export default class Golem extends Phaser.GameObjects.Container {
                          scene.triggerBreeding(this, other); mated = true; break;
                     }
                 }
-                if (!mated) this.startRoaming();
+
+                // If not mated, do a playful slingshot back to origin instead of teleporting
+                try {
+                    if (!mated && this._dragOrigin) {
+                        // perform slingshot return (handles trail cleanup and sounds)
+                        this.slingBackToOrigin(this._dragOrigin.x, this._dragOrigin.y);
+                    } else {
+                        // Fallback: still play an 'oops' if it was an invalid drop at least
+                        if (!mated && this._dragTrailColor === 'red') {
+                            this.playOopsSound();
+                        }
+                        // Cleanup trail gracefully
+                        if (this.dragTrail) {
+                            const g = this.dragTrail;
+                            this.scene.tweens.add({ targets: g, alpha: 0, duration: 220, onComplete: () => { try { g.destroy(); } catch(e) {} } });
+                            this.dragTrail = null;
+                        }
+                        if (!mated) this.startRoaming();
+                    }
+                } catch (e) {
+                    console.warn('slingshot error', e);
+                    if (!mated) this.startRoaming();
+                }
             });
+
+            // Pointer move handler (scene-level) - supports rotation even if pointer leaves the golem
+            this._pointerMoveHandler = (pointer) => {
+                if (!this.active || this.scene.isPaused) return;
+                if (!pointer.isDown) return;
+                if (!this.rotationPending) return;
+
+                // Begin active rotating state
+                this.isRotating = true;
+
+                // Calcula ângulo atual e delta incremental desde o último movimento
+                const newAngle = Phaser.Math.Angle.Between(this.x, this.y, pointer.worldX, pointer.worldY);
+                let last = (typeof this.lastPointerAngle === 'number') ? this.lastPointerAngle : newAngle;
+                let delta = Phaser.Math.Angle.Wrap(newAngle - last);
+
+                // Limita delta por frame para evitar saltos grandes
+                const MAX_DELTA = 0.6; // radianos (~34°) por evento
+                delta = Phaser.Math.Clamp(delta, -MAX_DELTA, MAX_DELTA);
+
+                // Aplica rotação incremental diretamente na targetRotation
+                this.targetRotation = Phaser.Math.Angle.Wrap((typeof this.targetRotation === 'number' ? this.targetRotation : this.rotation) + delta);
+
+                // Atualiza o último ângulo do ponteiro
+                this.lastPointerAngle = newAngle;
+
+                // Refresh dizzy expression while rotating
+                this.setActionExpression('dizzy', 600);
+            };
+            scene.input.on('pointermove', this._pointerMoveHandler);
+
+            // Smoothly interpolate rotation towards target on each frame
+            this._rotationUpdate = (time, dt) => {
+                if (!this.active) return;
+                if (typeof this.targetRotation !== 'number') return;
+                // dt is ms; compute step as radians per frame
+                const maxStep = 0.12 * (dt / 16);
+                this.rotation = Phaser.Math.Angle.RotateTo(this.rotation, this.targetRotation, maxStep);
+            };
+            scene.events.on('update', this._rotationUpdate);
             
             this.toolDragMoveHandler = (data) => {
                 if (!this.active || this.isDragging) return;
@@ -418,7 +568,7 @@ export default class Golem extends Phaser.GameObjects.Container {
             // ═══════════════════════════════════════════════════════════════════
             this.socialResponseCooldown = 0; // Cooldown para evitar spam de respostas
             this.SOCIAL_RESPONSE_RADIUS = 150; // Distância máxima para "ouvir"
-            this.SOCIAL_RESPONSE_CHANCE = 0.30; // 30% de chance de responder
+            this.SOCIAL_RESPONSE_CHANCE = 0.08; // 8% de chance de responder (reduzido para melhor UX)
             
             this.golemSpokeHandler = (eventData) => {
                 // Não responde a si mesmo
@@ -455,9 +605,9 @@ export default class Golem extends Phaser.GameObjects.Container {
                     this.speakSocialResponse(eventData.physicsId);
                 });
                 
-                // Ativa cooldown de 5 segundos para evitar spam
-                this.socialResponseCooldown = 5000;
-                scene.time.delayedCall(5000, () => {
+                // Ativa cooldown maior (10s) para evitar spam
+                this.socialResponseCooldown = 10000;
+                scene.time.delayedCall(10000, () => {
                     this.socialResponseCooldown = 0;
                 });
             };
@@ -1657,7 +1807,7 @@ export default class Golem extends Phaser.GameObjects.Container {
      */
     setExpression(expression, duration = 2000) {
         // Se for uma action expression (angry, breed, etc), usa o sistema de action
-        const actionExpressions = ['angry', 'breed', 'mutate', 'born', 'feed', 'begging', 'panic', 'burn', 'freeze', 'love', 'hurt'];
+        const actionExpressions = ['angry', 'breed', 'mutate', 'born', 'feed', 'begging', 'panic', 'burn', 'freeze', 'love', 'hurt', 'dizzy'];
         
         if (actionExpressions.includes(expression)) {
             this.setActionExpression(expression, duration);
@@ -2462,7 +2612,8 @@ export default class Golem extends Phaser.GameObjects.Container {
      */
     isCompatibleForBreeding(other) {
         if (!other || !other.active || other === this) return false;
-        if (other.lifePhase === 'child' || this.lifePhase === 'child') return false; // Crianças não
+        // Apenas golems 'old' não podem reproduzir; recém-nascidos agora podem participar
+        if (other.lifePhase === 'old' || this.lifePhase === 'old') return false;
         if (other.isFrozen || this.isFrozen) return false;
         
         // Física oposta = NÃO PODE (são inimigos)
@@ -2474,7 +2625,9 @@ export default class Golem extends Phaser.GameObjects.Container {
         const isOpposite = PHYSICS_OPPOSITES[this.currentPhysics] === other.currentPhysics;
         
         // Se são opostos físicos, não podem reproduzir (são inimigos!)
-        if (isOpposite) return false;
+        if (isOpposite) return false; // qualquer não-inimigo pode tentar
+        
+        // Removida restrição de vitalidade — apenas 'old' bloqueia a reprodução agora.
         
         // Qualquer outro par pode tentar reproduzir
         // Bônus de compatibilidade (para log/debug) mas não bloqueia
@@ -2568,10 +2721,11 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
         
         // Prioridade 2: Cortejo (energia alta, adulto)
-        const vitalityPct = this.vitality / this.maxVitality;
         const canBreed = this.autonomy.cooldowns.breeding <= 0 && (this.scene.globalBreedingCooldown || 0) <= 0;
         
-        if (closestMate && vitalityPct > 0.5 && canBreed) { // Reduzido de 0.7 para 0.5
+        // Não permite cortejo apenas se algum dos dois for 'old' (exceto no tutorial)
+        const isTutorialCase = (this.dataAttributes && this.dataAttributes.__tutorialSpawn) || (typeof window !== 'undefined' && window.tutorial && window.tutorial.isActive);
+        if (closestMate && (isTutorialCase || (this.lifePhase !== 'old' && closestMate.lifePhase !== 'old')) && canBreed) {
             // Probabilidade aumentada: attractiveness * 0.7 (era * 0.5)
             const courtChance = this.autonomy.attractiveness * 0.7;
             const roll = Math.random();
@@ -2604,9 +2758,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         // Fala de cortejo
         if (this.autonomy.cooldowns.socialSpeak <= 0) {
             this.speakContextual('courting');
-            this.autonomy.cooldowns.socialSpeak = 8000;
+            this.autonomy.cooldowns.socialSpeak = 12000; // mais tempo entre falas
         }
-        
         // Move em direção ao parceiro
         const angle = Phaser.Math.Angle.Between(this.x, this.y, target.x, target.y);
         const speed = this.baseSpeed * 1.5; // Mais rápido para chegar logo
@@ -2669,7 +2822,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         // Fala de combate
         if (this.autonomy.cooldowns.socialSpeak <= 0) {
             this.speakContextual('combat_start');
-            this.autonomy.cooldowns.socialSpeak = 5000;
+            this.autonomy.cooldowns.socialSpeak = 10000; // reduzir frequência de falas em combate
         }
         
         // Bump Attack! Acelera em direção ao inimigo
@@ -2855,16 +3008,21 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.typewriterEvent = null;
         this.speechFadeTimer = null;
         this.speechUpdateEvent = null;
+        // Remove trail se existir
+        try { if (this.dragTrail) { this.dragTrail.destroy(); this.dragTrail = null; } } catch(e) {}
         
         // Ensure we stop any in-progress eating/feeding animation
         try { this.stopEatingAnimation(); } catch(e) { }
         // Detach event handlers
         try { if (this.scene && this.toolDragMoveHandler) this.scene.game.events.off('tool-drag-move', this.toolDragMoveHandler); } catch(e) {}
         try { if (this.scene && this.toolDragEndHandler) this.scene.game.events.off('tool-drag-end', this.toolDragEndHandler); } catch(e) {}
+        // Remove pointermove and update handlers we added
+        try { if (this.scene && this._pointerMoveHandler) this.scene.input.off('pointermove', this._pointerMoveHandler); } catch(e) {}
+        try { if (this.scene && this._rotationUpdate) this.scene.events.off('update', this._rotationUpdate); } catch(e) {}
         // Remove social listener
         try { if (this.scene && this.golemSpokeHandler) this.scene.events.off('golem-spoke', this.golemSpokeHandler); } catch(e) {}
         this.isSpeaking = false;
-        this.speechQueue = [];
+        this.speechQueue = []; 
         this.expressionState.mood = 'dead';
         this.expressionState.action = null;
         this.drawFace();
@@ -2929,7 +3087,7 @@ export default class Golem extends Phaser.GameObjects.Container {
         osc.frequency.setValueAtTime(pitchVariation, now);
         const gainNode = ctx.createGain();
         gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.3, now + 0.01);  
+        gainNode.gain.linearRampToValueAtTime(0.6, now + 0.01);  // aumentado para voz mais alta
         gainNode.gain.linearRampToValueAtTime(0, now + 0.06);    
         osc.connect(gainNode);
         gainNode.connect(this.masterGain);
@@ -2980,8 +3138,8 @@ export default class Golem extends Phaser.GameObjects.Container {
         
         const gainNode = ctx.createGain();
         gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.25, now + 0.008);  
-        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.05); 
+        gainNode.gain.linearRampToValueAtTime(0.5, now + 0.008);  // aumento de volume
+        gainNode.gain.exponentialRampToValueAtTime(0.02, now + 0.05); 
         osc.connect(gainNode);
         gainNode.connect(this.masterGain);
         osc.start(now);
@@ -3013,6 +3171,165 @@ export default class Golem extends Phaser.GameObjects.Container {
         gainNode.connect(this.masterGain);
         osc.start(now);
         osc.stop(now + 0.12);
+    }
+
+    // Drag trail: draw dotted/gummy line between drag origin and current position
+    _updateDragTrail() {
+        if (!this.dragTrail || !this._dragOrigin) return;
+        try {
+            const g = this.dragTrail;
+            g.clear();
+            const color = (this._dragTrailColor === 'green') ? 0x00ff88 : 0xff4444;
+            const alpha = (this._dragTrailColor === 'green') ? 0.95 : 0.85;
+
+            // Draw origin blob
+            g.fillStyle(color, 0.8);
+            g.fillCircle(this._dragOrigin.x, this._dragOrigin.y - 10, 6);
+
+            // Dotted / goo line: place small circles along the line
+            const dx = this.x - this._dragOrigin.x;
+            const dy = this.y - this._dragOrigin.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const step = 14; // spacing between dots
+            const count = Math.max(2, Math.floor(dist / step));
+            for (let i = 1; i <= count; i++) {
+                const t = i / (count + 1);
+                const nx = this._dragOrigin.x + dx * t;
+                const ny = this._dragOrigin.y + dy * t;
+                const size = 3 + Math.sin((t + (Date.now() / 300)) * Math.PI * 2) * 1.2;
+                g.fillStyle(color, alpha * (0.7 + 0.3 * (1 - Math.abs(0.5 - t) * 2)));
+                g.fillCircle(nx, ny, Math.abs(size));
+            }
+
+            // Tip blob at current position
+            g.fillStyle(color, 1);
+            g.fillCircle(this.x, this.y - 10, 6);
+
+            // Outline around potential mate if green
+            if (this._dragTrailColor === 'green') {
+                g.lineStyle(2, 0xffffff, 0.6);
+                g.strokeCircle(this.x, this.y - 10, 10);
+            }
+        } catch (e) {
+            console.warn('dragTrail draw error', e);
+        }
+    }
+
+    _clearDragTrail() {
+        try {
+            if (this.dragTrail) {
+                try { this.dragTrail.destroy(); } catch(e) {}
+                this.dragTrail = null;
+            }
+            this._dragOrigin = null;
+            this._dragTrailColor = null;
+        } catch (e) {}
+    }
+
+    // Humorous 'oops' sound when dropping in invalid spot
+    playOopsSound() {
+        this.initAudio();
+        if (!this.audioContext) return;
+        if (this.audioContext.state === 'suspended') this.audioContext.resume();
+
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+
+        // Slide whistle style: quick glide + soft pitch bend
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(900, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.22);
+
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.0, now);
+        gain.gain.linearRampToValueAtTime(0.28, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(now);
+        osc.stop(now + 0.26);
+
+        // Small playful noise 'slip' using triangle at end
+        const osc2 = ctx.createOscillator();
+        const g2 = ctx.createGain();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(240, now + 0.12);
+        g2.gain.setValueAtTime(0.06, now + 0.12);
+        g2.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        osc2.connect(g2); g2.connect(this.masterGain);
+        osc2.start(now + 0.12); osc2.stop(now + 0.28);
+    }
+
+    // Fun slingshot sound for playful return
+    playSlingshotSound() {
+        this.initAudio();
+        if (!this.audioContext) return;
+        if (this.audioContext.state === 'suspended') this.audioContext.resume();
+        const ctx = this.audioContext;
+        const now = ctx.currentTime;
+        // Short boing: quick up then settle
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(560, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.18);
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.0, now);
+        gain.gain.linearRampToValueAtTime(0.36, now + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+        osc.connect(gain); gain.connect(this.masterGain);
+        osc.start(now); osc.stop(now + 0.25);
+    }
+
+    // Slingshot back to origin with overshoot and oscillation
+    slingBackToOrigin(ox, oy) {
+        if (!this.scene) { this.startRoaming(); return; }
+        // If origin not provided, fallback
+        if (typeof ox !== 'number' || typeof oy !== 'number') { this.startRoaming(); return; }
+
+        // Disable physics while tweening
+        try { if (this.body) { this.body.setVelocity(0); this.body.enable = false; } } catch(e) {}
+
+        const cx = this.x; const cy = this.y;
+        const vx = ox - cx; const vy = oy - cy;
+        const overshootFactor = 0.25;
+        const targetX = ox + vx * overshootFactor;
+        const targetY = oy + vy * overshootFactor;
+
+        // Play slingshot sound
+        try { this.playSlingshotSound(); } catch(e) {}
+
+        // Main swoop with Back.Out for overshoot
+        this.scene.tweens.add({
+            targets: this,
+            x: targetX, y: targetY,
+            duration: 480,
+            ease: 'Back.easeOut',
+            onUpdate: () => {
+                // update drag trail too for visual continuity
+                if (this.dragTrail) this._updateDragTrail();
+            },
+            onComplete: () => {
+                // Small settle oscillation using yoyo repeats
+                this.scene.tweens.add({
+                    targets: this,
+                    x: ox, y: oy,
+                    duration: 360,
+                    ease: 'Sine.easeOut',
+                    yoyo: true,
+                    repeat: 2,
+                    onComplete: () => {
+                        // re-enable physics and resume roaming
+                        try { if (this.body) { this.body.enable = true; } } catch(e) {}
+                        // If last trail color was red, play oops at end for clarity
+                        try { if (this._dragTrailColor === 'red') { this.playOopsSound(); } } catch(e) {}
+                        this._clearDragTrail();
+                        this.startRoaming();
+                    }
+                });
+            }
+        });
     }
 
     /**
@@ -3056,7 +3373,7 @@ export default class Golem extends Phaser.GameObjects.Container {
     speak(text) {
         if (!text) return;
         if (this.isSpeaking) {
-            if (this.speechQueue.length < 3) {
+            if (this.speechQueue.length < 1) {
                 this.speechQueue.push(text);
             }
             return;
@@ -3329,6 +3646,21 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
 
     speakContextual(context) {
+        // Não falar durante rotação para reduzir poluição visual
+        if (this.rotationPending || this.isRotating) return;
+
+        // Chance de falar controlada por `talkativeness` (0..100)
+        // Quanto maior o valor, mais provável que o Golem fale; caso contrário, suprime para reduzir ruído visual.
+        try {
+            const chance = Phaser.Math.Clamp(Number(this.talkativeness ?? 0), 0, 100);
+            if (Math.random() * 100 > chance) {
+                // Suprimido por baixa verbalidade
+                return;
+            }
+        } catch (e) {
+            // Se algo der errado, prossegue normalmente
+        }
+
         import('../services/MockAiService.js').then(({ generateDialogue }) => {
             const phrase = generateDialogue(this.dataAttributes, context);
             this.speak(phrase);
@@ -3432,6 +3764,23 @@ export default class Golem extends Phaser.GameObjects.Container {
                 g.arc(-2*s, 8*s, 4*s, -Math.PI/2, Math.PI/2);
                 g.strokePath();
                 break;
+
+            case 'dizzy':
+                // Pequenos espirais/estrelas nas áreas dos olhos para indicar tontura/rotação
+                const spin = (Date.now() / 240) % (Math.PI * 2);
+                const spiralRadius = 4 * s;
+                g.lineStyle(1.2 * s, this.visualDNA.detailColor || 0xffffff, 1);
+                for (let i = 0; i < 2; i++) {
+                    const ex = (i === 0 ? -8 : 8) * s;
+                    // Desenha 3 pequenos pontos em arco rotacionando
+                    for (let a = 0; a < Math.PI * 2; a += Math.PI / 1.5) {
+                        const r = 1.5 * s + Math.sin(Date.now() / 180 + a) * (0.8 * s);
+                        const px = ex + Math.cos(a + spin) * r;
+                        const py = -5*s + Math.sin(a + spin) * r;
+                        g.beginPath(); g.fillStyle(this.visualDNA.detailColor || 0xffffff, 1); g.fillCircle(px, py, 1.2 * s);
+                    }
+                }
+                break; 
                 
             case 'begging':
                 const blink = Math.sin(Date.now() / 150);
