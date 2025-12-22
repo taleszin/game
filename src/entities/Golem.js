@@ -2755,15 +2755,24 @@ export default class Golem extends Phaser.GameObjects.Container {
         if (closestMate && (isTutorialCase || (this.lifePhase !== 'old' && closestMate.lifePhase !== 'old')) && canBreed) {
             // Probabilidade aumentada: attractiveness * 0.7 (era * 0.5)
             const courtChance = this.autonomy.attractiveness * 0.7;
+
+            // Soft cap: reduz chance de cortejo conforme a população se aproxima da capacidade
+            const pop = (this.scene.golemsGroup?.getChildren().filter(g => g.active).length) || 1;
+            const capacity = this.scene.maxPopulation || 20;
+            const densityRatio = Math.min(1, pop / capacity); // 0..1
+            // Reduz até 90% quando full; nunca chega a 0 para manter alguma possibilidade
+            const densityMultiplier = Math.max(0.05, 1 - densityRatio * 0.9);
+            const adjustedCourtChance = courtChance * densityMultiplier;
+
             const roll = Math.random();
-            
-            if (roll < courtChance) {
-                console.log(`[COURT] ${this.nameText?.text || 'Golem'} cortejando ${closestMate.nameText?.text || 'parceiro'}! (roll:${roll.toFixed(2)} < chance:${courtChance.toFixed(2)})`);
+
+            if (roll < adjustedCourtChance) {
+                console.log(`[COURT] ${this.nameText?.text || 'Golem'} cortejando ${closestMate.nameText?.text || 'parceiro'}! (roll:${roll.toFixed(2)} < adjChance:${adjustedCourtChance.toFixed(2)} pop:${pop}/${capacity})`);
                 this.startCourting(closestMate);
                 return;
             }
         }
-        
+
         // Estado padrão: idle
         this.autonomy.state = 'idle';
         this.autonomy.target = null;
@@ -2817,8 +2826,20 @@ export default class Golem extends Phaser.GameObjects.Container {
             if (target.autonomy) target.autonomy.cooldowns.breeding = 20000;
             this.scene.globalBreedingCooldown = 8000; // 8s cooldown global (era 10s)
             
-            if (this.scene.triggerBreeding) {
-                this.scene.triggerBreeding(this, target);
+            if (window.populationSterilized) {
+                // Sterilize ON — block automatic reproduction and provide feedback to player
+                try {
+                    this.setActionExpression && this.setActionExpression('shy', 1000);
+                    if (target.setActionExpression) target.setActionExpression('shy', 1000);
+                    const x = (this.x + target.x) / 2;
+                    const y = (this.y + target.y) / 2;
+                    const info = this.scene.add.text(x, y - 30, 'Reprodução pausada', { fontFamily: 'Arial', fontSize: '12px', fill: '#ff6666', backgroundColor: '#000000' }).setOrigin(0.5);
+                    this.scene.tweens.add({ targets: info, alpha: { from: 1, to: 0 }, y: info.y - 12, duration: 1200, ease: 'Cubic.easeOut', onComplete: () => info.destroy() });
+                } catch (e) { console.warn('Sterilize feedback failed', e); }
+            } else {
+                if (this.scene.triggerBreeding) {
+                    this.scene.triggerBreeding(this, target);
+                }
             }
             
             this.autonomy.state = 'idle';
@@ -3004,6 +3025,12 @@ export default class Golem extends Phaser.GameObjects.Container {
     }
 
     die() {
+        // Emit global event so scene can react (e.g., incubator hatch)
+        try {
+            if (this.scene && this.scene.game && this.scene.game.events) {
+                this.scene.game.events.emit('golem-died', { golemId: this.id });
+            }
+        } catch(e) {}
         // ══════════════════════════════════════════════════════════════════
         // PRIMEIRO: Limpa balão de fala IMEDIATAMENTE para evitar que fique na tela
         // ══════════════════════════════════════════════════════════════════
@@ -3079,6 +3106,37 @@ export default class Golem extends Phaser.GameObjects.Container {
     setBreedingExpression() {
         this.setActionExpression('breed', 1500);
         this.speakContextual('breed');
+    }
+
+    // Aplica uma doença por excesso de população; drena vitalidade em ticks e mostra feedback
+    applySickness({ intensity = 0.03, ticks = 4, tickInterval = 4000, source = 'overpopulation' } = {}) {
+        if (!this.scene || this.sicknessEvent) return;
+        this.addLifeEvent('sick', `Doença: ${source}`);
+        let remaining = ticks;
+        this.sicknessEvent = this.scene.time.addEvent({
+            delay: tickInterval,
+            repeat: ticks - 1,
+            callback: () => {
+                if (!this.active) {
+                    try { this.sicknessEvent.remove(); } catch(e) {}
+                    this.sicknessEvent = null;
+                    return;
+                }
+                const dmg = Math.max(1, (this.maxVitality || 10) * intensity);
+                this.vitality = Math.max(0, this.vitality - dmg);
+                this.currentLife = this.vitality;
+                // Visual cue
+                try {
+                    const pulse = this.scene.add.circle(this.x, this.y, 16, 0xff8800, 0.18);
+                    this.scene.tweens.add({ targets: pulse, alpha: 0, scale: 2, duration: 1000, onComplete: () => pulse.destroy() });
+                } catch(e) {}
+                remaining--;
+                if (remaining <= 0) {
+                    try { this.sicknessEvent.remove(); } catch(e) {}
+                    this.sicknessEvent = null;
+                }
+            }
+        });
     }
 
     initAudio() {

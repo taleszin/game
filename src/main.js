@@ -526,6 +526,206 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cria o elemento de Tooltip global
     const techTooltip = createTechTooltip();
     document.body.appendChild(techTooltip);
+
+    // Cria HUD de População / Incubadora (inicialmente escondida; será mostrada apenas na SanctuaryScene)
+    function createPopulationHUD() {
+        if (document.getElementById('population-hud')) return;
+        const hud = document.createElement('div');
+        hud.id = 'population-hud';
+        hud.style.position = 'absolute';
+        hud.style.left = '8px';
+        hud.style.top = '8px';
+        // Keep HUD interactive but placed below main controls (chrono-deck uses z-index 1000)
+        hud.style.zIndex = '980';
+        // Ensure this HUD receives pointer events even though #ui-layer uses pointer-events:none
+        hud.style.pointerEvents = 'auto';
+        hud.style.background = 'linear-gradient(180deg, #0b1622 0%, #071218 100%)';
+        hud.style.border = '3px solid #0f2940';
+        hud.style.borderRadius = '6px';
+        hud.style.padding = '8px 10px';
+        hud.style.fontFamily = "'Press Start 2P', monospace";
+        hud.style.fontSize = '10px';
+        hud.style.color = '#fff';
+        hud.style.display = 'none'; // Hidden until SanctuaryScene active
+        hud.style.boxShadow = 'inset 0 0 0 2px rgba(0,0,0,0.6)';
+        hud.style.gap = '8px';
+        hud.style.alignItems = 'center';
+        hud.style.minWidth = '160px';
+        hud.style.backdropFilter = 'none';
+
+        hud.innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div style="font-size:10px;color:#9ef2ff;">POP</div>
+                <div id="pop-count" style="font-size:10px;color:#fff;">0 / 20</div>
+            </div>
+            <div style="height:8px;background:#071018;border-radius:3px;margin-top:8px;overflow:hidden;border:1px solid #00121b">
+                <div id="pop-bar" style="width:0%;height:8px;background:#66ffcc;box-shadow:0 0 6px rgba(102,255,204,0.6) inset"></div>
+            </div>
+            <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap" id="pop-manager-buttons">
+                <button id="btn-sterilize-1" class="retro-pop-btn">STER1</button>
+                <button id="btn-archive-1" class="retro-pop-btn">ARCH1</button>
+                <button id="btn-relocate-1" class="retro-pop-btn">RELOC1</button>
+                <button id="btn-release-incubator" class="retro-pop-btn">RELEASE</button>
+            </div>
+            <div id="incubator" style="margin-top:8px;font-size:9px;max-height:86px;overflow:auto;color:#bfe8d9"></div>
+        `;
+
+        // Attach to ui-layer if present for consistent alignment
+        const uiLayer = document.getElementById('ui-layer') || document.body;
+        uiLayer.appendChild(hud);
+
+        // Enable dragging so users can reposition the HUD (persisted to localStorage)
+        enableDrag(hud, 'ui_pos_population_hud');
+
+        // Retro button styles
+        const styleTag = document.createElement('style');
+        styleTag.id = 'pop-hud-styles';
+        styleTag.textContent = `
+            .retro-pop-btn {
+                font-family: 'Press Start 2P', monospace;
+                font-size: 8px;
+                padding: 6px 8px;
+                color: #dfffe8;
+                background: linear-gradient(180deg,#102233 0%,#07121a 100%);
+                border: 2px solid #16394a;
+                box-shadow: 0 2px 0 #062020;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+            }
+            .retro-pop-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+            /* Active (sterilize ON) state */
+            .retro-pop-btn.active {
+                background: linear-gradient(180deg,#330000 0%,#220000 100%);
+                border-color: #ff4444;
+                box-shadow: 0 6px 18px rgba(255,68,68,0.25);
+                color: #ffdede;
+            }
+        `;
+        document.head.appendChild(styleTag);
+
+        // Buttons wiring
+        const btnSter = document.getElementById('btn-sterilize-1');
+        if (btnSter) {
+            // Load persisted sterilize mode
+            let sterilizeEnabled = JSON.parse(localStorage.getItem('sterilize_mode') || 'false');
+
+            function updateSterilizeUI() {
+                if (sterilizeEnabled) {
+                    btnSter.classList.add('active');
+                    btnSter.textContent = 'STER: ON';
+                    btnSter.setAttribute('aria-pressed', 'true');
+                } else {
+                    btnSter.classList.remove('active');
+                    btnSter.textContent = 'STER1';
+                    btnSter.setAttribute('aria-pressed', 'false');
+                }
+            }
+
+            // Initial UI
+            updateSterilizeUI();
+
+            btnSter.addEventListener('click', (e) => {
+                e.stopPropagation();
+                UISoundSystem.playClick('special');
+
+                // Toggle sterilize mode (prevents automatic reproduction; manual reproduction still allowed)
+                sterilizeEnabled = !sterilizeEnabled;
+                localStorage.setItem('sterilize_mode', JSON.stringify(sterilizeEnabled));
+                window.populationSterilized = sterilizeEnabled;
+
+                // Emit event for scenes to react
+                game.events.emit('sterilize-mode-changed', { enabled: sterilizeEnabled });
+
+                // Visual feedback
+                updateSterilizeUI();
+                // Audible difference
+                UISoundSystem.playSelect();
+            });
+        }
+        document.getElementById('btn-archive-1').addEventListener('click', () => {
+            UISoundSystem.playClick('special');
+            game.events.emit('population-archive', { count: 1 });
+        });
+        document.getElementById('btn-relocate-1').addEventListener('click', () => {
+            UISoundSystem.playClick('special');
+            game.events.emit('population-relocate', { count: 1 });
+        });
+        document.getElementById('btn-release-incubator').addEventListener('click', () => {
+            UISoundSystem.playClick('special');
+            game.events.emit('incubator-release');
+        });
+
+        // Centralized update function to ensure robustness
+        function updatePopulationUI(count = 0, capacity = 20) {
+            const pct = Math.min(100, Math.round((count / capacity) * 100));
+            const countEl = document.getElementById('pop-count');
+            const barEl = document.getElementById('pop-bar');
+            if (countEl) countEl.textContent = `${count} / ${capacity}`;
+            if (barEl) {
+                barEl.style.width = `${pct}%`;
+                barEl.style.background = pct > 80 ? '#ff8844' : '#66ffcc';
+            }
+        }
+
+        // Event listeners
+        game.events.on('population-update', ({ count, capacity }) => {
+            updatePopulationUI(count || 0, capacity || 20);
+        });
+
+        game.events.on('incubator-updated', (queue) => {
+            const el = document.getElementById('incubator');
+            if (!el) return;
+            if (!queue || !queue.length) el.innerHTML = '<div style="opacity:0.6">Incubator: empty</div>';
+            else {
+                el.innerHTML = queue.map((it, i) => `<div>• #${i+1} hatch in ${Math.max(0, Math.round((it.hatchAt - Date.now())/1000))}s</div>`).join('');
+            }
+        });
+
+        game.events.on('population-warning', ({ level }) => {
+            const el = document.getElementById('population-hud');
+            if (!el) return;
+            if (level === 'high') {
+                el.style.boxShadow = '0 0 12px rgba(255,136,0,0.85)';
+                setTimeout(()=>el.style.boxShadow = '', 1600);
+            }
+        });
+
+        // Show/hide helpers tied to SanctuaryScene lifecycle
+        function showHUD() { hud.style.display = 'flex'; }
+        function hideHUD() { hud.style.display = 'none'; }
+
+
+
+        return hud;
+    }
+
+    // Create HUD only when ui-ready is fired by the SanctuaryScene (prevents showing in other scenes)
+    game.events.on('ui-ready', () => {
+        createPopulationHUD();
+        const hud = document.getElementById('population-hud');
+        if (!hud) return;
+        // show HUD now that SanctuaryScene UI is ready
+        hud.style.display = 'flex';
+
+        // Initial sync from scene counts
+        const scene = game.scene.getScene('SanctuaryScene');
+        if (scene) {
+            const count = scene.golemsGroup?.getChildren().filter(g => g.active).length || 0;
+            const capacity = scene.maxPopulation || 20;
+            game.events.emit('population-update', { count, capacity });
+
+            // Also sync incubator if any
+            if (scene.incubatorQueue) {
+                game.events.emit('incubator-updated', scene.incubatorQueue.slice());
+            }
+
+            // Hide HUD when scene shuts down or sleeps, show on wake
+            scene.events.on('shutdown', () => { hud.style.display = 'none'; });
+            scene.events.on('sleep', () => { hud.style.display = 'none'; });
+            scene.events.on('wake', () => { hud.style.display = 'flex'; });
+        }
+    });
     
     // ═══════════════════════════════════════════════════════════════════
     // DRAGGABLE UI: permite arrastar btn-evolved-forms e chrono-deck
@@ -536,8 +736,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function enableDrag(el, storageKey) {
         if (!el) return;
         
-        // No mobile, não habilita drag (posições são fixas via CSS)
-        if (isMobile) return;
+        // No mobile, não habilita drag por padrão (posições são fixas via CSS).
+        // Permitimos explicitamente para o HUD de população no mobile.
+        if (isMobile && el.id !== 'population-hud') return;
         
         el.classList.add('draggable');
         el.style.touchAction = 'none';
@@ -556,6 +757,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let startX = 0, startY = 0, origX = 0, origY = 0, prevZ = '';
 
         function onDown(ev) {
+            // Don't start dragging when interacting with inner controls (buttons, links, inputs)
+            if (ev.target && ev.target.closest && ev.target.closest('button, a, input, .retro-pop-btn, .close-btn')) return;
             ev.preventDefault();
             const p = ev.touches ? ev.touches[0] : ev;
             startX = p.clientX; startY = p.clientY;
@@ -612,6 +815,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 el.style.left = '30px'; el.style.bottom = '30px'; el.style.top = 'auto'; el.style.right = 'auto';
             } else if (el.id === 'chrono-deck') {
                 el.style.left = '20px'; el.style.bottom = '20px'; el.style.top = 'auto'; el.style.right = 'auto';
+            } else if (el.id === 'population-hud') {
+                // Reset to default top-left position
+                el.style.left = '8px'; el.style.top = '8px'; el.style.right = 'auto'; el.style.bottom = 'auto';
             }
         });
     }
@@ -633,7 +839,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const evolvedBtn = document.getElementById('btn-evolved-forms');
     evolvedBtn?.addEventListener('click', () => setTimeout(positionEvolvedModalNearButton, 60));
     window.addEventListener('resize', () => {
-        [document.getElementById('btn-evolved-forms'), document.getElementById('chrono-deck')].forEach(el => {
+        [document.getElementById('btn-evolved-forms'), document.getElementById('chrono-deck'), document.getElementById('population-hud')].forEach(el => {
             if (!el) return;
             const rect = el.getBoundingClientRect();
             const margin = 8;

@@ -91,6 +91,74 @@ export default class SanctuaryScene extends Phaser.Scene {
 
     this.golemsGroup = this.add.group();
 
+    // Population control
+    this.maxPopulation = 20; // configurable cap
+    this.incubatorQueue = [];
+    this.reserve = [];
+
+    // Emit initial population state for UI
+    this.game.events.emit('population-update', { count: this.golemsGroup.getChildren().filter(g => g.active).length || 0, capacity: this.maxPopulation });
+
+    // Periodic health check & incubator attempts
+    this.time.addEvent({ delay: 5000, loop: true, callback: this._populationHealthCheck, callbackScope: this });
+
+    // Manager controls
+    this.game.events.on('population-sterilize', ({ count = 1 } = {}) => {
+        const candidates = this.golemsGroup.getChildren().filter(g => g.active);
+        for (let i = 0; i < count && candidates.length; i++) {
+            const idx = Phaser.Math.Between(0, candidates.length - 1);
+            const g = candidates.splice(idx, 1)[0];
+            if (g && g.autonomy) {
+                g.autonomy.maxBreeds = 0;
+                try { g.addLifeEvent('sterilized', 'Sterilized by population manager'); } catch(e){}
+            }
+        }
+    });
+
+    this.game.events.on('population-archive', ({ count = 1 } = {}) => {
+        const arr = this.golemsGroup.getChildren().filter(g => g.active).sort((a,b) => (a.lifeLog?.[0]?.ts || 0) - (b.lifeLog?.[0]?.ts || 0));
+        for (let i = 0; i < count && i < arr.length; i++) {
+            const g = arr[i]; if (g) { try { g.kill(); } catch(e){} }
+        }
+    });
+
+    this.game.events.on('population-relocate', ({ count = 1 } = {}) => {
+        const arr = this.golemsGroup.getChildren().filter(g => g.active);
+        for (let i = 0; i < count && arr.length; i++) {
+            const idx = Phaser.Math.Between(0, arr.length - 1);
+            const g = arr.splice(idx, 1)[0];
+            if (g) {
+                try {
+                    g.setActive(false); g.setVisible(false);
+                    if (g.body) { g.body.enable = false; g.body.setVelocity(0,0); }
+                    this.reserve.push(g);
+                    g.addLifeEvent('relocated', 'Moved to reserve');
+                } catch(e){}
+            }
+        }
+        this.game.events.emit('population-update', { count: this.golemsGroup.getChildren().filter(g => g.active).length, capacity: this.maxPopulation });
+    });
+
+    this.game.events.on('incubator-release', () => {
+        // Try to hatch as many as possible until cap
+        while (this.incubatorQueue.length > 0 && (this.golemsGroup.getChildren().filter(g => g.active).length) < this.maxPopulation) {
+            this._tryHatchIncubatorItem();
+        }
+    });
+
+    this.game.events.on('golem-died', () => {
+        // Attempt hatch when space frees up
+        this.time.delayedCall(100, () => this._tryHatchIncubatorItem());
+        this.game.events.emit('population-update', { count: this.golemsGroup.getChildren().filter(g => g.active).length, capacity: this.maxPopulation });
+    });
+
+    // Track sterilize mode in-scene (used if we need scene-level behavior)
+    this.sterilizeMode = !!window.populationSterilized;
+    this.game.events.on('sterilize-mode-changed', ({ enabled }) => {
+        this.sterilizeMode = !!enabled;
+        console.log('[SanctuaryScene] sterilize mode changed:', this.sterilizeMode);
+    });
+
     this.cursorText = this.add.text(0, 0, '[ CLIQUE PARA CRIAR ]', {
         fontFamily: '"Press Start 2P"', fontSize: '10px', fill: '#0f0', backgroundColor: '#000'
     }).setDepth(100).setVisible(false);
@@ -1129,6 +1197,45 @@ export default class SanctuaryScene extends Phaser.Scene {
     setTimeout(() => { try { if (previousSpeed !== undefined && previousSpeed !== null) this.setSimulationSpeed(previousSpeed); } catch(e){} }, 40);
 
     return spawnedGolem;
+  }
+
+  // Tentativa de chocar um item da incubadora (se houver espaço)
+  _tryHatchIncubatorItem() {
+    if (!this.incubatorQueue || this.incubatorQueue.length === 0) return;
+    const pop = this.golemsGroup.getChildren().filter(g => g.active).length;
+    if (pop < this.maxPopulation) {
+      const item = this.incubatorQueue.shift();
+      this.game.events.emit('incubator-updated', this.incubatorQueue.slice());
+      this.spawnGolem(item.x, item.y + 30, item.childData);
+      this.game.events.emit('population-update', { count: this.golemsGroup.getChildren().filter(g => g.active).length, capacity: this.maxPopulation });
+    } else {
+      // requeue with retry delay
+      const item = this.incubatorQueue.shift();
+      item.hatchAt = Date.now() + 10000;
+      this.incubatorQueue.push(item);
+      this.game.events.emit('incubator-updated', this.incubatorQueue.slice());
+      this.time.delayedCall(10000, () => this._tryHatchIncubatorItem());
+    }
+  }
+
+  // Checa efeitos de overpopulation periodicamente e aplica sickness em excesso
+  _populationHealthCheck() {
+    const golems = this.golemsGroup.getChildren().filter(g => g.active);
+    const pop = golems.length;
+    const warningThreshold = Math.ceil(this.maxPopulation * 0.8);
+    if (pop > warningThreshold) {
+      const excess = pop - warningThreshold;
+      const toSicken = Math.min(Math.ceil(excess / 2), golems.length);
+      for (let i = 0; i < toSicken; i++) {
+        const g = Phaser.Utils.Array.GetRandom(golems);
+        if (g && typeof g.applySickness === 'function') {
+          g.applySickness({ intensity: 0.03, ticks: 4, tickInterval: 4000, source: 'overpopulation' });
+        }
+      }
+      this.game.events.emit('population-warning', { level: 'high', count: pop, capacity: this.maxPopulation });
+    } else {
+      this.game.events.emit('population-warning', { level: 'normal', count: pop, capacity: this.maxPopulation });
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════
