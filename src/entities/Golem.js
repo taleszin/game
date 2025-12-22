@@ -123,6 +123,27 @@ export default class Golem extends Phaser.GameObjects.Container {
             breathY: 0
         };
 
+        // Procedural animation state (squash/stretch, breathing, drag-lag)
+        this.breathSeed = Math.random() * Math.PI * 2; // phase offset so not all breathe in sync
+        // Base graphic scales used as the reference for tweens and breathing
+        this._gfxBaseScaleX = this.targetScaleX;
+        this._gfxBaseScaleY = this.targetScaleY;
+        this._currentGfxScaleX = this._gfxBaseScaleX;
+        this._currentGfxScaleY = this._gfxBaseScaleY;
+
+        // Interaction flags and transient tween refs
+        this._pressAnimating = false;    // when true, breathing is temporarily suspended
+        this._squashTween = null;
+        this._overshootTween = null;
+
+        // Drag/lag visuals
+        this._dragRotationTarget = 0;
+        this._graphicLagTarget = { x: 0, y: 0 };
+        this._graphicLag = { x: 0, y: 0 };
+
+        // Ensure face scale reference exists
+        this.faceScale = this.faceScale || 1;
+
         this.eyeOffset = { x: 0, y: 0 };
         this.blinkTimer = 0;
         this.isBlinking = false;
@@ -369,6 +390,34 @@ export default class Golem extends Phaser.GameObjects.Container {
                 this.isPointerDown = true;
                 this.pointerDownStart = { x: pointer.worldX, y: pointer.worldY };
 
+                // Immediate tactile feedback: squash & stretch (short press animation)
+                try { if (this._squashTween) this._squashTween.stop(); if (this._overshootTween) this._overshootTween.stop(); } catch(e) {}
+                this._pressAnimating = true;
+                // Use container scale as the authoritative base so growth (age-based scaling) still works
+                const baseX = (this.scaleX || (this.targetScaleX * (this.currentScale || 1)));
+                const baseY = (this.scaleY || (this.targetScaleY * (this.currentScale || 1)));
+
+                // Short squash (fast) then overshoot 'jelly' tween — operate on the container itself
+                this._squashTween = scene.tweens.add({
+                    targets: this,
+                    scaleX: baseX * 1.4,
+                    scaleY: baseY * 0.6,
+                    duration: 50,
+                    yoyo: true,
+                    onComplete: () => {
+                        try { if (this._overshootTween) this._overshootTween.stop(); } catch(e) {}
+                        this._overshootTween = scene.tweens.add({
+                            targets: this,
+                            scaleX: baseX * 0.9,
+                            scaleY: baseY * 1.1,
+                            duration: 220,
+                            ease: 'Back.easeOut',
+                            yoyo: true,
+                            onComplete: () => { this._pressAnimating = false; }
+                        });
+                    }
+                });
+
                 // Se segura por mais que 160ms sem iniciar drag, entra em modo de rotação
                 try { if (this.pointerDownDelayedCall) this.pointerDownDelayedCall.remove(); } catch(e) {}
                 this.pointerDownDelayedCall = scene.time.delayedCall(160, () => {
@@ -454,6 +503,13 @@ export default class Golem extends Phaser.GameObjects.Container {
                             this.emitHearts();
                         }
                     }
+
+                    // DRAG LAG & ROTATION: feedback proporcional à velocidade (parece 'mole')
+                    // rotation target scaled from dx (pixels) and clamped to avoid extreme tilts
+                    this._dragRotationTarget = Phaser.Math.Clamp(dx * 0.02, -0.2, 0.2);
+                    // graphic lag target: slight offset opposite to the drag direction for 'lag' feel
+                    this._graphicLagTarget.x = Phaser.Math.Clamp(-dx * 0.18, -24, 24);
+                    this._graphicLagTarget.y = Phaser.Math.Clamp(-dy * 0.12, -16, 16);
                 }
 
                 // ═══════════════════════════════════════════════════════════════════
@@ -487,6 +543,14 @@ export default class Golem extends Phaser.GameObjects.Container {
                 this.alpha = 1;
                 this.pettingActive = false;
                 this.isBlinking = false;
+
+                // Reset drag visuals
+                this._dragRotationTarget = 0;
+                this._graphicLagTarget = { x: 0, y: 0 };
+                try { scene.tweens.add({ targets: this, rotation: 0, duration: 200, ease: 'Sine.easeOut' }); } catch(e) {}
+                try { scene.tweens.add({ targets: [this.graphics, this.faceGraphics], x: 0, y: 0, duration: 200, ease: 'Sine.easeOut' }); } catch(e) {}
+                // Ensure container scale returns to growth-normalized values
+                try { scene.tweens.add({ targets: this, scaleX: this.targetScaleX * (this.currentScale || 1), scaleY: this.targetScaleY * (this.currentScale || 1), duration: 220, ease: 'Sine.easeOut' }); } catch(e) {}
                 
                 const others = scene.golemsGroup.getChildren();
                 let mated = false;
@@ -2542,6 +2606,46 @@ export default class Golem extends Phaser.GameObjects.Container {
                 }
             }
         }});
+    }
+
+    // Procedural animations & tactile feedback loop
+    preUpdate(time, delta) {
+        // Breathing (idle) - simple smooth sinusoidal squash & stretch
+        if (!this.scene || this.scene.isPaused) return;
+
+        // If a press animation is active, let that tween drive scale; suspend breathing
+        if (!this.isDragging && !this._pressAnimating && !this.isFrozen) {
+            const t = time * 0.003 + (this.breathSeed || 0);
+            const breath = Math.sin(t) * 0.05; // ~5% breath
+
+            // Compute desired container scales based on growth (currentScale) and targetScale
+            const baseX = this.targetScaleX * (this.currentScale || 1);
+            const baseY = this.targetScaleY * (this.currentScale || 1);
+
+            const targetSX = baseX * (1 - breath);
+            const targetSY = baseY * (1 + breath);
+
+            // Smoothly interpolate the container's scale (so growth remains authoritative)
+            this.scaleX = Phaser.Math.Linear(this.scaleX || baseX, targetSX, 0.12);
+            this.scaleY = Phaser.Math.Linear(this.scaleY || baseY, targetSY, 0.12);
+        }
+
+        // Drag rotation smoothing (always lerp toward target to feel soft)
+        this.rotation = Phaser.Math.Linear(this.rotation || 0, this._dragRotationTarget || 0, 0.18);
+
+        // Graphic lag smoothing and application
+        this._graphicLag.x = Phaser.Math.Linear(this._graphicLag.x || 0, (this._graphicLagTarget?.x || 0), 0.12);
+        this._graphicLag.y = Phaser.Math.Linear(this._graphicLag.y || 0, (this._graphicLagTarget?.y || 0), 0.12);
+
+        if (this.graphics) {
+            this.graphics.x = this._graphicLag.x;
+            this.graphics.y = this._graphicLag.y;
+        }
+        if (this.faceGraphics) {
+            // Face follows with slightly reduced lag for more stable facial readability
+            this.faceGraphics.x = this._graphicLag.x * 0.75;
+            this.faceGraphics.y = this._graphicLag.y * 0.7;
+        }
     }
     
     // ═══════════════════════════════════════════════════════════════════════════════
