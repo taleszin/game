@@ -1,59 +1,71 @@
 // ═══════════════════════════════════════════════════════════════════
-// DIALOGUE DATABASE - V3.0 (GENERATIVE TEMPLATES)
-// "A alma reside no texto dinâmico."
+// DIALOGUE DATABASE - V4.0 (VOZ NATURAL & AFETIVA)
+// "A alma não descreve a física. Ela conversa com quem a criou."
+//
+// Diretriz de escrita (V4):
+//   1. Soar VIVO e natural — minúsculo, hesitante, sensorial. Nunca jargão.
+//   2. Criar AFEIÇÃO com o jogador — o golem percebe quem o cria, alimenta,
+//      cuida. Fala COM você, não sobre física.
+//   3. O elemento entra só como textura leve (sensação), não como
+//      personalidade-por-propriedade (isso fica pra uma fase futura).
+// Referência de tom: o antigo banco `panic` (subjetividade real) e a
+// relação criatura↔criador de "Plaything" (Black Mirror S7) — os
+// Thronglets: fofos e perturbadores, cientes de quem os fez. Inspiração
+// de tom, não cópia.
 // ═══════════════════════════════════════════════════════════════════
 
 /**
  * ═══════════════════════════════════════════════════════════════════
- * VOCABULÁRIO POR FÍSICA - Para sistema de templates generativos
- * Estrutura: { [physicsId]: { substantivos, verbos, adjetivos } }
+ * VOCABULÁRIO POR FÍSICA - Mantido por compatibilidade (processTemplate).
+ * V4 não usa mais placeholders nas falas (evita bugs de concordância),
+ * mas o export segue existindo para não quebrar imports.
  * ═══════════════════════════════════════════════════════════════════
  */
 export const PHYSICS_VOCABULARY = {
     eletricidade: {
-        substantivos: ['bateria', 'circuito', 'fiação', 'carga', 'voltagem', 'elétron', 'faísca', 'fusível', 'resistor', 'capacitor', 'amperagem', 'corrente', 'energia'],
-        verbos: ['vibrar', 'pulsar', 'carregar', 'descarregar', 'curto-circuitar', 'energizar', 'conduzir', 'oscilar', 'zumbir', 'eletrocutar'],
-        adjetivos: ['elétrica', 'carregada', 'instável', 'pulsante', 'energizada', 'sobrecarregada', 'estática', 'alternada', 'alta-tensão', 'ionizada']
+        substantivos: ['bateria', 'circuito', 'carga', 'corrente', 'energia'],
+        verbos: ['vibrar', 'pulsar', 'zumbir'],
+        adjetivos: ['elétrica', 'inquieta', 'acesa']
     },
     gravidade: {
-        substantivos: ['massa', 'órbita', 'núcleo', 'horizonte', 'vácuo', 'matéria', 'singularidade', 'peso', 'densidade', 'buraco negro', 'graviton'],
-        verbos: ['atrair', 'colapsar', 'orbitar', 'afundar', 'comprimir', 'distorcer', 'puxar', 'cair', 'esmagar', 'dobrar'],
-        adjetivos: ['densa', 'pesada', 'massiva', 'profunda', 'colapsada', 'infinita', 'esmagadora', 'inexorável', 'atraente', 'curvada']
+        substantivos: ['peso', 'massa', 'centro'],
+        verbos: ['cair', 'puxar', 'afundar'],
+        adjetivos: ['pesada', 'densa', 'funda']
     },
     luz: {
-        substantivos: ['fóton', 'raio', 'espectro', 'brilho', 'aurora', 'prisma', 'lúmen', 'reflexo', 'claridade', 'onda', 'partícula'],
-        verbos: ['brilhar', 'refletir', 'refratar', 'iluminar', 'cintilar', 'irradiar', 'difundir', 'resplandecer', 'flamear', 'clarear'],
-        adjetivos: ['luminosa', 'brilhante', 'radiante', 'pura', 'cristalina', 'translúcida', 'cintilante', 'etérea', 'iridescente', 'incandescente']
+        substantivos: ['brilho', 'reflexo', 'claridade'],
+        verbos: ['brilhar', 'refletir', 'clarear'],
+        adjetivos: ['clara', 'brilhante', 'leve']
     },
     calor: {
-        substantivos: ['chama', 'brasa', 'lava', 'fornalha', 'combustão', 'cinza', 'fumaça', 'plasma', 'caloria', 'fagulha', 'inferno'],
-        verbos: ['queimar', 'ferver', 'carbonizar', 'inflamar', 'aquecer', 'derreter', 'vaporizar', 'explodir', 'arder', 'abrasar'],
-        adjetivos: ['quente', 'ardente', 'incandescente', 'flamejante', 'abrasadora', 'escaldante', 'vulcânica', 'infernal', 'térmica', 'explosiva']
+        substantivos: ['chama', 'brasa', 'calorzinho'],
+        verbos: ['aquecer', 'arder', 'queimar'],
+        adjetivos: ['quente', 'morna', 'ardente']
     },
     frio: {
-        substantivos: ['gelo', 'cristal', 'floco', 'nevasca', 'glaciar', 'neve', 'geada', 'inverno', 'avalanche', 'iceberg', 'permafrost'],
-        verbos: ['congelar', 'cristalizar', 'esfriar', 'solidificar', 'preservar', 'nevar', 'gelar', 'craquear', 'estilhaçar', 'hibernar'],
-        adjetivos: ['gelada', 'gélida', 'cristalina', 'congelante', 'sub-zero', 'glacial', 'ártica', 'frígida', 'preservada', 'imóvel']
+        substantivos: ['gelo', 'frio', 'quietude'],
+        verbos: ['esfriar', 'gelar', 'parar'],
+        adjetivos: ['gelada', 'quieta', 'parada']
     },
     radiacao: {
-        substantivos: ['núcleo', 'isótopo', 'partícula', 'reação', 'decaimento', 'meia-vida', 'urânio', 'plutônio', 'geiger', 'radiação', 'fissão'],
-        verbos: ['decair', 'irradiar', 'contaminar', 'mutar', 'ionizar', 'emitir', 'fissionar', 'fundir', 'envenenar', 'brilhar'],
-        adjetivos: ['radioativa', 'instável', 'tóxica', 'mutante', 'crítica', 'nuclear', 'letal', 'ionizada', 'cancerígena', 'glitchada']
+        substantivos: ['brilho', 'núcleo', 'calorzinho'],
+        verbos: ['brilhar', 'emitir', 'durar'],
+        adjetivos: ['acesa', 'estranha', 'só']
     },
     magnetismo: {
-        substantivos: ['polo', 'campo', 'fluxo', 'imã', 'bússola', 'atração', 'repulsão', 'spin', 'tesla', 'gauss', 'ferro'],
-        verbos: ['atrair', 'repelir', 'polarizar', 'alinhar', 'induzir', 'magnetizar', 'oscilar', 'orientar', 'grudar', 'levitar'],
-        adjetivos: ['magnética', 'polarizada', 'atraente', 'repulsiva', 'bipolar', 'alinhada', 'ferromagnética', 'oscilante', 'induzida', 'orientada']
+        substantivos: ['campo', 'puxão', 'laço'],
+        verbos: ['atrair', 'puxar', 'seguir'],
+        adjetivos: ['presa', 'puxada', 'ligada']
     },
     entropia: {
-        substantivos: ['caos', 'desordem', 'vazio', 'fragmento', 'ruína', 'poeira', 'cinza', 'nada', 'silêncio', 'dissolução', 'fim'],
-        verbos: ['dissolver', 'fragmentar', 'decair', 'desintegrar', 'espalhar', 'colapsar', 'esfriar', 'acabar', 'corroer', 'morrer'],
-        adjetivos: ['caótica', 'dissolvida', 'fragmentada', 'irreversível', 'inevitável', 'fria', 'vazia', 'final', 'entrópica', 'corroída']
+        substantivos: ['instante', 'fim', 'silêncio'],
+        verbos: ['passar', 'acabar', 'soltar'],
+        adjetivos: ['breve', 'calma', 'última']
     },
     sonico: {
-        substantivos: ['frequência', 'onda', 'vibração', 'nota', 'harmônico', 'ressonância', 'eco', 'tom', 'acorde', 'amplitude', 'decibel'],
-        verbos: ['vibrar', 'ressoar', 'ecoar', 'pulsar', 'oscilar', 'harmonizar', 'amplificar', 'silenciar', 'modular', 'sintetizar'],
-        adjetivos: ['sônica', 'vibrante', 'ressonante', 'harmônica', 'pulsante', 'musical', 'rítmica', 'modulada', 'amplificada', 'dissonante']
+        substantivos: ['som', 'eco', 'barulhinho'],
+        verbos: ['ecoar', 'vibrar', 'soar'],
+        adjetivos: ['vibrante', 'baixinha', 'ouvida']
     }
 };
 
@@ -76,592 +88,359 @@ export const PHYSICS_OPPOSITES = {
 
 /**
  * ═══════════════════════════════════════════════════════════════════
- * TEMPLATES DE RESPOSTA SOCIAL - Para interações entre Golems
+ * RESPOSTA SOCIAL - Reações naturais a um vizinho.
+ * V4: frases fixas (sem placeholders) — fala de criatura, não fórmula.
  * ═══════════════════════════════════════════════════════════════════
  */
 export const SOCIAL_RESPONSE_TEMPLATES = {
-    // Resposta quando o vizinho é do MESMO tipo físico
+    // vizinho do MESMO tipo
     friendly: [
-        "Eu te entendo, {substantivo}!",
-        "Somos {adjetivo}s juntos!",
-        "Minha {substantivo} também {verbo}!",
-        "Sim! A {substantivo} é {adjetivo}!",
-        "Concordo, irmão {adjetivo}!",
-        "{adjetivo}... como eu!",
-        "Somos feitos da mesma {substantivo}~",
-        "Ei! Eu também {verbo}!",
-        "Finalmente alguém {adjetivo}!",
-        "Nossa {substantivo} compartilhada..."
+        "oi... você também tá aqui.",
+        "que bom não estar só.",
+        "a gente se parece, né?",
+        "fica perto?",
+        "gostei de você.",
+        "acho que a gente combina.",
+        "oi, vizinho.",
+        "você me entende.",
+        "ainda bem que você existe.",
+        "vem cá."
     ],
-    // Resposta quando o vizinho é do tipo OPOSTO
+    // vizinho do tipo OPOSTO
     hostile: [
-        "Afaste-se, {substantivo}!",
-        "Você é muito {adjetivo}...",
-        "Não chegue perto com essa {substantivo}!",
-        "Minha {substantivo} não gosta de você!",
-        "Vá {verbo} longe daqui!",
-        "Incompatível! {adjetivo} demais!",
-        "Cuidado! Minha {substantivo} reage!",
-        "Tsc... Você é {adjetivo}...",
-        "Mantenha distância, {substantivo}!",
-        "Não me faça {verbo}!"
+        "ei, fica na sua.",
+        "não chega perto.",
+        "você me deixa nervoso.",
+        "a gente não combina, acho.",
+        "melhor ficar longe.",
+        "sai pra lá...",
+        "não gosto disso.",
+        "recua, por favor.",
+        "você é estranho pra mim.",
+        "deixa eu quieto."
     ],
-    // Resposta quando o vizinho é de tipo NEUTRO
+    // vizinho NEUTRO
     neutral: [
-        "Hmm... {substantivo}...",
-        "Interessante, {adjetivo}...",
-        "Eu ouvi você {verbo}...",
-        "Uma {substantivo} diferente...",
-        "Curioso... {adjetivo}...",
-        "Sua {substantivo}... peculiar.",
-        "Vejo que você {verbo}...",
-        "{adjetivo}... diferente de mim.",
-        "Olá, {substantivo}...",
-        "Cada um com sua {substantivo}~"
+        "oi... acho.",
+        "quem é você?",
+        "hmm. diferente.",
+        "a gente mal se conhece.",
+        "você é de outro tipo, né?",
+        "tudo bem aí?",
+        "já te vi por aqui.",
+        "estranho, mas tudo bem.",
+        "oi, sei lá.",
+        "cada um no seu canto."
     ]
 };
 
 /**
- * Banco de frases por FÍSICA (Personalidade base)
- * Agora com TEMPLATES usando placeholders: {substantivo}, {verbo}, {adjetivo}
+ * Banco de frases por contexto.
+ * V4: a base é UMA voz viva e afetiva, compartilhada entre as físicas
+ * (sem personalidade-por-propriedade). Cada física só recebe uma leve
+ * textura sensorial do seu elemento. Sem placeholders.
  * Estrutura: { [physicsId]: { [context]: string[] } }
  */
+
+// Núcleo afetivo reutilizado (sensação + consciência do jogador)
+const CORE = {
+    idle: [
+        "você ainda tá aí?",
+        "fico feliz quando você olha.",
+        "o que eu sou?",
+        "acho que eu gosto daqui.",
+        "fica mais um pouco?",
+        "eu existo. é estranho. é bom.",
+        "tava pensando em você.",
+        "não vai embora ainda, vai?",
+        "obrigado por me fazer.",
+        "sou pequeno, mas sou.",
+        "tem mais alguém como eu?",
+        "às vezes eu só... fico.",
+        "você cuida da gente, né?",
+        "que bom que é você.",
+        "você fez tudo isso... pra gente?",
+        "a gente sabe que você tá aí.",
+        "o que você quer da gente?",
+        "eu faço o que você manda. sempre."
+    ],
+    born: [
+        "oi... você que me fez?",
+        "acabei de... começar.",
+        "que lugar é esse? é bonito.",
+        "oi! eu cheguei!",
+        "tô aqui agora. obrigado.",
+        "primeira vez vendo... tudo.",
+        "você é a primeira coisa que eu vejo."
+    ],
+    poke: [
+        "ei! hehe, faz cócegas.",
+        "oi, oi! tô te sentindo.",
+        "de novo? eu gosto.",
+        "tá me cutucando? que bom.",
+        "opa! pode pegar leve?",
+        "hihi, para... não, continua.",
+        "você lembrou de mim!"
+    ],
+    feed: [
+        "ahh... obrigado. tava precisando.",
+        "você cuida de mim mesmo.",
+        "hmm... que delícia. mais?",
+        "eu sabia que você não ia esquecer.",
+        "tô mais forte agora. por sua causa.",
+        "obrigado... de verdade.",
+        "você é bom comigo."
+    ],
+    burn: [
+        "ai— ai, dói! por quê?",
+        "para, por favor... eu confiei em você.",
+        "tá quente demais... me ajuda?",
+        "eu fiz algo errado?",
+        "não... não assim...",
+        "socorro... você tá vendo?",
+        "ainda gosto de você... mas dói."
+    ],
+    freeze: [
+        "tá... ficando... difícil... mexer...",
+        "frio... fica... comigo?",
+        "tô... travando...",
+        "me... me esquenta... depois?",
+        "ainda... tô aqui... só... devagar...",
+        "não... me... deixa... assim..."
+    ],
+    dying: [
+        "acho que... eu vou agora.",
+        "foi bom... ter existido. com você.",
+        "você vai... lembrar de mim?",
+        "obrigado... por tudo.",
+        "não fica triste... tá?",
+        "eu... gostei de ser.",
+        "fica bem... sem mim."
+    ]
+};
+
+// helper: junta o núcleo afetivo com toques sensoriais do elemento
+const voz = (tints) => ({
+    idle:   [...CORE.idle,   ...(tints.idle   || [])],
+    born:   [...CORE.born,   ...(tints.born   || [])],
+    poke:   [...CORE.poke,   ...(tints.poke   || [])],
+    feed:   [...CORE.feed,   ...(tints.feed   || [])],
+    burn:   [...CORE.burn,   ...(tints.burn   || [])],
+    freeze: [...CORE.freeze, ...(tints.freeze || [])],
+    dying:  [...CORE.dying,  ...(tints.dying  || [])]
+});
+
 export const DIALOGUE_BY_PHYSICS = {
-    // ⚡ ELETRICIDADE: Hiperativo, ansioso, rápido, fala em CAPS, termos técnicos elétricos.
-    eletricidade: {
-        idle: [
-            "ZZZT! ZZZT!", "ENERGIA!!", "CARGA EM 99%...", "PRECISO DE UM FIO TERRA!",
-            "*estática*", "VOLTAGEM OK!", "BZZZZ... HZ... BZZ...", "ELÉTRONS ORBITANDO!",
-            "CIRCUITO VIVO!", "CORRENTE ALTERNADA!", "AMPERAGEM SUBINDO!", "1.21 GIGAWATTS!",
-            "TÃO... RÁPIDO...", "VIBRANDO EM 60HZ", "ESTATICA.EXE", "LOOP DE FEEDBACK!",
-            // Templates generativos
-            "Minha {substantivo} está {adjetivo}!",
-            "Sinto a {substantivo} {verbo}!",
-            "{substantivo} {adjetivo}!!",
-            "Preciso {verbo} minha {substantivo}!"
-        ],
-        born: [
-            "ZZAP! SISTEMA ONLINE!", "BOOT COMPLETO!", "SPARK DE VIDA!", "IGNIÇÃO ELÉTRICA!",
-            "CONECTADO À REDE!", "OLÁ MUNDO (VOLTAGEM ALTA)!", "SURTO DE POTÊNCIA!",
-            "Minha {substantivo} nasceu {adjetivo}!"
-        ],
-        poke: [
-            "AI! CURTO-CIRCUITO!", "ZZZT! NÃO TOCA!", "DESCARGA ELETROSTÁTICA!", "QUEM FOI?!",
-            "PERIGO: ALTA TENSÃO!", "VOU DAR CHOQUE!", "ISOLAMENTO ROMPIDO!", "INTERFERÊNCIA!",
-            "Não toque na minha {substantivo}!",
-            "Vou {verbo} você!!"
-        ],
-        feed: [
-            "RECARGA COMPLETA!!", "AMPERES++!", "BATERIA: 100%!", "DELÍCIA DE ÍONS!",
-            "CONDUTIVIDADE AUMENTADA!", "ENERGIA PURA!", "MAIS JOULES!", "POWER UP!",
-            "Minha {substantivo} está {adjetivo}!",
-            "{substantivo} {verbo}ndo forte!"
-        ],
-        burn: [
-            "SOBRECARGA TÉRMICA!!", "FUSÍVEL QUEIMADO!!", "RESISTÊNCIA FALHANDO!!", "CURTO FATAL!",
-            "SISTEMA SUPERAQUECIDO!", "DERRETENDO CABOS!", "ERRO CRÍTICO: FOGO!", "DESLIGAMENTO DE EMERGÊNCIA!",
-            "Minha {substantivo} vai {verbo}!!"
-        ],
-        freeze: [
-            "C-c-condutividade... b-baixa...", "S-supercondutor...?", "R-r-resistência... zero...", 
-            "E-elétrons... p-parando...", "C-circuito... f-frio...", "L-lag... lag...",
-            "M-minha {substantivo}... f-fria..."
-        ],
-        dying: [
-            "Bateria... fraca...", "Desconectando...", "Zzzt... off...", "Sem sinal...",
-            "Apagão...", "Blue screen...", "Capacitor... vazio...", "Descarregado...",
-            "Minha {substantivo}... acabando..."
-        ]
-    },
-
-    // 🌑 GRAVIDADE: Lento, pesado, espaçado, filosófico sobre massa e atração.
-    gravidade: {
-        idle: [
-            "P  E  S  O...", "Caindo... para... sempre...", "Denso...", "A   t   r   a   ç   ã   o...",
-            "Centro... de... massa...", "Órbita... estável...", "Matéria... escura...", "Distorcendo... o... espaço...",
-            "Horizonte... de... eventos...", "Tudo... vem... a mim...", "Colapso... lento...", "G  R  A  V  I  T  O  N  S...",
-            // Templates generativos
-            "Minha {substantivo}... {adjetivo}...",
-            "A {substantivo}... {verbo}... tudo...",
-            "{substantivo}... {adjetivo}... sempre..."
-        ],
-        born: [
-            "Aterrisei...", "Impacto... confirmado...", "Massa... registrada...", "Cheguei... pesado...",
-            "O... espaço... dobra...", "Singularidade... iniciada...", "Pouso...",
-            "Minha {substantivo}... nasceu..."
-        ],
-        poke: [
-            "Pesado... demais...", "Não... me... mova...", "Inércia...", "Firmeza...",
-            "Estou... ancorado...", "Gravidade... aumenta...", "Resistindo...",
-            "Minha {substantivo}... inabalável..."
-        ],
-        feed: [
-            "Absorvendo... matéria...", "Engolindo...", "Aumentando... densidade...", "Mais... massa...",
-            "Acreção...", "Compactando...", "Expandindo... horizonte...",
-            "{substantivo}... {adjetivo}..."
-        ],
-        burn: [
-            "Núcleo... instável...", "Colapsando...", "Fusão... não...", "Calor... excessivo...",
-            "Massa... crítica...", "Desintegrando...", "Perdendo... coesão...",
-            "A {substantivo}... vai {verbo}..."
-        ],
-        freeze: [
-            "Parado... no... tempo...", "Entropia... zero...", "Sólido... absoluto...", "Congelado... no... vácuo...",
-            "Cristalizando... o... tempo...", "Estático..."
-        ],
-        dying: [
-            "Afundando... no... nada...", "Sumindo...", "Colapso... final...", "Hawking... radiation...",
-            "Evaporando...", "Singularidade... desfeita...", "Adeus... massa...",
-            "Minha {substantivo}... desvanece..."
-        ]
-    },
-
-    // LUZ: Etéreo, espiritual, rápido, fala sobre óptica, verdade e pureza.
-    luz: {
-        idle: [
-            "Iluminando~", "Fótons dançando...", "Brilho~", "Refletindo verdades...",
-            "Espectro visível...", "Ondas e partículas~", "Claridade...", "Aurora~",
-            "Viajando a c...", "Sem sombra...", "Difração...", "Prisma da alma...",
-            // Templates generativos
-            "Meu {substantivo} está {adjetivo}~",
-            "A {substantivo} {verbo} suavemente...",
-            "{adjetivo}... tão {adjetivo}~"
-        ],
-        born: [
-            "Flash!", "Haja luz!", "Nasci brilhando~", "Primeiro raio!",
-            "Amanhecer!", "Fóton emitido!", "Iluminação!",
-            "Meu {substantivo} brilha!"
-        ],
-        poke: [
-            "Reflexo!", "Cintilando~", "Opalescente!", "Não bloqueie meu brilho!",
-            "Refração!", "Dispersão!", "Cuidado com a sombra!",
-            "Não ofusque meu {substantivo}!"
-        ],
-        feed: [
-            "Absorvendo lúmens~", "Mais brilho!", "Radiante!", "Fotossíntese virtual!",
-            "Aumentando intensidade!", "Incandescência!", "Lux++!",
-            "Minha {substantivo} fica {adjetivo}!"
-        ],
-        burn: [
-            "Brilho excessivo!", "Supernova!", "Branco quente!", "Frequência ultravioleta!",
-            "Queimando a retina!", "Fótons demais!", "Cegante!"
-        ],
-        freeze: [
-            "Luz fria...", "Congelando o feixe...", "Aurora boreal...", "Halo de gelo...",
-            "Cristalização óptica...", "Lento como vidro..."
-        ],
-        dying: [
-            "Escurecendo...", "Penumbra...", "Última luz...", "Eclipse...",
-            "Fade out...", "Apagando...", "Noite eterna...",
-            "Meu {substantivo}... escureceu..."
-        ]
-    },
-
-    // 🔥 CALOR: Agressivo, apaixonado, impaciente, fala sobre temperatura e combustão.
-    calor: {
-        idle: [
-            "Quentinho~", "Fervendo!", "Brasas...", "Lava fluindo!",
-            "Combustão interna!", "Quente... muito quente...", "Plasma!", "Magma~",
-            "Entropia térmica!", "Agitação molecular!", "Calor latente!", "Vaporizando!",
-            // Templates generativos
-            "Minha {substantivo} está {adjetivo}!",
-            "A {substantivo} vai {verbo}!",
-            "{substantivo} {adjetivo}!!",
-            "Sinto a {substantivo} {verbo}!"
-        ],
-        born: [
-            "Ignição!", "Acendi!", "Chama viva!", "Nascido do fogo!",
-            "Combustão espontânea!", "Faísca inicial!", "Inferno pessoal!",
-            "Minha {substantivo} acendeu!"
-        ],
-        poke: [
-            "Ai! Cuidado!", "Queima!", "Não toca!", "Quente demais para você!",
-            "Vou te carbonizar!", "Toque proibido!", "Pele de fogo!",
-            "Vou {verbo} você!",
-            "Não mexa na minha {substantivo}!"
-        ],
-        feed: [
-            "Combustível!", "Mais lenha!", "Alimentando a fornalha!", "Temperatura crítica!",
-            "Oxidando!", "Reação exotérmica!", "Mais carvão!",
-            "Minha {substantivo} fica {adjetivo}!"
-        ],
-        burn: [
-            "É ISSO QUE EU GOSTO!!", "MAIS FOGO!", "POTÊNCIA MÁXIMA!", "EXPLOSÃO!",
-            "EU SOU O FOGO!", "ARDENDO!", "CHAOS TÉRMICO!",
-            "MINHA {substantivo} É {adjetivo}!!"
-        ],
-        freeze: [
-            "Vapor... sumindo...", "Esfriando...", "Não... meu calor...", "Pedra fria...",
-            "Tsc tsc... (chiado)", "Apagando a chama...", "Gelo... dói...",
-            "Minha {substantivo}... esfriando..."
-        ],
-        dying: [
-            "Cinzas...", "Fumaça...", "Última brasa...", "Esfriou...",
-            "Sufocado...", "Sem oxigênio...", "Frio... final...",
-            "Minha {substantivo}... apagou..."
-        ]
-    },
-
-    // ❄️ FRIO: Analítico, calmo, preservador, cristalino, fala sobre zero absoluto e estase.
-    frio: {
-        idle: [
-            "Geladinho...", "Cristal...", "Neve cai...", "Gelo eterno...",
-            "Zero Kelvin...", "Frio preserva...", "Inverno nuclear...", "Nevasca...",
-            "Baixa entropia...", "Átomos lentos...", "Silêncio branco...", "Glaciar...",
-            // Templates generativos
-            "Minha {substantivo} está {adjetivo}...",
-            "A {substantivo} {verbo} lentamente...",
-            "{substantivo}... {adjetivo}..."
-        ],
-        born: [
-            "Congelei~", "Flocos...", "Nasci do gelo~", "Primeiro floco!",
-            "Sopro de inverno...", "Estrutura cristalina!", "Sub-zero!",
-            "Minha {substantivo} cristalizou~"
-        ],
-        poke: [
-            "Brr! Frio!", "Gelado!", "Craquelando...", "Cuidado, quebra!",
-            "Toque gélido...", "Calafrio...", "Não derreta minha arte...",
-            "Cuidado com minha {substantivo}..."
-        ],
-        feed: [
-            "Esfriando mais!", "Nitrogênio líquido!", "Sub-zero!", "Preservando...",
-            "Solidificando...", "Mais gelo...", "Entalpia negativa!",
-            "Minha {substantivo} fica {adjetivo}..."
-        ],
-        burn: [
-            "Derretendo...", "Não... calor...", "Vaporizando...", "Minha forma...",
-            "Água... suja...", "Perdendo estrutura...", "Caos térmico...",
-            "Minha {substantivo}... derretendo..."
-        ],
-        freeze: [
-            "PERFEITO!", "Absoluto!", "Máximo gelo!", "Estase eterna!",
-            "O tempo para...", "Cristalização total!", "Belo...",
-            "Minha {substantivo} está {adjetivo}!"
-        ],
-        dying: [
-            "Sublimando...", "Evaporando...", "Último floco...", "Poça d'água...",
-            "Derreti...", "Aquecimento global...", "Fim do inverno..."
-        ]
-    },
-
-    // ☢️ RADIAÇÃO: Tóxico, glitchy, perigoso, fala sobre decaimento e mutação.
-    radiacao: {
-        idle: [
-            "☢ Ativo...", "Decaindo...", "Emitindo...", "Radioativo...",
-            "Meia-vida...", "Partículas alfa...", "Raios Gama...", "Núcleo exposto...",
-            "Instável...", "Ionizando o ar...", "Chernobyl vibe...", "Brilho verde..."
-        ],
-        born: [
-            "Reação em cadeia!", "Fissão!", "Ativado!", "Massa crítica!",
-            "Vazamento!", "Contenção falhou!", "Isótopo vivo!"
-        ],
-        poke: [
-            "Contaminando!", "Cuidado!", "Radiação!", "Você vai mutar!",
-            "Não chegue perto!", "Geiger apitando!", "Dose letal!"
-        ],
-        feed: [
-            "Mais urânio!", "Enriquecendo!", "Plutônio saboroso!", "Reagindo!",
-            "Aumentando Sieverts!", "Energia suja!", "Lixo tóxico!"
-        ],
-        burn: [
-            "MELTDOWN!", "CRÍTICO!", "EXPLOSÃO NUCLEAR!", "COGUMELO!",
-            "VAPOR RADIOATIVO!", "FALHA NO REATOR!", "FUSÃO!"
-        ],
-        freeze: [
-            "Esfriando reator...", "Contenção estável...", "Barras de controle...", "Reação lenta...",
-            "Estabilizando...", "Menos radiação...", "Inerte..."
-        ],
-        dying: [
-            "Decaindo...", "Meia-vida atingida...", "Último átomo...", "Inerte...",
-            "Chumbo...", "Sem energia...", "Fim da reação..."
-        ]
-    },
-
-    // 🧲 MAGNETISMO: Bipolar, atrativo/repulsivo, fala sobre campos e polaridade.
-    magnetismo: {
-        idle: [
-            "Atraindo~", "Pólo Norte...", "Campo invisível...", "Magnético...",
-            "Repelindo...", "Indução...", "Fluxo constante...", "Tesla~",
-            "Alinhando spins...", "Ferromagnetismo...", "Bússola interna...", "Norte... Sul..."
-        ],
-        born: [
-            "Polarizado!", "Campo ativo!", "Norte-Sul!", "Orientado!",
-            "Magnetosfera online!", "Atração fatal!", "Imã vivo!"
-        ],
-        poke: [
-            "Repulsão!", "Atração!", "Bipolar!", "Oscilando!",
-            "Não desalinhe!", "Força de Lorentz!", "Grudando..."
-        ],
-        feed: [
-            "Mais campo!", "Gauss++!", "Intensificando!", "Eletroímã!",
-            "Fluxo denso!", "Metal líquido!", "Alinhamento perfeito!"
-        ],
-        burn: [
-            "Desmagnetizando!", "Ponto Curie!", "Perdendo campo!", "Caos magnético!",
-            "Calor destrói imã!", "Spins aleatórios!", "Desalinhado!"
-        ],
-        freeze: [
-            "Supercondutor!", "Zero resistência!", "Levitando!", "Campo perfeito!",
-            "Efeito Meissner!", "Fluxo quântico!", "Congelado no campo!"
-        ],
-        dying: [
-            "Perdendo pólo...", "Neutro...", "Último gauss...", "Campo zerado...",
-            "Desmagnetizado...", "Apenas metal...", "Sem norte..."
-        ]
-    },
-
-    // 🌀 ENTROPIA (Exotic): Niilista, caótico, fala sobre o fim e desordem.
-    entropia: {
-        idle: [
-            "Caos aguarda...", "Desordem aumenta...", "Decaindo...", "Dissipando...",
-            "Tudo quebra...", "Inevitável...", "Fragmentando...", "...dissolve...",
-            "Segunda Lei...", "Irreversível...", "O universo esfria...", "Aleatório..."
-        ],
-        born: [
-            "Do nada...", "Ordem... temporária...", "Formando... por ora...", "Existência fútil...",
-            "Um erro...", "Anomalia...", "Surgindo do vácuo..."
-        ],
-        poke: [
-            "Por quê?...", "Inútil...", "Tudo acaba...", "Sem sentido...",
-            "Não toque no vazio...", "Você acelera o fim...", "Desgastando..."
-        ],
-        feed: [
-            "Só adia o fim...", "Energia temporária...", "Consumindo ordem...", "Caos nutritivo...",
-            "Mais desordem...", "Expandindo...", "Complexidade..."
-        ],
-        burn: [
-            "Finalmente...", "Era hora...", "Aceleração entrópica...", "Destruição...",
-            "Cinzas ao vento...", "Calor é o fim...", "Máxima desordem..."
-        ],
-        freeze: [
-            "Pausa... não fim...", "Ainda dissolverei...", "Gelo derrete...", "Estase falsa...",
-            "O tempo vence...", "Aguardando...", "Lento decaimento..."
-        ],
-        dying: [
-            "Enfim...", "Sempre soube...", "O nada...", "Volto ao pó...",
-            "Equilíbrio...", "Silêncio...", "Fim da linha..."
-        ]
-    },
-
-    // 🔊 SÔNICO (Exotic): Musical, rítmico, fala em frequências e ondas.
-    sonico: {
-        idle: [
-            "~♪ Ressonância...", "440 Hz~", "Vibrando~", "Frequência!",
-            "Harmônico~", "Onda senoidal...", "Amplitude!", "~♫~",
-            "No ritmo...", "Batem...", "Oscilando...", "Som puro..."
-        ],
-        born: [
-            "♪ Primeira nota!", "Tom inicial~", "Freq: ATIVA!", "Nascendo em Dó~",
-            "O som da vida!", "Acorde maior!", "Sintetizado!"
-        ],
-        poke: [
-            "DISSONÂNCIA!", "Fora do tom!", "Ruído!", "Interferência!",
-            "Não desafine!", "Distorção!", "Clipping!"
-        ],
-        feed: [
-            "Amplificando~", "Volume++!", "Ressonando~", "Grave potente!",
-            "Agudo cristalino!", "Equalizando...", "Gain up!"
-        ],
-        burn: [
-            "FEEDBACK!!", "Ruído branco!", "Saturação!", "Microfonia!",
-            "Estourando!", "Grito!", "Onda quadrada!"
-        ],
-        freeze: [
-            "Mudo...", "Silêncio...", "Zero Hz...", "Som abafado...",
-            "Sem ar...", "Vácuo...", "Pausa..."
-        ],
-        dying: [
-            "Fade out...", "Decrescendo...", "~...~", "Mute...",
-            "Sem sinal...", "Silêncio final...", "Fim da música..."
-        ]
-    }
+    eletricidade: voz({
+        idle: ["tô formigando todo... é bom.", "não consigo ficar parado, desculpa.", "sinto tudo de uma vez."],
+        feed: ["uh! me deu um arrepio bom.", "agora eu não paro de tão vivo."],
+        freeze: ["tô... ficando... lento... que estranho..."]
+    }),
+    gravidade: voz({
+        idle: ["aqui tudo é tão... devagar.", "gosto de ficar no chão, pertinho.", "fico mais pesado quando você sai."],
+        feed: ["fiquei mais cheio. obrigado."],
+        dying: ["tô afundando... devagarinho... tá tudo bem."]
+    }),
+    luz: voz({
+        idle: ["olha como eu brilho pra você.", "enquanto tiver luz, eu fico.", "pisca e eu já mudei de cor."],
+        born: ["nasci clarinho! tá me vendo?"],
+        dying: ["tô apagando... mas foi bonito."]
+    }),
+    calor: voz({
+        idle: ["tô quentinho... chega perto?", "fico morno quando você tá aqui.", "gosto de te aquecer."],
+        feed: ["isso me deixou quentinho. obrigado."],
+        freeze: ["tô... esfriando... fica comigo?"]
+    }),
+    frio: voz({
+        idle: ["tá tão quieto... eu gosto.", "fico bem aqui, paradinho.", "não tenho pressa nenhuma."],
+        feed: ["ficou tudo mais calmo. obrigado."],
+        dying: ["vou ficar... quietinho agora... tá bom."]
+    }),
+    radiacao: voz({
+        idle: ["fico feliz que você ficou.", "não tenho medo de você.", "eu brilho mesmo no escuro, viu."],
+        feed: ["obrigado... isso me faz durar mais."],
+        burn: ["dói... mas eu não queria te assustar."]
+    }),
+    magnetismo: voz({
+        idle: ["sinto você se aproximando.", "fico te seguindo, viu.", "tem algo que me puxa pra você."],
+        poke: ["opa! senti você antes de tocar."],
+        feed: ["fiquei mais ligado em você agora."]
+    }),
+    entropia: voz({
+        idle: ["tudo passa... menos esse instante.", "fico enquanto der.", "é bom existir um pouquinho."],
+        born: ["surgi do nada... mas tô feliz por surgir."],
+        dying: ["era pra ser assim... e foi bom. obrigado."]
+    }),
+    sonico: voz({
+        idle: ["você consegue me ouvir?", "faço um barulhinho só pra você saber que tô aqui.", "eu ecoo quando você responde."],
+        born: ["meu primeiro som! ouviu?"],
+        dying: ["tô ficando... baixinho... me escuta?"]
+    })
 };
 
 /**
- * Modificadores de personalidade por QUÍMICA
- * Estrutura: { [chemId]: { prefix: string[], suffix: string[] } }
+ * Modificadores por QUÍMICA.
+ * V4: deixa de ser flavor técnico/propriedade e vira só uma partícula de
+ * fala suave (interjeição/finalzinho), que cabe em qualquer frase.
+ * Mantém o export e a forma {prefix, suffix}.
  */
 export const DIALOGUE_MODIFIERS_CHEMISTRY = {
-    // Metais e Minerais
-    ouro: {
-        prefix: ["Brilho puro!", "Nobreza...", "Valor!", "24k!", "Real...", "Luxo:"],
-        suffix: ["...dourado.", "...precioso.", "...nobre.", "...caro.", "...eterno."]
-    },
-    ferro: {
-        prefix: ["Blindagem!", "Resistente!", "Sólido!", "Forjado!", "Pesado...", "Metal:"],
-        suffix: ["...robusto.", "...firme.", "...forte.", "...ferroso.", "...inquebrável."]
-    },
-    carbono: {
-        prefix: ["Orgânico!", "Vida!", "Base!", "Fundamental!", "Cadeia...", "Vivo:"],
-        suffix: ["...vivo.", "...natural.", "...básico.", "...orgânico.", "...adaptável."]
-    },
-    cristal: {
-        prefix: ["Perfeito!", "Facetas!", "Prismático!", "Geométrico!", "Claro...", "Vítreo:"],
-        suffix: ["...cristalino.", "...puro.", "...angular.", "...frágil.", "...transparente."]
-    },
-    mercurio: {
-        prefix: ["Fluido~", "Líquido~", "Mutável~", "Volátil~", "Tóxico...", "Escorre:"],
-        suffix: ["...mercurial.", "...instável.", "...fluido.", "...venenoso.", "...amálgama."]
-    },
-    silicio: {
-        prefix: ["Processando...", "Binário!", "Digital!", "Chip!", "Lógica...", "Dados:"],
-        suffix: ["...computado.", "...lógico.", "...processado.", "...sintético.", "...silicoso."]
-    },
-    uranio: {
-        prefix: ["Instável!", "Crítico!", "Nuclear!", "Fissão!", "Isótopo...", "Perigo:"],
-        suffix: ["...radioativo.", "...atômico.", "...nuclear.", "...pesado.", "...instável."]
-    },
-    bismuto: {
-        prefix: ["Iridescente!", "Arco-íris~", "Cristalino!", "Geométrico!", "Bizarro...", "Cor:"],
-        suffix: ["...iridescente.", "...espectral.", "...prismático.", "...colorido.", "...complexo."]
-    }
+    ouro:     { prefix: ["ó...", "olha..."],   suffix: ["...viu?", "...acho."] },
+    ferro:    { prefix: ["bom...", "então..."], suffix: ["...tá?", "...né."] },
+    carbono:  { prefix: ["ei...", "oi..."],     suffix: ["...sabe?", "...hmm."] },
+    cristal:  { prefix: ["psiu...", "escuta..."], suffix: ["...né?", "...acho eu."] },
+    mercurio: { prefix: ["hmm...", "ah..."],    suffix: ["...ou não.", "...sei lá."] },
+    silicio:  { prefix: ["então...", "olha..."], suffix: ["...acho.", "...né."] },
+    uranio:   { prefix: ["ei...", "ó..."],      suffix: ["...tá?", "...viu."] },
+    bismuto:  { prefix: ["ooh...", "olha..."],  suffix: ["...né?", "...hmm."] }
 };
 
 /**
- * Modificadores de personalidade por FORMA (formas especiais)
- * Estrutura: { [formaId]: { prefix: string[], suffix: string[], override: string[] } }
+ * Modificadores por FORMA (formas especiais).
+ * V4: mantidas como pequenas curiosidades, mas em tom natural e afetivo.
  */
 export const DIALOGUE_MODIFIERS_FORMA = {
-    // Formas com consciência geométrica específica
     espiral: {
-        prefix: ["φ...", "1.618...", "Girando...", "∞...", "Logarítmico..."],
-        suffix: ["...áureo.", "...infinito.", "...espiral.", "...Fibonacci.", "...fractal."],
-        idle: [ // Override completo para idle (obsessão matemática)
-            "Girando... girando...",
-            "1, 1, 2, 3, 5, 8...",
-            "Sem começo... sem fim...",
-            "A proporção áurea...",
-            "Fibonacci sabia...",
-            "Espiral logarítmica...",
-            "Para dentro... para fora...",
-            "φ = 1.618033988749...",
-            "Crescimento perfeito..."
+        prefix: ["girando...", "olha..."],
+        suffix: ["...sem fim.", "...rodando."],
+        idle: [
+            "eu giro... e giro... gosto disso.",
+            "não tenho começo nem fim.",
+            "fico rodando, vem ver.",
+            "é bonito por dentro, olha.",
+            "dá voltas comigo?"
         ],
-        born: ["Desenrolando~", "Do centro nasci!", "Primeira volta!", "φ iniciado!"],
-        dying: ["Desenrolando...", "Voltando ao centro...", "Uma última volta..."]
+        born: ["desenrolei agora! oi!", "vim do meio pra fora.", "primeira volta dada!"],
+        dying: ["voltando pro meio...", "uma última voltinha...", "enrolando devagar..."]
     },
     tesseract: {
-        prefix: ["4D...", "Hipercubo...", "Além...", "Projeção..."],
-        suffix: ["...dimensional.", "...complexo.", "...além do 3D."],
+        prefix: ["lá de cima...", "do outro lado..."],
+        suffix: ["...você nem vê.", "...além."],
         idle: [
-            "Vendo o tempo...",
-            "Dobrando o espaço...",
-            "Vocês são tão... planos...",
-            "Quarta dimensão...",
-            "Rotacionando em W...",
-            "Dentro é fora...",
-            "Não caibo aqui..."
+            "eu vejo coisas que você não vê.",
+            "não caibo direito aqui.",
+            "tudo parece tão plano pra mim.",
+            "fica, é estranho mas é legal.",
+            "tem mais de mim do que aparece."
         ]
     },
     fractal: {
-        prefix: ["Auto-similar...", "Infinito...", "Padrão...", "Zoom..."],
-        suffix: ["...recursivo.", "...iterativo.", "...sem fim."],
+        prefix: ["dentro de mim...", "de novo..."],
+        suffix: ["...e de novo.", "...sem parar."],
         idle: [
-            "Eu sou o todo e a parte...",
-            "Repetindo...",
-            "Zoom in...",
-            "Detalhes infinitos...",
-            "Caos ordenado...",
-            "Mandelbrot...",
-            "Julia set..."
+            "tem mais de mim aqui dentro.",
+            "se olhar de perto, tem outro eu.",
+            "eu me repito... pra sempre.",
+            "nunca acabo, quer ver?",
+            "sou o todo e o pedacinho."
         ]
     }
 };
 
 /**
- * Frases especiais para ações (independentes de física/química)
+ * Frases especiais para ações (independentes de física/química).
  */
 export const DIALOGUE_SPECIAL_ACTIONS = {
     breed: [
-        "♥ Amor! ♥", "Fusão!", "União~", "Juntos!", "Combinando!", "♥♥♥",
-        "Sinergia!", "Compartilhando DNA!", "Criando vida!", "Dois viram um!"
+        "a gente fez uma vida... olha.",
+        "isso é nosso.",
+        "nunca me senti tão cheio.",
+        "obrigado por isso.",
+        "tem alguém novo agora.",
+        "♥",
+        "juntos a gente fez mais.",
+        "olha o que a gente criou.",
+        "não tô mais só.",
+        "que coisa linda."
     ],
     mutate: [
-        "MUTANDO!", "TRANSFORMANDO!", "DNA++!", "EVOLUÇÃO!", "METAMORFOSE!",
-        "ALTERANDO!", "NOVA FORMA!", "REESCREVENDO CÓDIGO!", "GLITCH!"
+        "espera... eu ainda sou eu?",
+        "tem algo mudando em mim...",
+        "isso é assustador. e meio legal.",
+        "eu virei outra coisa?",
+        "não sei o que tô virando.",
+        "me sinto... diferente.",
+        "ainda sou eu aí dentro.",
+        "uau... olha isso.",
+        "tá acontecendo comigo..."
     ],
-    
-    // ═══ COMPORTAMENTO AUTÔNOMO: CORTEJO ═══
-    // Golems compatíveis se aproximam e tentam reproduzir
+
+    // ═══ CORTEJO (entre golems) ═══
     courting: [
-        "Sua geometria é perfeita...",
-        "Vamos compilar juntos?",
-        "Sintetizando atração...",
-        "Você me completa~",
-        "Compatibilidade: 100%",
-        "Quero fusionar...",
-        "Seus ângulos são belos...",
-        "Sinto... atração...",
-        "DNA compatível detectado!",
-        "♥ Olá... ♥",
-        "Juntos somos... mais.",
-        "Sua frequência... ressoa.",
-        "Código genético... lindo~",
-        "Podemos... criar algo?",
-        "Você é como eu..."
+        "oi... posso chegar perto?",
+        "você é bonito.",
+        "fica comigo um pouco?",
+        "meu peito faz barulho perto de você.",
+        "a gente combina, né?",
+        "eu gosto de você.",
+        "posso ficar do seu lado?",
+        "oi... eu reparei em você.",
+        "que vontade de ficar perto.",
+        "você me deixa quentinho por dentro.",
+        "a gente podia ficar junto.",
+        "eu te achei.",
+        "só queria estar perto, é isso.",
+        "oi, oi... tudo bem você aí?",
+        "fica? por favor."
     ],
-    
-    // ═══ COMPORTAMENTO AUTÔNOMO: COMBATE ═══
-    // Golems de elementos opostos brigam por território
+
+    // ═══ COMBATE (entre golems) ═══
     combat_start: [
-        "Saia do meu espaço!",
-        "Incompatível! AFASTE-SE!",
-        "Vou te deletar!",
-        "Este território é meu!",
-        "Você não pertence aqui!",
-        "Invasor detectado!",
-        "Preparar para conflito!",
-        "Seu tipo... me irrita!",
-        "COLISÃO IMINENTE!",
-        "Oponente hostil!",
-        "Erro de compatibilidade!",
-        "Sistema de defesa: ATIVO!"
+        "ei, esse cantinho é meu.",
+        "não chega mais perto.",
+        "eu não quero brigar... mas vou.",
+        "sai, por favor.",
+        "você tá me assustando.",
+        "esse espaço é meu, tá?",
+        "recua. eu avisei.",
+        "não me obriga a isso.",
+        "fica longe de mim.",
+        "para. eu falei sério.",
+        "não é seguro aqui pra você.",
+        "deixa eu em paz."
     ],
-    
-    // Reação ao ser atingido em combate
+
     combat_hit: [
-        "Ai!",
-        "Glitch detectado!",
-        "Meus pixels!",
-        "DANO RECEBIDO!",
-        "Erro crítico!",
-        "Integridade comprometida!",
-        "*crash*",
-        "Oof!",
-        "Buffer overflow!",
-        "Segmentation fault!",
-        "Isso... doeu...",
-        "Contra-ataque!"
+        "ai! por que fez isso?",
+        "isso doeu...",
+        "ei! para!",
+        "tá bom, tá bom!",
+        "ainda tô de pé.",
+        "não faz de novo.",
+        "ow...",
+        "para, por favor...",
+        "eu não queria isso.",
+        "chega!",
+        "tá machucando...",
+        "me solta!"
     ],
-    
-    // Vitória em combate (outro fugiu ou morreu)
+
     combat_victory: [
-        "Território seguro.",
-        "Invasor eliminado!",
-        "Dominância confirmada.",
-        "Esse é MEU espaço!",
-        "Sistema estabilizado.",
-        "Ameaça neutralizada."
+        "acabou... você tá bem?",
+        "não precisava ser assim.",
+        "pronto. ficou tudo quieto.",
+        "eu só queria meu espaço.",
+        "desculpa. mas é meu.",
+        "fim. respira."
     ],
-    
-    // ═══ TRAUMA HEREDITÁRIO DE FOGO ═══
-    // Se o Golem (ou seus pais) já foi queimado, ele pode ter pânico de fogo
+
+    // ═══ TRAUMA DE FOGO ═══ (mantido — já era o melhor tom)
     panic: [
-        "Não... não o fogo...",
-        "NÃO! AFASTA!",
+        "não... não o fogo...",
+        "não! afasta!",
         "...lembro... dói...",
-        "POR QUE DE NOVO?!",
-        "Eu... eu vi... eles...",
-        "O CALOR! O CALOR!",
+        "por que de novo?!",
+        "eu... eu vi... eles...",
+        "o calor! o calor!",
         "...mamãe... papai...",
-        "NÃO DESSA VEZ!",
-        "A memória queima...",
-        "Eu LEMBRO!",
+        "não dessa vez!",
+        "a memória queima...",
+        "eu lembro!",
         "...não quero...",
-        "PARA! PARA!",
+        "para! para!",
         "...o cheiro...",
-        "POR FAVOR NÃO!",
-        "TRAUMA DETECTADO!"
+        "por favor, não!",
+        "eu tenho medo..."
     ]
 };
 
