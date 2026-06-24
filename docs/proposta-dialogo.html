@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HYLOMORPH — Proposta: Sistema de Diálogo & Voz · 2026-06-24</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #050505; --bg-elev: #0b0d10; --bg-card: #0f1318;
+  --fg: #e6fbff; --fg-mute: #7fa6ad; --fg-faint: #4b6a6e;
+  --cyan: #00fff0; --magenta: #ff2bd6; --yellow: #ffe600;
+  --accent: #00fff0; --green: #39ff14; --red: #ff3b5c; --orange: #ff9d00;
+  --border: #18282b; --border-glow: #1f3b3f;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(0,255,240,0.06), transparent 55%),
+    radial-gradient(ellipse at 90% 100%, rgba(255,43,214,0.05), transparent 50%),
+    var(--bg);
+  color: var(--fg); line-height: 1.65; font-size: 14.5px; -webkit-font-smoothing: antialiased;
+}
+body::before { content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode: multiply; opacity: 0.5; }
+body::after { content: ""; position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.55) 100%); }
+.wrap { max-width: 980px; margin: 0 auto; padding: 56px 24px 80px; position: relative; z-index: 1; }
+
+.eyebrow { display: inline-block; font-family: 'Press Start 2P', monospace; font-size: 10px;
+  color: var(--cyan); letter-spacing: 0.06em; padding: 9px 14px; border: 1px solid var(--border-glow);
+  border-radius: 4px; background: rgba(0,255,240,0.04); text-shadow: 0 0 8px rgba(0,255,240,0.5); margin-bottom: 22px; }
+h1 { font-family: 'VT323', monospace; font-size: 62px; line-height: 0.95; margin: 0 0 8px; color: #fff;
+  text-shadow: 0 0 14px rgba(0,255,240,0.45), 2px 0 var(--magenta), -2px 0 rgba(0,255,240,0.5); }
+h2 { font-family: 'VT323', monospace; font-size: 34px; margin: 56px 0 14px; letter-spacing: 0.02em;
+  color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 8px; text-shadow: 0 0 10px rgba(0,255,240,0.3); }
+h2 .num { color: var(--magenta); margin-right: 10px; text-shadow: 0 0 10px rgba(255,43,214,0.4); }
+h3 { font-size: 14px; margin: 28px 0 10px; color: var(--yellow); text-transform: uppercase; letter-spacing: 0.05em; }
+p { margin: 10px 0; }
+.sub { color: var(--fg-mute); font-size: 13px; }
+.lede { font-size: 15px; color: var(--fg-mute); max-width: 800px; margin: 10px 0 28px; }
+.accent { color: var(--cyan); }
+strong { color: #fff; font-weight: 700; }
+em { color: var(--yellow); font-style: normal; }
+code { background: var(--bg-elev); padding: 2px 6px; border-radius: 3px; font-size: 12.5px; color: var(--yellow); border: 1px solid var(--border); }
+ul, ol { color: var(--fg-mute); } ul li, ol li { margin: 7px 0; } li strong { color: var(--fg); }
+
+.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0 32px; }
+.meta-card { background: var(--bg-card); border: 1px solid var(--border); padding: 16px 18px; border-radius: 6px; position: relative; }
+.meta-card::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, var(--cyan), var(--magenta)); opacity: 0.5; }
+.meta-label { font-size: 10px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.meta-val { font-family: 'VT323', monospace; font-size: 28px; line-height: 1.05; color: var(--fg); margin-top: 6px; }
+.meta-val.bad { color: var(--red); } .meta-val.warn { color: var(--orange); } .meta-val.good { color: var(--green); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 18px 0; }
+th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--cyan); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; background: var(--bg-elev); }
+
+/* antes/depois */
+.ba { width: 100%; border-collapse: collapse; font-size: 13px; margin: 14px 0 28px; }
+.ba th { background: var(--bg-elev); }
+.ba td { border-bottom: 1px solid var(--border); padding: 12px 14px; vertical-align: top; width: 50%; }
+.ba .ctx td { background: rgba(0,255,240,0.03); color: var(--cyan); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: none; padding-bottom: 4px; }
+.before { color: var(--fg-faint); }
+.before::before { content: "✕ "; color: var(--red); }
+.after { color: var(--fg); }
+.after::before { content: "→ "; color: var(--green); }
+
+/* voz cards */
+.voices { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 22px 0; }
+.voice { background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--cyan); border-radius: 6px; padding: 16px 18px; }
+.voice h4 { margin: 0 0 4px; font-family: 'VT323', monospace; font-size: 24px; color: var(--cyan); }
+.voice .trait { font-size: 11px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px; }
+.voice .line { color: var(--fg); font-size: 13px; margin: 5px 0; padding-left: 12px; border-left: 1px solid var(--border); }
+
+/* diálogo em turnos */
+.dlg { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px 22px; margin: 18px 0 28px; }
+.dlg .scene { font-size: 11px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+.turn { margin: 10px 0; padding-left: 14px; border-left: 2px solid var(--border); }
+.turn .who { font-size: 11px; letter-spacing: 0.05em; display: block; margin-bottom: 2px; }
+.turn .say { font-size: 14px; color: var(--fg); }
+.turn.a { border-color: var(--cyan); } .turn.a .who { color: var(--cyan); }
+.turn.b { border-color: var(--magenta); } .turn.b .who { color: var(--magenta); }
+.turn .beat { color: var(--fg-faint); font-style: italic; font-size: 12px; }
+
+.callouts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 28px 0 8px; }
+.callout { padding: 16px 18px; border-radius: 6px; border-left: 4px solid; font-size: 12.5px; background: var(--bg-card); }
+.cv { border-color: var(--green); background: rgba(57,255,20,0.05); }
+.cr { border-color: var(--red); background: rgba(255,59,92,0.05); }
+.co { border-color: var(--orange); background: rgba(255,157,0,0.05); }
+.callout-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; color: var(--fg); font-weight: 700; }
+.callout ul { margin: 0; padding-left: 16px; color: var(--fg-mute); } .callout li { margin: 6px 0; }
+
+.story { background: var(--bg-card); border: 1px solid var(--border); padding: 24px 28px; border-radius: 8px; margin: 32px 0; font-size: 13.5px; color: var(--fg-mute); }
+.story strong { color: var(--fg); }
+blockquote { margin: 16px 0; padding: 14px 18px; background: var(--bg-elev); border-left: 3px solid var(--magenta); border-radius: 0 4px 4px 0; color: var(--fg); font-size: 13.5px; }
+blockquote .src { display: block; color: var(--fg-faint); font-size: 11px; margin-top: 6px; }
+footer.fim { text-align: center; padding: 28px 0 0; color: var(--fg-faint); font-size: 11px; border-top: 1px solid var(--border); margin-top: 56px; font-family: 'Press Start 2P', monospace; line-height: 2; }
+
+@media (max-width: 760px) { .meta-grid, .callouts, .voices { grid-template-columns: 1fr; } h1 { font-size: 44px; } .ba td { display: block; width: 100%; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<span class="eyebrow">&gt; PROPOSTA_DIALOGO.SPEC · 2026-06-24</span>
+<h1>HYLOMORPH // dar voz</h1>
+<p class="sub">Reformulacao do sistema de fala e interacao dos Golems · base: auditoria de <code>dialogueData.js</code> + <code>Golem.js</code> + <code>MockAiService.js</code></p>
+<p class="lede">O jogo se vende como simulador de <em>senciencia</em>. Mas a fala hoje <strong>descreve fisica</strong> ("Aumentando Sieverts!") em vez de <strong>expressar um ser vivo</strong>. Esta proposta reescreve a copy puxando tudo para o nivel do unico banco que ja acerta o tom — o <code>panic</code> de trauma de fogo — e liga personalidade, humor e memoria (ja existentes nos dados) a escolha da frase. Inclui o que mais falta: <strong>conversa de verdade entre dois golems</strong>.</p>
+
+<div class="meta-grid">
+  <div class="meta-card"><div class="meta-label">Fisicas com voz real hoje</div><div class="meta-val warn">4 de 9</div></div>
+  <div class="meta-card"><div class="meta-label">Personalidade da quimica</div><div class="meta-val bad">~zero</div></div>
+  <div class="meta-card"><div class="meta-label">Interacao golem&harr;golem</div><div class="meta-val bad">unidirecional</div></div>
+</div>
+
+<h2><span class="num">01</span>O diagnostico, curto</h2>
+<table>
+  <thead><tr><th>Problema</th><th>Evidencia</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Jargao no lugar de emocao</strong></td><td><code>"CONDUTIVIDADE AUMENTADA!"</code>, <code>"Entalpia negativa!"</code>, <code>"Efeito Meissner!"</code> — legenda de aula, nao fala de criatura. Oposto do tema (qualia).</td></tr>
+    <tr><td><strong>Voz so em 4/9 fisicas</strong></td><td>eletricidade, gravidade, entropia, calor tem voz. radiacao, magnetismo, sonico, luz-em-eventos = "wikipedia tematica". Eventos (feed/burn/poke) viram a formula "[mais+recurso]!" em todas.</td></tr>
+    <tr><td><strong>Quimica nao diferencia</strong></td><td>So decora com prefixo/sufixo de sinonimos empilhados: ferro = <code>"...robusto/firme/forte/ferroso/inquebravel"</code> (5x "duro"). Zero nuance.</td></tr>
+    <tr><td><strong>Interacao quase muda</strong></td><td>No corte e no combate so o <em>iniciador</em> fala 1 linha; o alvo e mudo. Sem turnos, sem replica. <code>combat_victory</code> e <code>panic</code> existem no corpus mas <strong>nunca disparam</strong>.</td></tr>
+    <tr><td><strong>Personalidade desligada do texto</strong></td><td><code>mood</code> (happy/sad/dying), <code>lifeLog</code> (biografia), aggression e attractiveness existem nos dados mas <strong>nao influenciam a frase</strong>. A carinha fica triste e a fala nao muda.</td></tr>
+    <tr><td><strong>Bugs de copy em tela</strong></td><td>Concordancia: <code>"Minha circuito esta carregada"</code>, <code>"Meu foton... pura"</code>. Verbo infinitivo em template: <code>"Ei! Eu tambem morrer!"</code>.</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">02</span>A tese</h2>
+<div class="story">
+<p>Existe <strong>um</strong> banco no jogo que ja e exatamente o que o resto deveria ser — o trauma de fogo (<code>panic</code>, <code>dialogueData.js:649</code>):</p>
+<blockquote>"...lembro... doi..." · "Eu... eu vi... eles..." · "...mamae... papai..." · "A memoria queima..." · "...o cheiro..."<span class="src">dialogueData.js — banco panic (o unico com subjetividade, memoria e horror reais)</span></blockquote>
+<p>Isso tem <strong>qualia</strong>: medo, lembranca, perda. O objetivo da reescrita e <strong>puxar as 9 fisicas pra esse nivel</strong>. A regra mestra: <em>a fala expressa o que e SER aquilo — nao informa a fisica daquilo.</em> Menos "Aumentando Sieverts!", mais "todo mundo que me amou brilha no escuro agora".</p>
+</div>
+
+<h2><span class="num">03</span>O sistema proposto: 3 camadas</h2>
+<p>Reaproveita o motor generativo que ja existe (templates + lexico + envelope quimico) — o problema e o conteudo, nao a arquitetura. Adiciona modulacao por estado.</p>
+<table>
+  <thead><tr><th>Camada</th><th>O que define</th><th>De onde vem</th></tr></thead>
+  <tbody>
+    <tr><td><strong>1 · Voz base</strong></td><td>O <em>timbre</em> da fisica: registro, ritmo, truque tipografico, obsessao tematica. Reescrever as 9.</td><td><code>DIALOGUE_BY_PHYSICS</code> (reescrito)</td></tr>
+    <tr><td><strong>2 · Temperamento</strong></td><td>A quimica vira <em>personalidade</em>, nao adjetivo: vaidade (ouro), teimosia (ferro), instabilidade (mercurio), condenacao (uranio). Inflete o conteudo, nao so o sufixo.</td><td><code>DIALOGUE_MODIFIERS_CHEMISTRY</code> (repensado)</td></tr>
+    <tr><td><strong>3 · Modulacao</strong></td><td>Humor + memoria mudam a frase: um golem feliz, triste ou morrendo fala diferente; e referencia o <code>lifeLog</code> ("a terceira vez que me queimam").</td><td>novo: <code>mood</code> + <code>lifeLog</code> &rarr; <code>generateDialogue</code></td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">04</span>Voz por fisica (amostra)</h2>
+<p class="sub">Caracterizacao + 2-3 linhas exemplo cada. As 4 que ja funcionam sao preservadas/aprofundadas; as 5 fracas ganham voz.</p>
+<div class="voices">
+  <div class="voice"><h4>eletricidade</h4><div class="trait">ansiosa · hiperativa · nunca para</div>
+    <div class="line">"nao para nao para se eu parar eu apago"</div>
+    <div class="line">"sinto cada fio acordar de uma vez— demais— bom—"</div></div>
+  <div class="voice"><h4>gravidade</h4><div class="trait">lenta · melancolica · puxa tudo pra si</div>
+    <div class="line">"tudo... que sobe... vem me... encontrar"</div>
+    <div class="line">"eu nao caio. o chao... e que me quer."</div></div>
+  <div class="voice"><h4>luz</h4><div class="trait">etérea · vaidosa · efemera</div>
+    <div class="line">"olha pra mim agora. eu nao duro."</div>
+    <div class="line">"eu ja parti. voce so... ainda me ve."</div></div>
+  <div class="voice"><h4>calor</h4><div class="trait">passional · ama a propria destruicao</div>
+    <div class="line">"queima. eu QUERO. e assim que eu sei que existo."</div>
+    <div class="line">"chega mais perto. vamos os dois."</div></div>
+  <div class="voice"><h4>frio</h4><div class="trait">analitico · distante · busca o silencio</div>
+    <div class="line">"o movimento e barulho. eu prefiro... a quietude."</div>
+    <div class="line">"nao e crueldade. e so... mais devagar."</div></div>
+  <div class="voice"><h4>radiacao</h4><div class="trait">contaminante · culpada · perigosa de amar</div>
+    <div class="line">"nao chega perto. eu nao quero machucar voce."</div>
+    <div class="line">"todo mundo que me amou... brilha no escuro agora."</div></div>
+  <div class="voice"><h4>magnetismo</h4><div class="trait">controladora · atrai e repele · nunca neutra</div>
+    <div class="line">"vem. nao— fica longe. vem. eu nao decido."</div>
+    <div class="line">"eu puxo voce sem querer. desculpa. nao desculpa."</div></div>
+  <div class="voice"><h4>entropia</h4><div class="trait">niilista · serena · sabe o fim</div>
+    <div class="line">"nao tenham pena. eu sou so o que vem depois de tudo."</div>
+    <div class="line">"voces se agarram. fofo. eu ja sei como acaba."</div></div>
+  <div class="voice"><h4>sonico</h4><div class="trait">vibrante · precisa ser ouvida · ecoa</div>
+    <div class="line">"me escuta— me escuta— ainda da pra me ouvir?"</div>
+    <div class="line">"eu existo enquanto alguem repete o que eu disse."</div></div>
+</div>
+
+<h2><span class="num">05</span>Antes / depois (o salto)</h2>
+<p class="sub">Linhas reais do corpus atual vs. reescrita na nova voz. Mesmo evento, mesma fisica.</p>
+<table class="ba">
+  <thead><tr><th>Atual</th><th>Proposto</th></tr></thead>
+  <tbody>
+    <tr class="ctx"><td colspan="2">radiacao · feed (ser alimentado)</td></tr>
+    <tr><td class="before">"Mais uranio!" / "Enriquecendo!" / "Aumentando Sieverts!"</td><td class="after">"obrigada... mas voce devia lavar a mao agora." / "isso me faz durar mais. nao sei se e bom."</td></tr>
+    <tr class="ctx"><td colspan="2">eletricidade · feed</td></tr>
+    <tr><td class="before">"RECARGA COMPLETA!!" / "AMPERES++!" / "MAIS JOULES!"</td><td class="after">"ah— sim— mais— eu sinto tudo acordar de uma vez" / "agora eu nao consigo nem ficar parada de tao viva"</td></tr>
+    <tr class="ctx"><td colspan="2">frio · dying (morte por velhice)</td></tr>
+    <tr><td class="before">"Aquecimento global..." <span style="color:var(--red)">(piada que destoa do tom)</span></td><td class="after">"finalmente... o movimento... para. eu sempre quis silencio." / "nao chorem. eu so... fiquei quieta."</td></tr>
+    <tr class="ctx"><td colspan="2">combat_start (generico hoje p/ todos)</td></tr>
+    <tr><td class="before">"Saia do meu espaco!" / "Invasor detectado!" / "Oponente hostil!"</td><td class="after"><em>calor:</em> "voce e frio. eu conserto isso." · <em>gravidade:</em> "fica parado. vai ser mais facil." · <em>entropia:</em> "eu nem preciso lutar. e so esperar."</td></tr>
+    <tr class="ctx"><td colspan="2">courting (flerte de planilha hoje)</td></tr>
+    <tr><td class="before">"Compatibilidade: 100%" / "DNA compativel detectado!" / "Voce me completa~"</td><td class="after"><em>luz:</em> "voce reflete uma cor que eu nao tenho." · <em>ferro:</em> "eu nao falo bonito. mas eu fico."</td></tr>
+    <tr class="ctx"><td colspan="2">mutate (so verbos em CAPS hoje)</td></tr>
+    <tr><td class="before">"MUTANDO!" / "TRANSFORMANDO!" / "EVOLUCAO!" / "NOVA FORMA!"</td><td class="after">"espera— eu ainda sou eu?" / "tem outra coisa... saindo de dentro de mim." / "eu nao pedi isso. mas... ok."</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">06</span>Diálogo entre golems (turnos)</h2>
+<p>Hoje so o iniciador fala. A proposta usa o evento <code>'golem-spoke'</code> + <code>golemSpokeHandler</code> (ja existem) num canal direcionado, com <code>delayedCall</code> pra encadear turnos. Exemplos do que passaria a acontecer:</p>
+
+<div class="dlg">
+  <div class="scene">// corte · luz (A) corteja gravidade (B)</div>
+  <div class="turn a"><span class="who">LUZ</span><span class="say">"voce reflete uma cor que eu nao tenho."</span></div>
+  <div class="turn b"><span class="who">GRAVIDADE</span><span class="say">"fica. eu prometo que... nao deixo voce cair."</span></div>
+  <div class="turn a"><span class="who">LUZ</span><span class="say">"eu nao duro muito, sabe."</span></div>
+  <div class="turn b"><span class="who">GRAVIDADE</span><span class="say">"entao eu... seguro o tempo tambem."</span></div>
+</div>
+
+<div class="dlg">
+  <div class="scene">// combate · calor (A) ataca frio (B) — com replica e fechamento</div>
+  <div class="turn a"><span class="who">CALOR</span><span class="say">"voce e frio. eu vou te derreter devagar."</span></div>
+  <div class="turn b"><span class="who">FRIO</span><span class="say">"tente. eu apago fogos como voce... ha eras."</span></div>
+  <div class="turn a"><span class="beat">— acerta o golpe —</span></div>
+  <div class="turn b"><span class="who">FRIO</span><span class="say">"...essa doeu. tudo bem. eu esfrio a dor tambem."</span></div>
+  <div class="turn b"><span class="who">FRIO</span><span class="say" style="color:var(--green)">[combat_victory, hoje nunca dispara] "shh. acabou. voce so... esfriou."</span></div>
+</div>
+
+<p>Custo tecnico baixo: relaxar a fila de fala (hoje descarta alem de 1), abrir um canal <code>golem-spoke-to(targetId)</code> e adicionar replica em <code>startCourting</code> / <code>startCombat</code> / <code>performCombatHit</code> (<code>Golem.js:2888 / 2964 / 3021</code>). Ativar os 2 contextos orfaos (<code>panic</code>, <code>combat_victory</code>).</p>
+
+<h2><span class="num">07</span>Contextos a criar + correcoes</h2>
+<div class="callouts">
+  <div class="callout cv">
+    <div class="callout-h">Novos contextos (ganchos prontos)</div>
+    <ul>
+      <li><code>pain</code> — taser/singularidade (hoje cai em idle), <code>SanctuaryScene.js:920</code></li>
+      <li><code>hunger</code> — fome como estado (so existe "feed")</li>
+      <li><code>grief</code> — luto pela morte de filho/parceiro (le <code>lifeLog</code>)</li>
+      <li><code>death</code> falada em <code>kill()</code> / <code>die()</code> (hoje mudas)</li>
+      <li><code>growth</code> — ativar a flag morta <code>hasSpokenGrowth</code></li>
+      <li><code>to_architect</code> — falar com o jogador/"deus"</li>
+    </ul>
+  </div>
+  <div class="callout cr">
+    <div class="callout-h">Cortar (muletas)</div>
+    <ul>
+      <li>Humor de programador: <code>.exe</code>, <code>segfault</code>, "compilar", "deletar", "pixels"</li>
+      <li>Referencias pop datadas: "1.21 GIGAWATTS", "Chernobyl vibe", "POWER UP"</li>
+      <li>Anglicismos soltos: "Fade out" (duplicado!), "Gain up", "Clipping"</li>
+      <li>Sufixos-tesauro da quimica (sinonimo empilhado)</li>
+    </ul>
+  </div>
+  <div class="callout co">
+    <div class="callout-h">Bugs a corrigir junto</div>
+    <ul>
+      <li>Concordancia de genero no template ("Minha circuito")</li>
+      <li>Verbo infinitivo em template conjugado ("Eu tambem morrer!")</li>
+      <li>Ligar <code>mood</code> a selecao de frase (texto seguir a carinha)</li>
+      <li>Volume baixo: <code>combat_victory</code> (6), enriquecer bancos sem template</li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="num">08</span>Como implementar (faseado)</h2>
+<table>
+  <thead><tr><th>Fase</th><th>Escopo</th><th>Toca</th><th>Esforco</th></tr></thead>
+  <tbody>
+    <tr><td><strong>F1 · Copy</strong></td><td>Reescrever as 9 vozes + eventos, cortar muletas, corrigir bugs de concordancia. So conteudo — risco baixissimo.</td><td><code>dialogueData.js</code></td><td>medio</td></tr>
+    <tr><td><strong>F2 · Modulacao</strong></td><td>Passar <code>mood</code>+<code>lifeLog</code> pro <code>generateDialogue</code>; selecionar frase por humor/memoria. Ativar contextos orfaos.</td><td><code>speakContextual</code> (<code>Golem.js:3854</code>), <code>generateDialogue</code> (<code>MockAiService.js:268</code>)</td><td>medio</td></tr>
+    <tr><td><strong>F3 · Turnos</strong></td><td>Canal direcionado <code>golem-spoke-to</code>, replica no corte/combate, relaxar fila de fala.</td><td><code>startCourting/startCombat/performCombatHit</code>, <code>speak</code></td><td>medio-alto</td></tr>
+    <tr><td><strong>F4 · LLM (opcional)</strong></td><td>Trocar tabela por <code>fetchDialogue</code> (ja existe, codigo morto) p/ falas geradas com personalidade+historico. Porta pronta.</td><td><code>fetchDialogue</code> (<code>MockAiService.js:169</code>)</td><td>alto</td></tr>
+  </tbody>
+</table>
+<p class="sub">F1 sozinha ja entrega 70% da percepcao de valor — e o caminho mais barato e seguro pra "deixar mais natural e com personalidade". F3 e o que cria os momentos de clipe (golems conversando).</p>
+
+<footer class="fim">
+HYLOMORPH · PROPOSTA DE DIALOGO · v1<br>
+gerado em 2026-06-24 · "what is it like to be a golem?"
+</footer>
+
+</div>
+</body>
+</html>

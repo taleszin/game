@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HYLOMORPH — Auditoria Tecnica · 2026-06-24</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #050505;
+  --bg-elev: #0b0d10;
+  --bg-card: #0f1318;
+  --fg: #e6fbff;
+  --fg-mute: #7fa6ad;
+  --fg-faint: #4b6a6e;
+  --cyan: #00fff0;
+  --magenta: #ff2bd6;
+  --yellow: #ffe600;
+  --accent: #00fff0;
+  --green: #39ff14;
+  --red: #ff3b5c;
+  --orange: #ff9d00;
+  --border: #18282b;
+  --border-glow: #1f3b3f;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(0,255,240,0.06), transparent 55%),
+    radial-gradient(ellipse at 90% 100%, rgba(255,43,214,0.05), transparent 50%),
+    var(--bg);
+  color: var(--fg);
+  line-height: 1.65;
+  font-size: 14.5px;
+  -webkit-font-smoothing: antialiased;
+}
+/* overlay CRT / scanlines */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode: multiply; opacity: 0.5;
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.55) 100%);
+}
+.wrap { max-width: 960px; margin: 0 auto; padding: 56px 24px 80px; position: relative; z-index: 1; }
+
+.eyebrow {
+  display: inline-block; font-family: 'Press Start 2P', monospace; font-size: 10px;
+  color: var(--cyan); letter-spacing: 0.06em; padding: 9px 14px;
+  border: 1px solid var(--border-glow); border-radius: 4px; background: rgba(0,255,240,0.04);
+  text-shadow: 0 0 8px rgba(0,255,240,0.5); margin-bottom: 22px;
+}
+h1 {
+  font-family: 'VT323', monospace; font-size: 64px; line-height: 0.95; margin: 0 0 8px;
+  letter-spacing: 0.01em; color: #fff; text-shadow: 0 0 14px rgba(0,255,240,0.45), 2px 0 var(--magenta), -2px 0 rgba(0,255,240,0.5);
+}
+h2 {
+  font-family: 'VT323', monospace; font-size: 34px; margin: 56px 0 14px; letter-spacing: 0.02em;
+  color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  text-shadow: 0 0 10px rgba(0,255,240,0.3);
+}
+h2 .num { color: var(--magenta); margin-right: 10px; text-shadow: 0 0 10px rgba(255,43,214,0.4); }
+h3 { font-size: 14px; margin: 28px 0 10px; color: var(--yellow); text-transform: uppercase; letter-spacing: 0.05em; }
+p { margin: 10px 0; }
+.sub { color: var(--fg-mute); font-size: 13px; }
+.lede { font-size: 15px; color: var(--fg-mute); max-width: 760px; margin: 10px 0 28px; }
+.accent { color: var(--cyan); }
+strong { color: #fff; font-weight: 700; }
+a { color: var(--cyan); }
+code { background: var(--bg-elev); padding: 2px 6px; border-radius: 3px; font-size: 12.5px; color: var(--yellow); border: 1px solid var(--border); }
+ul, ol { color: var(--fg-mute); }
+ul li, ol li { margin: 7px 0; }
+ul li strong, ol li strong { color: var(--fg); }
+
+.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0 32px; }
+.meta-card { background: var(--bg-card); border: 1px solid var(--border); padding: 16px 18px; border-radius: 6px; position: relative; }
+.meta-card::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, var(--cyan), var(--magenta)); opacity: 0.5; }
+.meta-label { font-size: 10px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.meta-val { font-family: 'VT323', monospace; font-size: 30px; line-height: 1; color: var(--fg); margin-top: 6px; }
+.meta-val.bad { color: var(--red); text-shadow: 0 0 10px rgba(255,59,92,0.4); }
+.meta-val.warn { color: var(--orange); }
+.meta-val.good { color: var(--green); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 18px 0; }
+th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--cyan); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; background: var(--bg-elev); }
+td:first-child { font-weight: 700; color: var(--fg); }
+.sev { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.sev-alta { background: rgba(255,59,92,0.18); color: var(--red); border: 1px solid rgba(255,59,92,0.4); }
+.sev-media { background: rgba(255,157,0,0.16); color: var(--orange); border: 1px solid rgba(255,157,0,0.4); }
+.sev-baixa { background: rgba(57,255,20,0.14); color: var(--green); border: 1px solid rgba(57,255,20,0.35); }
+
+.callouts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 28px 0 8px; }
+.callout { padding: 16px 18px; border-radius: 6px; border-left: 4px solid; font-size: 12.5px; background: var(--bg-card); }
+.cv { border-color: var(--green); background: rgba(57,255,20,0.05); }
+.cr { border-color: var(--red); background: rgba(255,59,92,0.05); }
+.co { border-color: var(--orange); background: rgba(255,157,0,0.05); }
+.callout-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; color: var(--fg); font-weight: 700; }
+.callout ul { margin: 0; padding-left: 16px; color: var(--fg-mute); }
+.callout li { margin: 6px 0; }
+
+.story { background: var(--bg-card); border: 1px solid var(--border); padding: 24px 28px; border-radius: 8px; margin: 32px 0; font-size: 13.5px; color: var(--fg-mute); }
+.story::before { content: "> "; color: var(--cyan); }
+.story p { margin: 10px 0; }
+.story strong { color: var(--fg); }
+
+blockquote { margin: 16px 0; padding: 14px 18px; background: var(--bg-elev); border-left: 3px solid var(--magenta); border-radius: 0 4px 4px 0; color: var(--fg); font-size: 13.5px; }
+blockquote .src { display: block; color: var(--fg-faint); font-size: 11px; margin-top: 6px; }
+
+footer.fim { text-align: center; padding: 28px 0 0; color: var(--fg-faint); font-size: 11px; border-top: 1px solid var(--border); margin-top: 56px; font-family: 'Press Start 2P', monospace; line-height: 2; }
+
+@media (max-width: 760px) {
+  .meta-grid, .callouts { grid-template-columns: 1fr; }
+  h1 { font-size: 46px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<span class="eyebrow">&gt; AUDITORIA_TECNICA.LOG · 2026-06-24</span>
+<h1>HYLOMORPH // diagnostico</h1>
+<p class="sub">Simulador de vida artificial · Phaser 3 + Vite · repo <code>taleszin/game</code> · branch <code>main</code></p>
+<p class="lede">Leitura cruzada do codigo (<code>src/</code>), build/CI e docs, com verificacao por <code>grep</code> dos achados acionaveis. Veredito curto: <strong>projeto solo substancialmente implementado e coerente</strong> — os sistemas descritos existem de verdade, nao e vaporware. Os problemas sao de divida tecnica e drift de documentacao, nao de fundacao. Um bug silencioso (save morto) e o item mais critico.</p>
+
+<div class="meta-grid">
+  <div class="meta-card"><div class="meta-label">Achados ALTA</div><div class="meta-val bad">2</div></div>
+  <div class="meta-card"><div class="meta-label">Achados MEDIA</div><div class="meta-val warn">4</div></div>
+  <div class="meta-card"><div class="meta-label">Achados BAIXA</div><div class="meta-val good">5</div></div>
+</div>
+
+<h2><span class="num">[!]</span>Severidade ALTA</h2>
+<table>
+  <thead><tr><th>#</th><th>Achado</th><th>Evidencia</th><th>Impacto</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="sev sev-alta">A1</span></td>
+      <td><strong>Save / "Continuar" nao funciona.</strong> O estado do santuario nunca e serializado (nao ha <code>setItem</code> de save). E as duas cenas checam chaves diferentes: <code>MainMenuScene</code> le <code>hylomorph_sanctuary_data</code>, <code>StartScene</code> le <code>hylomorph_data</code>.</td>
+      <td><code>MainMenuScene.js:10,60</code> · <code>StartScene.js:70,2159</code> · nenhum <code>setItem</code> correspondente</td>
+      <td>Jogador perde tudo ao fechar; botao "Continuar" engana. Quebra de confianca e do loop de retencao.</td>
+    </tr>
+    <tr>
+      <td><span class="sev sev-alta">A2</span></td>
+      <td><strong>Caminhos de asset frageis sob <code>base:'/game/'</code>.</strong> <code>title-screen.mp4</code> / <code>opening.mp3</code> / <code>soundtrack.mp3</code> carregados via DOM com <code>src</code> relativo, sem <code>import.meta.env.BASE_URL</code>.</td>
+      <td><code>StartScene.js:872,1052</code> · <code>SanctuaryScene.js:1648</code></td>
+      <td>Funciona hoje por coincidencia de rota; quebra se a base/rota mudar. Midia some no Pages.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2><span class="num">[~]</span>Severidade MEDIA</h2>
+<table>
+  <thead><tr><th>#</th><th>Achado</th><th>Impacto</th></tr></thead>
+  <tbody>
+    <tr><td><span class="sev sev-media">M1</span></td><td><strong><code>PHYSICS_COLORS</code> duplicado em ~7 arquivos.</strong> Sem fonte unica de verdade (Golem, MockAiService, dialogueData, gameData, SanctuaryScene, main, TutorialSystem).</td><td>Mudar uma cor exige editar 7 lugares; bug latente de inconsistencia.</td></tr>
+    <tr><td><span class="sev sev-media">M2</span></td><td><strong>God objects.</strong> <code>Golem.js</code> ~4189 linhas, <code>main.js</code> ~3897 (config + UI HTML + wiring num so <code>DOMContentLoaded</code>).</td><td>Manutencao cara, alto risco de regressao, dificil de testar.</td></tr>
+    <tr><td><span class="sev sev-media">M3</span></td><td><strong>Midia de 24 MB duplicada</strong> (raiz do repo <em>e</em> <code>public/</code>), sem Git LFS. <code>title-screen.mp4</code> carregado no boot.</td><td>Repo inchado; boot pesado em mobile/conexao lenta.</td></tr>
+    <tr><td><span class="sev sev-media">M4</span></td><td><strong>Drift doc &leftrightarrow; codigo.</strong> readme cita ferramentas <code>heal</code>/<code>inject</code> inexistentes. Toolset real: feed, burn, freeze, mutate, kill, singularity, taser, mutagen.</td><td>Confunde contribuidores e jogadores; promessa &ne; entrega.</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">[.]</span>Severidade BAIXA</h2>
+<table>
+  <thead><tr><th>#</th><th>Achado</th><th>Impacto</th></tr></thead>
+  <tbody>
+    <tr><td><span class="sev sev-baixa">B1</span></td><td><strong>CI quebrado/lixo.</strong> <code>npm-publish.yml</code> e boilerplate: roda <code>npm test</code> (inexistente) e <code>npm publish</code> num pacote <code>private</code>.</td><td>Falha de Action a cada release. Remover.</td></tr>
+    <tr><td><span class="sev sev-baixa">B2</span></td><td><strong>~110 <code>console.*</code> + <code>try/catch</code> vazios</strong> no bundle de producao.</td><td>Ruido, erros engolidos, leve peso.</td></tr>
+    <tr><td><span class="sev sev-baixa">B3</span></td><td><strong>4 vulnerabilidades de dep</strong> (3 high / 1 moderate), Vite/Rollup, majoritariamente do dev server.</td><td>Baixo risco no estatico do Pages; <code>npm audit fix</code>.</td></tr>
+    <tr><td><span class="sev sev-baixa">B4</span></td><td><strong>Sem testes, lint ou formatter.</strong> <code>GeometryMath.js</code> e puro e seria trivial de testar.</td><td>Sem rede de seguranca; indentacao inconsistente (2 vs 4 espacos).</td></tr>
+    <tr><td><span class="sev sev-baixa">B5</span></td><td><strong>LICENSE ausente</strong> apesar de referenciada (MIT) no readme.</td><td>Ambiguidade legal.</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">&gt;</span>Plano de correcao (ordem de ROI)</h2>
+<div class="callouts">
+  <div class="callout cr">
+    <div class="callout-h">Corrigir agora</div>
+    <ul>
+      <li><strong>A1</strong> — serializar o santuario de verdade (<code>setItem</code> no autosave/quit) e unificar a chave numa constante unica importada pelas duas cenas.</li>
+      <li><strong>A2</strong> — prefixar assets DOM com <code>import.meta.env.BASE_URL</code>.</li>
+      <li><strong>B1 + B5</strong> — remover <code>npm-publish.yml</code>, adicionar <code>LICENSE</code> (minutos).</li>
+    </ul>
+  </div>
+  <div class="callout co">
+    <div class="callout-h">Higiene</div>
+    <ul>
+      <li><strong>M3</strong> — remover midia duplicada da raiz; avaliar comprimir o <code>.mp4</code>.</li>
+      <li><strong>M1</strong> — extrair <code>PHYSICS_COLORS</code>/elementos pra modulo unico.</li>
+      <li><strong>B3</strong> — <code>npm audit fix</code> (jogo e <code>landing/</code> a parte).</li>
+    </ul>
+  </div>
+  <div class="callout cv">
+    <div class="callout-h">Longo prazo</div>
+    <ul>
+      <li><strong>M2</strong> — fatiar <code>Golem.js</code>/<code>main.js</code> em mixins/modulos (so com pedido).</li>
+      <li><strong>B4</strong> — comecar testes por <code>GeometryMath.js</code> (puro).</li>
+      <li><strong>M4</strong> — reconciliar readme/GDD com o codigo real.</li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="num">+</span>Ponto forte a preservar</h2>
+<div class="story">
+<p>O barramento <strong><code>game.events</code></strong> que desacopla a UI-HTML (em <code>main.js</code>) da simulacao (na <code>SanctuaryScene</code>) e boa arquitetura. Eventos como <code>spawn-golem</code>, <code>tool-selected</code>, <code>population-update</code>, <code>inspect-golem</code> formam um contrato limpo entre as camadas. <strong>Mantenha esse contrato ao refatorar</strong> — e o que vai permitir quebrar os god objects sem quebrar o jogo.</p>
+</div>
+
+<footer class="fim">
+HYLOMORPH · AUDITORIA TECNICA · v1<br>
+gerado em 2026-06-24 · 11 achados · in silico ergo sum
+</footer>
+
+</div>
+</body>
+</html>

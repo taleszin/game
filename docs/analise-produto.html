@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HYLOMORPH — Analise de Produto · 2026-06-24</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #050505;
+  --bg-elev: #0b0d10;
+  --bg-card: #0f1318;
+  --fg: #e6fbff;
+  --fg-mute: #7fa6ad;
+  --fg-faint: #4b6a6e;
+  --cyan: #00fff0;
+  --magenta: #ff2bd6;
+  --yellow: #ffe600;
+  --accent: #00fff0;
+  --green: #39ff14;
+  --red: #ff3b5c;
+  --orange: #ff9d00;
+  --border: #18282b;
+  --border-glow: #1f3b3f;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(255,43,214,0.06), transparent 55%),
+    radial-gradient(ellipse at 90% 100%, rgba(0,255,240,0.05), transparent 50%),
+    var(--bg);
+  color: var(--fg);
+  line-height: 1.65;
+  font-size: 14.5px;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.16) 0px, rgba(0,0,0,0.16) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode: multiply; opacity: 0.5;
+}
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 9998; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.55) 100%);
+}
+.wrap { max-width: 960px; margin: 0 auto; padding: 56px 24px 80px; position: relative; z-index: 1; }
+
+.eyebrow {
+  display: inline-block; font-family: 'Press Start 2P', monospace; font-size: 10px;
+  color: var(--magenta); letter-spacing: 0.06em; padding: 9px 14px;
+  border: 1px solid var(--border-glow); border-radius: 4px; background: rgba(255,43,214,0.05);
+  text-shadow: 0 0 8px rgba(255,43,214,0.5); margin-bottom: 22px;
+}
+h1 {
+  font-family: 'VT323', monospace; font-size: 64px; line-height: 0.95; margin: 0 0 8px;
+  letter-spacing: 0.01em; color: #fff; text-shadow: 0 0 14px rgba(255,43,214,0.45), 2px 0 var(--cyan), -2px 0 var(--magenta);
+}
+h2 {
+  font-family: 'VT323', monospace; font-size: 34px; margin: 56px 0 14px; letter-spacing: 0.02em;
+  color: var(--cyan); border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  text-shadow: 0 0 10px rgba(0,255,240,0.3);
+}
+h2 .num { color: var(--magenta); margin-right: 10px; text-shadow: 0 0 10px rgba(255,43,214,0.4); }
+h3 { font-size: 14px; margin: 28px 0 10px; color: var(--yellow); text-transform: uppercase; letter-spacing: 0.05em; }
+p { margin: 10px 0; }
+.sub { color: var(--fg-mute); font-size: 13px; }
+.lede { font-size: 15px; color: var(--fg-mute); max-width: 780px; margin: 10px 0 28px; }
+.accent { color: var(--cyan); }
+strong { color: #fff; font-weight: 700; }
+em { color: var(--yellow); font-style: normal; }
+a { color: var(--cyan); }
+code { background: var(--bg-elev); padding: 2px 6px; border-radius: 3px; font-size: 12.5px; color: var(--yellow); border: 1px solid var(--border); }
+ul, ol { color: var(--fg-mute); }
+ul li, ol li { margin: 7px 0; }
+ul li strong, ol li strong { color: var(--fg); }
+
+.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 24px 0 32px; }
+.meta-card { background: var(--bg-card); border: 1px solid var(--border); padding: 16px 18px; border-radius: 6px; position: relative; }
+.meta-card::before { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, var(--magenta), var(--cyan)); opacity: 0.5; }
+.meta-label { font-size: 10px; color: var(--fg-faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.meta-val { font-family: 'VT323', monospace; font-size: 30px; line-height: 1; color: var(--fg); margin-top: 6px; }
+.meta-val.good { color: var(--green); text-shadow: 0 0 10px rgba(57,255,20,0.35); }
+.meta-val.warn { color: var(--orange); }
+.meta-val.bad { color: var(--red); }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 18px 0; }
+th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--cyan); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; background: var(--bg-elev); }
+td:first-child { font-weight: 700; color: var(--fg); }
+.tag { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
+.tag-ok { background: rgba(57,255,20,0.14); color: var(--green); border: 1px solid rgba(57,255,20,0.35); }
+.tag-warn { background: rgba(255,157,0,0.16); color: var(--orange); border: 1px solid rgba(255,157,0,0.4); }
+
+.callouts { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin: 28px 0 8px; }
+.callout { padding: 16px 18px; border-radius: 6px; border-left: 4px solid; font-size: 12.5px; background: var(--bg-card); }
+.cv { border-color: var(--green); background: rgba(57,255,20,0.05); }
+.cr { border-color: var(--red); background: rgba(255,59,92,0.05); }
+.co { border-color: var(--orange); background: rgba(255,157,0,0.05); }
+.callout-h { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; color: var(--fg); font-weight: 700; }
+.callout ul { margin: 0; padding-left: 16px; color: var(--fg-mute); }
+.callout li { margin: 6px 0; }
+
+.story { background: var(--bg-card); border: 1px solid var(--border); padding: 24px 28px; border-radius: 8px; margin: 32px 0; font-size: 13.5px; color: var(--fg-mute); }
+.story p { margin: 10px 0; }
+.story strong { color: var(--fg); }
+
+blockquote { margin: 16px 0; padding: 14px 18px; background: var(--bg-elev); border-left: 3px solid var(--magenta); border-radius: 0 4px 4px 0; color: var(--fg); font-size: 13.5px; }
+blockquote .src { display: block; color: var(--fg-faint); font-size: 11px; margin-top: 6px; }
+
+.verdict { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+.verdict .v { padding: 20px 22px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-card); }
+.verdict .v h4 { margin: 0 0 6px; font-family: 'VT323', monospace; font-size: 26px; }
+.verdict .v.hi h4 { color: var(--green); }
+.verdict .v.mid h4 { color: var(--orange); }
+.verdict .v .score { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-faint); }
+
+footer.fim { text-align: center; padding: 28px 0 0; color: var(--fg-faint); font-size: 11px; border-top: 1px solid var(--border); margin-top: 56px; font-family: 'Press Start 2P', monospace; line-height: 2; }
+.refs { font-size: 11.5px; color: var(--fg-faint); }
+.refs a { color: var(--fg-mute); }
+
+@media (max-width: 760px) {
+  .meta-grid, .callouts, .verdict { grid-template-columns: 1fr; }
+  h1 { font-size: 46px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<span class="eyebrow">&gt; ANALISE_PRODUTO.LOG · 2026-06-24</span>
+<h1>HYLOMORPH // mercado</h1>
+<p class="sub">Avaliacao honesta do conceito frente ao mercado indie 2026 · god game / vida artificial</p>
+<p class="lede">Premissas consideradas: <strong>usuarios reais testaram, gostaram e acharam o conceito <em>satisfying</em></strong>; existe um MVP com boa margem de melhora. Isso muda a pergunta — nao e mais "a ideia presta?", e <strong>"como transformar uma ideia validada num produto que sobrevive a descoberta"</strong>.</p>
+
+<div class="meta-grid">
+  <div class="meta-card"><div class="meta-label">Como objeto cultural / viral de nicho</div><div class="meta-val good">ALTA</div></div>
+  <div class="meta-card"><div class="meta-label">Como produto comercial</div><div class="meta-val warn">BAIXA-MEDIA</div></div>
+  <div class="meta-card"><div class="meta-label">Risco dominante</div><div class="meta-val">Descoberta</div></div>
+</div>
+
+<h2><span class="num">01</span>O produto em uma frase</h2>
+<p>Um <em>god game / simulador de vida artificial</em> onde voce sintetiza criaturas geometricas sencientes (Golems) a partir da triade <strong>Forma + Quimica + Fisica</strong>, e observa/intervem num ecossistema emergente com peso etico — embrulhado numa estetica cyber-retro CRT e num discurso filosofico (hilomorfismo, dualismo, qualia).</p>
+
+<h2><span class="num">02</span>O que o conceito tem de forte</h2>
+<table>
+  <thead><tr><th>Forca</th><th>Por que importa no mercado de hoje</th></tr></thead>
+  <tbody>
+    <tr><td>Gancho intelectual raro</td><td>"Aristoteles + Tamagotchi + Spore" e um pitch memoravel. Com 60 lancamentos/dia, ter uma frase que gruda ja e meio caminho.</td></tr>
+    <tr><td>Profundidade real sob a estetica</td><td>HP via area (Shoelace), resistencia via perimetro (Ramanujan), boids, genetica mendeliana. <em>Systems depth</em> que sustenta clipe/streamer.</td></tr>
+    <tr><td>Tema emocional embutido</td><td>O <code>lifeLog</code> (biografia de sofrimento) + expressoes faciais geram apego e conteudo organico (a la Undertale/Niche).</td></tr>
+    <tr><td>Validacao inicial existe</td><td>Testadores acharam <em>satisfying</em>. O sinal mais valioso e dificil de fabricar: a sensacao-nucleo ja funciona. O risco restante e de embalagem e descoberta, nao de <em>fun</em>.</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="num">03</span>O mercado, sem filtro (2026)</h2>
+<p>Os dados de 2026 sao duros e precisam ser encarados antes de qualquer sonho:</p>
+<div class="meta-grid">
+  <div class="meta-card"><div class="meta-label">Jogos/ano no Steam</div><div class="meta-val">~20.000</div></div>
+  <div class="meta-card"><div class="meta-label">Faturaram &lt; US$290</div><div class="meta-val bad">50%</div></div>
+  <div class="meta-card"><div class="meta-label">Taxa de fracasso</div><div class="meta-val bad">~70%</div></div>
+  <div class="meta-card"><div class="meta-label">Wishlists p/ "Popular Upcoming"</div><div class="meta-val">7k-10k</div></div>
+  <div class="meta-card"><div class="meta-label">Conversao wishlist&rarr;venda</div><div class="meta-val warn">~0,125</div></div>
+  <div class="meta-card"><div class="meta-label">Marketing do orcamento</div><div class="meta-val warn">30-50%</div></div>
+</div>
+<p><strong>Traducao:</strong> o sucesso financeiro hoje e decidido <em>antes</em> do lancamento, pela comunidade e wishlist acumuladas. O jogo ser bom e condicao necessaria e longe de suficiente.</p>
+
+<h2><span class="num">04</span>Onde o HYLOMORPH se encaixa</h2>
+<p>O nicho de god game / life-sim esta <strong>vivo mas mixed</strong> em 2026: <em>Creo God Simulator</em> (saiu do EA jan/2025), <em>Fata Deum</em> (EA set/2025, recepcao pos-mista), <em>Demiurgos</em> anunciado, <em>Substrate: Emergence</em>. Ha publico para "deus + emergencia", e o subgenero "weirdo indie" com comunidade forte e caminho comprovado de viabilidade em nicho.</p>
+<table>
+  <thead><tr><th>Comparavel</th><th>Licao a roubar</th><th>HYLOMORPH</th></tr></thead>
+  <tbody>
+    <tr><td>Spore</td><td>A fase de <em>criacao</em> e a parte que todos amam; o resto e bonus.</td><td><span class="tag tag-ok">ja e o nucleo</span></td></tr>
+    <tr><td>Tamagotchi / Pou</td><td>Ciclo de cuidado curto e emocional vende.</td><td><span class="tag tag-ok">presente</span></td></tr>
+    <tr><td>Undertale / Rain World</td><td>A narrativa emergente E o marketing.</td><td><span class="tag tag-ok">lifeLog</span></td></tr>
+    <tr><td>The Sims-likes / cozy</td><td>Vivem de emergencia + criatividade, mas a barra de polimento e conteudo e alta.</td><td><span class="tag tag-warn">barra alta</span></td></tr>
+  </tbody>
+</table>
+<p><strong>Posicionamento honesto:</strong> o HYLOMORPH nao compete em escala com nenhum desses — compete por uma fatia de <strong>curiosos intelectuais + fas de sandbox emergente + publico "jogos que fazem pensar"</strong>. Nicho pequeno, mas atingivel por um dev solo, e do tipo que streamers de "jogo estranho" amam.</p>
+
+<h2><span class="num">05</span>Riscos reais (a parte que doi)</h2>
+<div class="callouts">
+  <div class="callout cr">
+    <div class="callout-h">Criticos</div>
+    <ul>
+      <li><strong>"Satisfying por 20 min" &ne; "retenção por 20h".</strong> O risco #1 de sandbox sem objetivo: achar lindo, brincar meia hora e nunca voltar. Hoje o save nem persiste (ver auditoria A1) — isso <em>mata</em> a retencao literalmente.</li>
+      <li><strong>Descoberta.</strong> Sem wishlist/comunidade pre-construida, estatisticamente o lancamento morre. Risco de go-to-market, nao de codigo.</li>
+    </ul>
+  </div>
+  <div class="callout co">
+    <div class="callout-h">Atencao</div>
+    <ul>
+      <li><strong>Gap consciencia vs. simulacao.</strong> A doc vende "senciencia/qualia"; a entrega e steering behavior + falas por tabela. Venda <em>"vida artificial emergente"</em>, nao "consciencia".</li>
+      <li><strong>Escopo de dev solo.</strong> Roadmap (ecossistema, memoria, multiplayer, LLM real) e ambicioso demais. Risco de nunca "terminar".</li>
+    </ul>
+  </div>
+  <div class="callout cv">
+    <div class="callout-h">A favor</div>
+    <ul>
+      <li><strong>A parte mais dificil ja esta feita:</strong> um conceito original que as pessoas acham gostoso de usar.</li>
+      <li><strong>Plataforma web</strong> = funil viral de zero-atrito (joga no navegador, compartilha link). So nao monetiza bem — web e o funil, Steam/itch e a caixa registradora.</li>
+    </ul>
+  </div>
+</div>
+
+<h2><span class="num">06</span>Chances de dar certo — opiniao honesta</h2>
+<div class="verdict">
+  <div class="v hi">
+    <h4>ALTA</h4>
+    <div class="score">como objeto cultural / portfolio / viral de nicho</div>
+    <p>Conceito forte, original, demonstravel em GIF, e ja agrada quem testa. Como peca de portfolio de aluno de CC da UECE, e excelente. Como "joguinho que viraliza no Twitter/Reddit de gamedev", tem chance real.</p>
+  </div>
+  <div class="v mid">
+    <h4>BAIXA-MEDIA</h4>
+    <div class="score">como produto comercial sustentavel · condicional</div>
+    <p>Nao pela qualidade — pelo mercado. So vira comercial com <strong>wishlist + comunidade construidas 6-12 meses antes</strong>, um hook de retencao alem do sandbox, e versao paga em Steam/itch. Sem isso, entra na estatistica dos 70% / US$290.</p>
+  </div>
+</div>
+<div class="story">
+<p><strong>Resumo brutal:</strong> voce tem a parte mais dificil e mais rara — um conceito original <em>que as pessoas acham gostoso</em>. O que falta nao e ideia, e <strong>(a) transformar "bonito por 20 min" em "quero voltar amanha"</strong> e <strong>(b) o trabalho nao-glamouroso de marketing/comunidade que decide tudo hoje</strong>. O teto e alto; o piso depende de execucao de go-to-market, nao de mais features.</p>
+</div>
+
+<h2><span class="num">07</span>Recomendacoes priorizadas</h2>
+<h3>Tornar sticky (o que mais move a agulha)</h3>
+<ol>
+  <li><strong>Consertar e implementar save de verdade</strong> (auditoria A1). Retencao comeca aqui — hoje e zero por bug.</li>
+  <li><strong>Gancho de sessao sem matar o sandbox:</strong> metas opcionais / codex de descobertas / conquistas ("descubra as 16 formas evoluidas", "uma anomalia estavel", "linhagem de 5 geracoes"). Razao pra voltar sem impor "vitoria".</li>
+  <li><strong>Loop de 5 minutos legivel:</strong> garantir um "momento uau" nos primeiros 2 min (uma sintese guiada impressionante). Mire o <em>first session magic</em>.</li>
+</ol>
+<h3>Tornar vendavel / descoberto</h3>
+<ol start="4">
+  <li><strong>Decidir a plataforma de monetizacao:</strong> web gratis como demo/funil &rarr; pagina na <strong>Steam com wishlist aberta JA</strong> (a wishlist e o ativo que decide o lancamento). itch.io pra comunidade indie/weird.</li>
+  <li><strong>Capturar os "satisfying moments" como marketing:</strong> o jogo ja gera GIFs por natureza (golem nascendo, anomalia, morte com lifeLog). Sistematize export de clipe/screenshot &rarr; combustivel de TikTok/Reddit r/gamedev.</li>
+  <li><strong>Honestidade no pitch:</strong> "vida artificial emergente onde geometria vira criatura", nao "consciencia". Mesmo publico, sem expectativa que vira review negativa.</li>
+</ol>
+<h3>Higiene + escopo</h3>
+<ol start="7">
+  <li>Blindar assets pro deploy (A2), comprimir o .mp4 de 24 MB (boot rapido = menos abandono), reconciliar doc&leftrightarrow;codigo (M4).</li>
+  <li>Nao perseguir multiplayer/LLM agora. Aprofundar o nucleo que ja agrada (criacao + apego + emergencia). Sandbox pequeno e polido &gt; roadmap grande e inacabado.</li>
+</ol>
+
+<h2><span class="num">&gt;</span>Fontes (mercado)</h2>
+<p class="refs">
+<a href="https://fungies.io/indie-developer-market-analysis-2026-3/">Indie Developer Market 2026 — Fungies.io</a> ·
+<a href="https://games-stats.com/blog/Steam_in_Q12026/">Steam Q1 2026 "Indie-pocalypse" — games-stats.com</a> ·
+<a href="https://entaltostudios.com/what-makes-indie-game-successful/">What Makes an Indie Game Successful 2026 — Entalto</a> ·
+<a href="https://www.mordorintelligence.com/industry-reports/indie-game-market">Indie Game Market Size 2026-2031 — Mordor</a> ·
+<a href="https://www.eneba.com/hub/games/games-like-spore/">12 Best Games Like Spore 2026 — Eneba</a> ·
+<a href="https://rogueliker.com/great-god-games-and-city-builders/">Best God Games — Rogueliker</a> ·
+<a href="https://www.accio.com/business/2025-indie-game-trends">2025 Indie Trends &amp; 2026 Outlook — Accio</a>
+</p>
+
+<footer class="fim">
+HYLOMORPH · ANALISE DE PRODUTO · v1<br>
+gerado em 2026-06-24 · opiniao honesta · what is it like to be a golem?
+</footer>
+
+</div>
+</body>
+</html>
