@@ -638,8 +638,8 @@ export default class Golem extends Phaser.GameObjects.Container {
             // SISTEMA DE RESPOSTA SOCIAL - Golems "ouvem" e respondem uns aos outros
             // ═══════════════════════════════════════════════════════════════════
             this.socialResponseCooldown = 0; // Cooldown para evitar spam de respostas
-            this.SOCIAL_RESPONSE_RADIUS = 150; // Distância máxima para "ouvir"
-            this.SOCIAL_RESPONSE_CHANCE = 0.08; // 8% de chance de responder (reduzido para melhor UX)
+            this.SOCIAL_RESPONSE_RADIUS = 160; // Distância máxima para "ouvir"
+            this.SOCIAL_RESPONSE_CHANCE = 0.22; // chance de responder a um vizinho (era 0.08 — pouco diálogo entre eles)
             
             this.golemSpokeHandler = (eventData) => {
                 // Não responde a si mesmo
@@ -676,9 +676,9 @@ export default class Golem extends Phaser.GameObjects.Container {
                     this.speakSocialResponse(eventData.physicsId);
                 });
                 
-                // Ativa cooldown maior (10s) para evitar spam
-                this.socialResponseCooldown = 10000;
-                scene.time.delayedCall(10000, () => {
+                // Cooldown de resposta (5s): permite mais ida-e-volta, mas segura o spam
+                this.socialResponseCooldown = 5000;
+                scene.time.delayedCall(5000, () => {
                     this.socialResponseCooldown = 0;
                 });
             };
@@ -2585,10 +2585,16 @@ export default class Golem extends Phaser.GameObjects.Container {
         }
         if (this.emitter) {
             if (isPaused) {
-                this.emitter.setFrequency(200); 
+                this.emitter.setFrequency(200);
             } else {
                 this.emitter.setFrequency(100 / speed);
             }
+        }
+        // CRÍTICO: a decisão de cortejo/combate (roamingTimer) também precisa
+        // acompanhar o tempo. Sem isto, em 5x os golems envelhecem/morrem 5x mais
+        // rápido mas só tentam acasalar em tempo real → "nunca se reproduzem".
+        if (this.roamingTimer) {
+            this.roamingTimer.timeScale = safeSpeed;
         }
     }
 
@@ -2895,10 +2901,16 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.setActionExpression('love', 3000);
         if (target.setActionExpression) target.setActionExpression('love', 2000);
         
-        // Fala de cortejo
+        // Fala de cortejo — agora vira uma troca de turnos entre o par
         if (this.autonomy.cooldowns.socialSpeak <= 0) {
             this.speakContextual('courting');
             this.autonomy.cooldowns.socialSpeak = 12000; // mais tempo entre falas
+            // Turno 2: o parceiro responde
+            this.scene.time.delayedCall(1400, () => {
+                if (target.active && this.active && this.autonomy.state === 'courting' && target.speakContextual) {
+                    target.speakContextual('courting');
+                }
+            });
         }
         // Move em direção ao parceiro
         const angle = Phaser.Math.Angle.Between(this.x, this.y, target.x, target.y);
@@ -3050,17 +3062,29 @@ export default class Golem extends Phaser.GameObjects.Container {
         this.setActionExpression('hurt', 500);
         enemy.setActionExpression('hurt', 800);
         
-        // Fala de hit
-        if (Math.random() < 0.6) {
+        // Fala de hit (alvo reage) + revide do atacante = troca de turnos
+        if (Math.random() < 0.7) {
             enemy.speakContextual('combat_hit');
         }
-        
+        this.scene.time.delayedCall(900, () => {
+            if (this.active && enemy.active && Math.random() < 0.5) {
+                this.speakContextual('combat_hit');
+            }
+        });
+
         // Efeito visual: faíscas/partículas
         this.createCombatEffect(enemy);
-        
+
         // Som de impacto
         this.playCombatSound();
-        
+
+        // Fechamento da escaramuça: quem ficou mais inteiro encerra (ativa combat_victory)
+        if (this.vitality >= enemy.vitality && Math.random() < 0.4) {
+            this.scene.time.delayedCall(1200, () => {
+                if (this.active) this.speakContextual('combat_victory');
+            });
+        }
+
         // Reseta estado
         this.autonomy.state = 'idle';
         this.autonomy.target = null;

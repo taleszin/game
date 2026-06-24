@@ -1026,6 +1026,21 @@ export default class SanctuaryScene extends Phaser.Scene {
   }
 
   async triggerBreeding(parent1, parent2) {
+      // Cap rígido de população — fecha reprodução autônoma E manual no mesmo ponto.
+      // (antes o limite só valia para a incubadora, então a população furava o teto e travava)
+      const activePop = this.golemsGroup.getChildren().filter(g => g.active).length;
+      if (activePop >= this.maxPopulation) {
+          try {
+              const cx = (parent1.x + parent2.x) / 2;
+              const cy = (parent1.y + parent2.y) / 2;
+              if (parent1.setActionExpression) parent1.setActionExpression('sad', 800);
+              if (parent2.setActionExpression) parent2.setActionExpression('sad', 800);
+              const full = this.add.text(cx, cy - 30, 'Santuário cheio', { fontFamily: 'Arial', fontSize: '8px', fill: '#ffaa66', backgroundColor: '#000000' }).setOrigin(0.5);
+              this.tweens.add({ targets: full, y: cy - 60, alpha: 0, duration: 1000, onComplete: () => full.destroy() });
+          } catch (e) {}
+          return;
+      }
+
       const x = (parent1.x + parent2.x) / 2;
       const y = (parent1.y + parent2.y) / 2;
 
