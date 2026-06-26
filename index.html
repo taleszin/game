@@ -25,21 +25,21 @@
         <h1>HYLOMORPH</h1>
       </div>
       
-      <button id="btn-tree" data-name="Arquivo Genético" data-desc="Acessa o Banco de Dados Genômico. Visualize linhagens, mutações e histórico evolutivo de todas as entidades." title="Arquivo Genético"><span class="dna-icon">🧬</span></button>
+      <button id="btn-tree" data-name="Arquivo Genético" data-desc="Acessa o Banco de Dados Genômico. Visualize linhagens, mutações e histórico evolutivo de todas as entidades." title="Arquivo Genético"><span class="dna-icon"><i class="pxi pxi-dna"></i></span></button>
 
       <!-- ═══ CHRONO-DECK: Controle Temporal Minimal ═══ -->
       <div id="chrono-deck">
         <div class="chrono-pill">
-          <button class="chrono-icon pixel-btn" data-speed="0" data-name="Pausar" data-desc="Congela o tempo. Golems ficam paralisados mas você ainda pode interagir." title="Pausar">⏸</button>
-          <button class="chrono-icon pixel-btn active" data-speed="1" data-name="Normal" data-desc="Tempo flui na velocidade padrão. 1 segundo real = 1 segundo no santuário." title="Normal">▶</button>
-          <button class="chrono-icon pixel-btn" data-speed="5" data-name="Acelerar" data-desc="Acelera o tempo em 5x. Ideal para observar ciclos de vida mais rapidamente." title="Acelerar">⏩</button>
+          <button class="chrono-icon pixel-btn" data-speed="0" data-name="Pausar" data-desc="Congela o tempo. Golems ficam paralisados mas você ainda pode interagir." title="Pausar"><i class="pxi pxi-pause"></i></button>
+          <button class="chrono-icon pixel-btn active" data-speed="1" data-name="Normal" data-desc="Tempo flui na velocidade padrão. 1 segundo real = 1 segundo no santuário." title="Normal"><i class="pxi pxi-play"></i></button>
+          <button class="chrono-icon pixel-btn" data-speed="5" data-name="Acelerar" data-desc="Acelera o tempo em 5x. Ideal para observar ciclos de vida mais rapidamente." title="Acelerar"><i class="pxi pxi-forward"></i></button>
         </div>
       </div>
 
       <div id="tree-modal" class="hidden">
           <div class="tree-header">
               <h2>REGISTRO DE VIDA</h2>
-              <button id="btn-close-tree" class="close-btn">X</button>
+              <button id="btn-close-tree" class="close-btn"><i class="pxi pxi-close"></i></button>
           </div>
           <div id="tree-content"></div>
       </div>
@@ -122,7 +122,7 @@
         <!-- BARRA DE AÇÕES -->
         <div class="panel-actions">
             <button id="btn-cancel" class="pixel-btn btn-red" data-name="Abortar" data-desc="Cancela a síntese e fecha o laboratório. Nenhum progresso será salvo.">
-                <span class="btn-icon">✕</span> ABORTAR
+                <span class="btn-icon"><i class="pxi pxi-close"></i></span> ABORTAR
             </button>            
             <!-- Randomize button: gera um golem aleatório e atualiza o preview -->
             <button id="btn-randomize" class="pixel-btn btn-yellow" data-name="Gerar Aleatório" data-desc="Gera um golem aleatório para visualizar antes de sintetizar.">
@@ -181,36 +181,36 @@
           </div>
           <div class="rack-slots">
             <div class="tool-slot" data-action="feed" data-name="Nutrir" data-desc="Restaura vitalidade do Golem." data-key="1" title="Nutrir">
-                <div class="tool-icon pixel-icon">♥</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">NUTRIR</span><span class="tt-key">[1]</span></div>
             </div>
             <div class="tool-slot" data-action="burn" data-name="Incendiar" data-desc="Aplica dano térmico intenso." data-key="2" title="Incendiar">
-                <div class="tool-icon pixel-icon">▲</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">INCENDIAR</span><span class="tt-key">[2]</span></div>
             </div>
             <div class="tool-slot" data-action="freeze" data-name="Congelar" data-desc="Paralisa temporariamente o Golem." data-key="3" title="Congelar">
-                <div class="tool-icon pixel-icon">✱</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">CONGELAR</span><span class="tt-key">[3]</span></div>
             </div>
             <div class="tool-slot" data-action="mutate" data-name="Mutar DNA" data-desc="Força mutação genética aleatória." data-key="4" title="Mutar DNA">
-                <div class="tool-icon pixel-icon">⌘</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">MUTAR</span><span class="tt-key">[4]</span></div>
             </div>
             <div class="tool-slot" data-action="kill" data-name="Eliminar" data-desc="Termina a existência do Golem." data-key="5" title="Eliminar">
-                <div class="tool-icon pixel-icon">☠</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">ELIMINAR</span><span class="tt-key">[5]</span></div>
             </div>
             <div class="rack-divider"></div>
             <div class="tool-slot" data-action="singularity" data-name="Singularidade" data-desc="Cria poço gravitacional que puxa Golems por 3s." data-key="6" title="Singularidade">
-                <div class="tool-icon pixel-icon">◎</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">SINGULARIDADE</span><span class="tt-key">[6]</span></div>
             </div>
             <div class="tool-slot" data-action="taser" data-name="Taser" data-desc="Induz pânico e repulsão por 5s." data-key="7" title="Taser">
-                <div class="tool-icon pixel-icon">⚡</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">TASER</span><span class="tt-key">[7]</span></div>
             </div>
             <div class="tool-slot" data-action="mutagen" data-name="Mutageno" data-desc="Rerola atributo. 10% chance letal." data-key="8" title="Mutageno">
-                <div class="tool-icon pixel-icon">⌂</div>
+                <div class="tool-icon"><span class="ticon"></span></div>
                 <div class="slot-tooltip"><span class="tt-name">MUTAGENO</span><span class="tt-key">[8]</span></div>
             </div>
           </div>
@@ -228,7 +228,7 @@
         <div class="evolved-modal-header">
           <h2>FORMAS EVOLUÍDAS</h2>
           <p class="evolved-subtitle">Combina primordiais para desbloquear</p>
-          <button class="close-btn evolved-close" title="Fechar">✕</button>
+          <button class="close-btn evolved-close" title="Fechar"><i class="pxi pxi-close"></i></button>
         </div>
         
         <div class="evolved-forms-grid" id="evolved-forms-grid">
@@ -248,15 +248,15 @@
          ═══════════════════════════════════════════════════════════════════ -->
     <nav id="mobile-nav">
         <button class="mobile-nav-btn" data-target="creation-panel">
-            <span class="nav-icon">🧬</span>
+            <span class="nav-icon"><i class="pxi pxi-dna"></i></span>
             <span>CRIAR</span>
         </button>
         <button class="mobile-nav-btn" data-target="tool-rack">
-            <span class="nav-icon">🛠️</span>
+            <span class="nav-icon"><i class="pxi pxi-tool-case"></i></span>
             <span>TOOLS</span>
         </button>
         <button class="mobile-nav-btn" data-target="tree-modal">
-            <span class="nav-icon">📂</span>
+            <span class="nav-icon"><i class="pxi pxi-folder"></i></span>
             <span>ARQUIVO</span>
         </button>
     </nav>

@@ -1187,6 +1187,33 @@ canvas {
     -moz-osx-font-smoothing: grayscale;
 }
 
+/* ═══ ÍCONES PIXEL-ART (pixelarticons + custom) — máscara recolorível ═══ */
+.tool-slot .tool-icon .ticon {
+    width: 26px;
+    height: 26px;
+    display: block;
+    background-color: currentColor;
+    -webkit-mask: var(--ico) center / contain no-repeat;
+    mask: var(--ico) center / contain no-repeat;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 3px currentColor);
+    transition: filter 0.15s ease, transform 0.15s ease;
+}
+.tool-slot:hover .tool-icon .ticon {
+    filter: drop-shadow(0 0 7px currentColor) brightness(1.25);
+}
+.tool-slot.selected .tool-icon .ticon {
+    filter: drop-shadow(0 0 10px currentColor) brightness(1.35);
+}
+.tool-slot[data-action="feed"] .ticon        { --ico: url(./icons/heart.svg); }
+.tool-slot[data-action="burn"] .ticon        { --ico: url(./icons/fire.svg); }
+.tool-slot[data-action="freeze"] .ticon      { --ico: url(./icons/snow.svg); }
+.tool-slot[data-action="mutate"] .ticon      { --ico: url(./icons/dna.svg); }
+.tool-slot[data-action="kill"] .ticon        { --ico: url(./icons/skull.svg); }
+.tool-slot[data-action="singularity"] .ticon { --ico: url(./icons/blackhole.svg); }
+.tool-slot[data-action="taser"] .ticon       { --ico: url(./icons/zap.svg); }
+.tool-slot[data-action="mutagen"] .ticon     { --ico: url(./icons/potion.svg); }
+
 /* Hover - Ícone "flutua" para fora */
 .tool-slot:hover .tool-icon {
     transform: translateX(-4px) scale(1.1);
@@ -1242,7 +1269,11 @@ canvas {
 
 /* Cursor especial quando ferramenta selecionada */
 body.tool-selected canvas {
-    cursor: crosshair !important;
+    cursor: url(./icons/cursors/target.svg) 12 12, crosshair !important;
+}
+/* Hover em golem arrastável → mão de "pegar" (fora de ferramenta/arrasto) */
+body:not(.tool-selected):not(.grabbing).golem-hover canvas {
+    cursor: url(./icons/cursors/grab.svg) 12 12, grab;
 }
 
 /* Animação de clique no canvas */
@@ -1388,13 +1419,69 @@ body.tool-selected canvas {
 .dragging-ghost[data-action="taser"] { color: #ffff00; }
 .dragging-ghost[data-action="mutagen"] { color: #00ff88; }
 
-/* Esconde cursor quando arrastando */
+/* Arrastando golem → cursor "segurando" (mover) */
 body.grabbing {
-    cursor: none !important;
+    cursor: url(./icons/cursors/grabbing.svg) 12 12, grabbing !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ÍCONES PIXELARTICONS — utilitário recolorível (.pxi)
+   Uso: <i class="pxi pxi-play"></i> — herda cor (currentColor) e
+   tamanho (1em) do contexto. Build-safe (urls processadas pelo Vite).
+   ═══════════════════════════════════════════════════════════════════ */
+.pxi {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
+    background-color: currentColor;
+    -webkit-mask: var(--pxi) center / contain no-repeat;
+    mask: var(--pxi) center / contain no-repeat;
+    image-rendering: pixelated;
+    flex: none;
+}
+.pxi-play         { --pxi: url(./icons/play.svg); }
+.pxi-pause        { --pxi: url(./icons/pause.svg); }
+.pxi-forward      { --pxi: url(./icons/forward.svg); }
+.pxi-dna          { --pxi: url(./icons/dna.svg); }
+.pxi-tool-case    { --pxi: url(./icons/tool-case.svg); }
+.pxi-folder       { --pxi: url(./icons/folder.svg); }
+.pxi-settings     { --pxi: url(./icons/settings-2.svg); }
+.pxi-volume       { --pxi: url(./icons/volume-2.svg); }
+.pxi-music        { --pxi: url(./icons/music.svg); }
+.pxi-headphone    { --pxi: url(./icons/headphone.svg); }
+.pxi-monitor      { --pxi: url(./icons/monitor.svg); }
+.pxi-close        { --pxi: url(./icons/close.svg); }
+.pxi-check        { --pxi: url(./icons/check.svg); }
+.pxi-chevron-up   { --pxi: url(./icons/chevron-up.svg); }
+.pxi-chevron-down { --pxi: url(./icons/chevron-down.svg); }
+.pxi-alert        { --pxi: url(./icons/square-alert.svg); }
+.pxi-star         { --pxi: url(./icons/star.svg); }
+.pxi-search       { --pxi: url(./icons/search.svg); }
+.pxi-chart        { --pxi: url(./icons/chart.svg); }
+.pxi-reload       { --pxi: url(./icons/reload.svg); }
+.pxi-skull        { --pxi: url(./icons/skull.svg); }
+.pxi-hand         { --pxi: url(./icons/hand.svg); }
+.pxi-minus        { --pxi: url(./icons/minus.svg); }
+.pxi-plus         { --pxi: url(./icons/plus.svg); }
+.pxi-users        { --pxi: url(./icons/users.svg); }
+.pxi-user-x       { --pxi: url(./icons/user-x.svg); }
+.pxi-user-minus   { --pxi: url(./icons/user-minus.svg); }
+.pxi-save         { --pxi: url(./icons/save.svg); }
+.pxi-arrow-up     { --pxi: url(./icons/arrow-up.svg); }
+.pxi-pointer      { --pxi: url(./icons/pointer.svg); }
+
+/* ═══ MODO MÃO (pan do mapa) — cursor por modo ═══ */
+body.mode-pan canvas {
+    cursor: url(./icons/cursors/grab.svg) 12 12, grab !important;
+}
+body.mode-pan.panning canvas,
+body.mode-pan.panning * {
+    cursor: url(./icons/cursors/grabbing.svg) 12 12, grabbing !important;
 }
 
 body.grabbing * {
-    cursor: none !important;
+    cursor: url(./icons/cursors/grabbing.svg) 12 12, grabbing !important;
 }
 
 /* ═══ TARGET LOCK - Retículo sobre Golem válido ═══ */

@@ -1585,17 +1585,17 @@ export class StartScene extends Phaser.Scene {
         this.settingsModal.innerHTML = `
             <div class="settings-panel">
                 <div class="settings-header">
-                    <h2 class="settings-title">⚙ CONFIGURAÇÕES</h2>
-                    <button class="close-settings">✕</button>
+                    <h2 class="settings-title"><i class="pxi pxi-settings"></i> CONFIGURAÇÕES</h2>
+                    <button class="close-settings"><i class="pxi pxi-close"></i></button>
                 </div>
                 
                 <!-- ═══ SEÇÃO DE ÁUDIO ═══ -->
                 <div class="settings-section audio-section">
-                    <div class="settings-label">🔊 CONTROLE DE ÁUDIO</div>
+                    <div class="settings-label"><i class="pxi pxi-volume"></i> CONTROLE DE ÁUDIO</div>
                     
                     <div class="audio-control">
                         <div class="audio-control-header">
-                            <span class="audio-icon">🎵</span>
+                            <span class="audio-icon"><i class="pxi pxi-music"></i></span>
                             <span class="audio-name">MÚSICA DE FUNDO</span>
                             <span class="audio-value" id="music-status">${musicEnabled ? 'ATIVADA' : 'DESATIVADA'}</span>
                         </div>
@@ -1607,7 +1607,7 @@ export class StartScene extends Phaser.Scene {
                     
                     <div class="audio-control">
                         <div class="audio-control-header">
-                            <span class="audio-icon">🔊</span>
+                            <span class="audio-icon"><i class="pxi pxi-volume"></i></span>
                             <span class="audio-name">EFEITOS (SFX)</span>
                             <span class="audio-value" id="sfx-value">${Math.round(sfxVol * 100)}%</span>
                         </div>
@@ -1621,7 +1621,7 @@ export class StartScene extends Phaser.Scene {
                 
                 <!-- ═══ SEÇÃO DE RESOLUÇÃO ═══ -->
                 <div class="settings-section">
-                    <div class="settings-label">📺 RESOLUÇÃO DO JOGO</div>
+                    <div class="settings-label"><i class="pxi pxi-monitor"></i> RESOLUÇÃO DO JOGO</div>
                     <div class="resolution-grid">
                         ${resolutionOptionsHTML}
                     </div>

@@ -189,11 +189,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const controls = document.createElement('div');
         controls.id = 'zoom-controls';
         controls.innerHTML = `
-            <button class="zoom-btn zoom-out" title="Zoom Out (-)">−</button>
+            <button class="zoom-btn zoom-out" title="Zoom Out (-)"><i class="pxi pxi-minus"></i></button>
             <button class="zoom-reset" title="Reset Zoom (0)">
                 <span class="zoom-value">100%</span>
             </button>
-            <button class="zoom-btn zoom-in" title="Zoom In (+)">+</button>
+            <button class="zoom-btn zoom-in" title="Zoom In (+)"><i class="pxi pxi-plus"></i></button>
         `;
         document.body.appendChild(controls);
         
@@ -262,7 +262,54 @@ document.addEventListener('DOMContentLoaded', () => {
         resetBtn.addEventListener('click', () => {
             applyZoom(zoomConfig.default);
         });
-        
+
+        // ═══ SELETOR DE MODO (Selecionar / Mão) — estilo Figma ═══
+        window.interactionMode = window.interactionMode || 'select';
+        const modeWrap = document.createElement('div');
+        modeWrap.id = 'mode-switch';
+        Object.assign(modeWrap.style, {
+            display: 'flex', gap: '2px', marginRight: '4px',
+            paddingRight: '4px', borderRight: '1px solid rgba(0,255,255,0.2)'
+        });
+        modeWrap.innerHTML = `
+            <button class="mode-btn" data-mode="select" title="Selecionar / Interagir (V)"><i class="pxi pxi-pointer"></i></button>
+            <button class="mode-btn" data-mode="pan" title="Mover o mapa (H)"><i class="pxi pxi-hand"></i></button>
+        `;
+        controls.insertBefore(modeWrap, controls.firstChild);
+
+        const modeBtns = modeWrap.querySelectorAll('.mode-btn');
+        const setInteractionMode = (mode) => {
+            window.interactionMode = mode;
+            document.body.classList.toggle('mode-pan', mode === 'pan');
+            document.body.classList.toggle('mode-select', mode === 'select');
+            // Ao entrar no modo mão, larga qualquer ferramenta selecionada
+            if (mode === 'pan' && typeof window.clearToolSelection === 'function') window.clearToolSelection();
+            modeBtns.forEach(b => {
+                const on = b.dataset.mode === mode;
+                b.classList.toggle('active', on);
+                b.style.background = on ? 'rgba(0,255,255,0.28)' : 'transparent';
+                b.style.color = on ? '#fff' : '#0ff';
+            });
+        };
+        window.setInteractionMode = setInteractionMode;
+        modeBtns.forEach(btn => {
+            Object.assign(btn.style, btnStyle);
+            btn.style.fontSize = '12px';
+            btn.addEventListener('mouseenter', () => { if (!btn.classList.contains('active')) btn.style.background = 'rgba(0,255,255,0.15)'; });
+            btn.addEventListener('mouseleave', () => { if (!btn.classList.contains('active')) btn.style.background = 'transparent'; });
+            btn.addEventListener('click', () => setInteractionMode(btn.dataset.mode));
+        });
+        setInteractionMode('select');
+
+        // Hotkeys estilo Figma: V = selecionar, H = mão
+        window.addEventListener('keydown', (e) => {
+            const t = e.target;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            const k = (e.key || '').toLowerCase();
+            if (k === 'v') setInteractionMode('select');
+            else if (k === 'h') setInteractionMode('pan');
+        });
+
         // MOBILE: Ajusta posição vertical se o drawer de ferramentas estiver visível
         if (isMobile) {
             const toolRackEl = document.getElementById('tool-rack');
@@ -1823,12 +1870,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isAnomaly) {
             const badge = document.createElement('div');
             badge.className = 'rarity-badge anomaly';
-            badge.textContent = '⚠ ANOMALIA';
+            badge.innerHTML = '<i class="pxi pxi-alert"></i> ANOMALIA';
             card.appendChild(badge);
         } else if (isRare) {
             const badge = document.createElement('div');
             badge.className = 'rarity-badge legendary';
-            badge.textContent = '★ RARO';
+            badge.innerHTML = '<i class="pxi pxi-star"></i> RARO';
             card.appendChild(badge);
         }
         
@@ -1853,7 +1900,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="card-name">${rec.name || 'Desconhecido'}</div>
                 <div class="card-gen">Geração ${generation}</div>
             </div>
-            <div class="expand-icon">▼</div>
+            <div class="expand-icon"><i class="pxi pxi-chevron-down"></i></div>
         `;
         card.appendChild(collapsed);
         
@@ -1959,7 +2006,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 5. Botão de Inspeção Completa
         const inspectBtn = document.createElement('button');
         inspectBtn.className = 'card-inspect-btn';
-        inspectBtn.innerHTML = '🔍 INSPECIONAR REGISTRO';
+        inspectBtn.innerHTML = '<i class="pxi pxi-search"></i> INSPECIONAR REGISTRO';
         inspectBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             
@@ -1996,7 +2043,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 6. Botão de Colapsar (dentro da área expandida)
         const collapseBtn = document.createElement('button');
         collapseBtn.className = 'card-collapse-btn';
-        collapseBtn.innerHTML = '▲ RECOLHER';
+        collapseBtn.innerHTML = '<i class="pxi pxi-chevron-up"></i> RECOLHER';
         collapseBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             UISoundSystem.playClick('close');

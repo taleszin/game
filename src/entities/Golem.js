@@ -370,9 +370,10 @@ export default class Golem extends Phaser.GameObjects.Container {
                         }
                     });
                     this.graphics.alpha = 1;
+                    document.body.classList.add('golem-hover'); // cursor "pegar"
                 }
             });
-            this.on('pointerout', () => { scene.game.events.emit('hide-inspect'); this.graphics.scale = 1; });
+            this.on('pointerout', () => { scene.game.events.emit('hide-inspect'); this.graphics.scale = 1; document.body.classList.remove('golem-hover'); });
             
             this.pokeStartTime = 0;
             // Rotation / press gesture state
@@ -386,6 +387,7 @@ export default class Golem extends Phaser.GameObjects.Container {
             this.pointerDownStart = null;
 
             this.on('pointerdown', (pointer) => {
+                if (window.interactionMode === 'pan') return; // modo mão: deixa a câmera deslocar
                 this.pokeStartTime = Date.now();
                 this.isPointerDown = true;
                 this.pointerDownStart = { x: pointer.worldX, y: pointer.worldY };
@@ -433,6 +435,7 @@ export default class Golem extends Phaser.GameObjects.Container {
                 });
             });
             this.on('pointerup', (pointer) => {
+                if (window.interactionMode === 'pan') return;
                 const clickDuration = Date.now() - this.pokeStartTime;
                 // Cleanup delayed call
                 try { if (this.pointerDownDelayedCall) { this.pointerDownDelayedCall.remove(); this.pointerDownDelayedCall = null; } } catch(e) {}
@@ -453,7 +456,8 @@ export default class Golem extends Phaser.GameObjects.Container {
                 this.isPointerDown = false;
             });
             
-            this.on('dragstart', () => { 
+            this.on('dragstart', () => {
+                if (window.interactionMode === 'pan') return; // modo mão não arrasta golem
                 // Cancel any pending rotation when starting a drag (moving the golem)
                 try { if (this.pointerDownDelayedCall) { this.pointerDownDelayedCall.remove(); this.pointerDownDelayedCall = null; } } catch(e) {}
                 this.rotationPending = false;
@@ -476,8 +480,9 @@ export default class Golem extends Phaser.GameObjects.Container {
                     this._dragTrailPulse = 0;
                 } catch (e) { console.warn('drag trail init error', e); }
             });
-            this.on('drag', (p, x, y) => { 
-                this.x = x; 
+            this.on('drag', (p, x, y) => {
+                if (window.interactionMode === 'pan') return;
+                this.x = x;
                 this.y = y;
                 
                 // ═══════════════════════════════════════════════════════════════════

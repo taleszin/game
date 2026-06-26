@@ -377,7 +377,7 @@ export class UIFlingSystem {
         const btn = document.createElement('button');
         btn.id = 'ui-reset-positions-btn';
         btn.className = 'ui-reset-positions-btn';
-        btn.textContent = '↺ RESET UI';
+        btn.innerHTML = '<i class="pxi pxi-reload"></i> RESET UI';
         btn.title = 'Restaura posições originais da UI';
         
         btn.addEventListener('click', () => {
@@ -397,7 +397,7 @@ export class UIFlingSystem {
         btn.setAttribute('aria-label', 'Matar todos os Golems');
 
         // ícone caveira + label curta (bom contraste para UX)
-        btn.innerHTML = `<span class="icon">☠</span><span style="font-size:8px;">MATAR TODOS</span>`;
+        btn.innerHTML = `<span class="icon"><i class="pxi pxi-skull"></i></span><span style="font-size:8px;">MATAR TODOS</span>`;
 
         btn.addEventListener('click', () => {
             // Ação imediata ao clicar (sem confirmação)
@@ -689,7 +689,7 @@ export class UIFlingSystem {
         if (this.modeIndicator) {
             const isFlingMode = speed > this.config.flingVelocityThreshold * 0.7;
             this.modeIndicator.className = `drag-mode-indicator visible ${isFlingMode ? 'fling' : 'position'}`;
-            this.modeIndicator.textContent = isFlingMode ? '↗ FLING' : '📌 MOVE';
+            this.modeIndicator.innerHTML = isFlingMode ? '<i class="pxi pxi-arrow-up"></i> FLING' : '<i class="pxi pxi-hand"></i> MOVE';
             this.modeIndicator.style.left = `${currentX + 20}px`;
             this.modeIndicator.style.top = `${currentY - 30}px`;
         }

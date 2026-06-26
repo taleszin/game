@@ -260,6 +260,30 @@ export default class SanctuaryScene extends Phaser.Scene {
         }
     });
 
+    // ═══ MODO MÃO — pan da câmera por mouse (desktop) ═══
+    this.input.on('pointerdown', (pointer) => {
+        if (window.interactionMode === 'pan' && !this.isPlacingMode) {
+            this._mousePanning = true;
+            this._mousePanLast = { x: pointer.x, y: pointer.y };
+            document.body.classList.add('panning');
+        }
+    });
+    this.input.on('pointermove', (pointer) => {
+        if (this._mousePanning && pointer.isDown) {
+            const cam = this.cameras.main;
+            // "Agarrar e arrastar a tela": o conteúdo segue a mão (Figma hand tool)
+            cam.scrollX += (pointer.x - this._mousePanLast.x) / cam.zoom;
+            cam.scrollY += (pointer.y - this._mousePanLast.y) / cam.zoom;
+            if (this._clampCameraToBounds) this._clampCameraToBounds();
+            this._mousePanLast = { x: pointer.x, y: pointer.y };
+        }
+    });
+    const _endMousePan = () => {
+        if (this._mousePanning) { this._mousePanning = false; document.body.classList.remove('panning'); }
+    };
+    this.input.on('pointerup', _endMousePan);
+    this.input.on('pointerupoutside', _endMousePan);
+
     // Usa dimensões dinâmicas do game config (reutiliza gameWidth/gameHeight do início)
     this.physics.world.setBounds(0, 0, gameWidth, gameHeight);
     
